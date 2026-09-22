@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -144,11 +144,22 @@ describe("엔진 카탈로그 — 화면의 숫자가 워커의 숫자와 같은
     - 카탈로그에 적었는데 워커가 안 고르면 → 아무도 안 쓰는 숫자가 남아 나중에 믿게 됩니다.
   */
   it("정밀도를 고르는 엔진과 bf16 크기를 적은 엔진이 서로 같다", () => {
+    /*
+      **공개판에는 워커 파일이 없는 엔진이 있습니다.** 상업 배포가 안 되는 엔진은 소스에서도
+      빠지므로(`edition.json`), 카탈로그에는 남아 있는데 `engines/<id>.py` 가 없습니다.
+      그 차이를 모르면 공개본에서만 이 시험이 멈춥니다 — 실제로 한 번 그렇게 멈췄습니다.
+
+      그래서 **워커 파일이 있는 엔진**만 견줍니다. 빠진 쪽은 아래 다른 시험이 「카탈로그에
+      적힌 크기가 워커의 값과 같은가」 로 이미 훑으므로, 숫자가 어긋나는 것은 그대로 잡힙니다.
+    */
     const written = (Object.keys(LOCAL_ENGINE_CATALOG) as LocalEngineId[]).filter(
-      (id) => LOCAL_ENGINE_CATALOG[id].needs.bf16Gb != null,
+      (id) =>
+        LOCAL_ENGINE_CATALOG[id].needs.bf16Gb != null &&
+        existsSync(join(WORKER_DIR, `engines/${id}.py`)),
     );
     expect([...ids].sort()).toEqual([...written].sort());
-    expect(ids.length).toBeGreaterThanOrEqual(9);
+    // 공개판에서 몇 개가 빠져도 그림·영상·음악이 고루 남습니다.
+    expect(ids.length).toBeGreaterThanOrEqual(7);
   });
 
   it("그림 엔진 셋의 몸통도 같은 한 곳에서 고른다", () => {
