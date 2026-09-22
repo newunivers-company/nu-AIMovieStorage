@@ -116,7 +116,13 @@ class ImageEngine(object):
             weights.append(float(item.get("weight", 1.0)))
         if names:
             self.pipe.set_adapters(names, adapter_weights=weights)
-            common.log("로라 {}개를 먹였습니다: {}".format(len(names), ", ".join(names)))
+            # 붙었는지 세어 보고 적습니다 — 안 붙어도 diffusers 는 조용합니다.
+            got = common.check_loras(
+                getattr(self.pipe, "transformer", None) or getattr(self.pipe, "unet", self.pipe),
+                wanted,
+                os.path.basename(wanted[0]["path"]),
+            )
+            common.log("로라 {}개를 먹였습니다.".format(got))
         self.loaded_loras = signature
 
     # ── 생성 ────────────────────────────────────────────────────────────

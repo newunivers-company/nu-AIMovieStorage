@@ -4,8 +4,9 @@ export const ALWAYS_KEEP = "*";
 /*
   **창마다 «내가 품은 것».** 딸린 것이 없는 파일이라, 누구든 읽어도 동그라미가 생기지 않습니다.
 
-  걸음이 가리키는 창이 저절로 안 열리는 고장이 거듭났습니다. «앵커 이름이 card- 로 시작하면 카드를
-  연다» 처럼 **이름 앞머리로 짐작**하고 있었던 것이 원인입니다. 새 앵커가 다른 이름으로 생기면 그 짐작에서 새어 나갑니다.
+  사용자 2026-09-22 에 같은 고장이 거듭났습니다 — 「구도잡기 자동으로 안열리네」 「이미지 편집 화면으로
+  자동으로 들어가야지」. 그때마다 «앵커 이름이 card- 로 시작하면 카드를 연다» 처럼 **이름 앞머리로
+  짐작**하고 있었던 것이 원인입니다. 새 앵커가 다른 이름으로 생기면 그 짐작에서 새어 나갑니다.
 
   그래서 판단의 근거를 목록 하나로 모읍니다. 창을 열지 닫을지(`tutorialStore.cardWantFor`)도,
   창이 스스로 물러날지(`useTutorialPanel`)도 전부 이 목록을 봅니다.
@@ -67,7 +68,7 @@ export const HOLDS_PLANNER = [
   "layout-characters layout-character-fields layout-body-color layout-gizmo-mode layout-path layout-objects",
   "layout-object-kinds layout-object-group layout-object-swap layout-object-asset layout-attach-bone layout-light",
   "layout-wall-image layout-pose-from-image layout-joints layout-hands layout-presets layout-mocap-cleanup bone-picker",
-  "env-room-add-indoor env-room-list env-room-size env-horizon-color env-outdoor-shape env-occlude-faces",
+  "env-room-add-indoor env-room-list env-room-size env-room-drift env-room-video env-horizon-color env-outdoor-shape env-occlude-faces",
   "env-room-make-image env-panoramas env-face-sets env-room-props env-room-library env-display",
   "timeline-music timeline-music-pick timeline-music-sections timeline-mocap-open timeline-glb",
   "timeline-blender-prompt timeline-render timeline-render-split timeline-render-run timeline-renders-list",
@@ -94,7 +95,7 @@ export const HOLDS_PLANNER = [
  */
 export const INLINE_REVEAL = [
   // 컷 카드를 펴면 그 자리에서 아래로 늘어납니다.
-  "cut-frame cut-switches cut-summary cut-refs cut-style-toggles cut-dialogue",
+  "cut-frame cut-switches cut-summary cut-refs cut-style-toggles cut-dialogue cut-background-motion",
   "cut-prompt-section cut-prompt-write cut-video-section cut-video-prompt cut-ref-video-list",
   // 곡을 고르면 오른쪽에 편집기가 붙습니다.
   "bgm-chips bgm-tempo-length bgm-tool bgm-instrumental bgm-write bgm-style-panels",
@@ -110,8 +111,9 @@ export const INLINE_REVEAL = [
 /**
  * **그림 선반에서 여는 작은 창 둘** — «크게 보기»(라이트박스)와 마그니픽 «가져오기».
  *
- * 이 둘은 썸네일이나 «가져오기» 를 눌러야 뜨는데 여는 문이 어디에도 안 적혀 있어, 그 걸음에서
- * 안내 창이 «자리가 없습니다» 만 띄우고 정작 눌러야 할 단추까지 막고 있었습니다.
+ * 이 둘은 썸네일이나 «가져오기» 를
+ * 눌러야 뜨는데 여는 문이 어디에도 안 적혀 있어, 그 걸음에서 안내 창이 «자리가 없습니다» 만
+ * 띄우고 정작 그 단추까지 막고 있었습니다.
  */
 export const HOLDS_LIGHTBOX = "shelf-lightbox-nav shelf-inbox-zoom";
 export const HOLDS_MAGNIFIC_IMPORT = "shelf-import-search shelf-import-grid";

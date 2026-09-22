@@ -14,13 +14,13 @@ import type { SavedPromptEntry } from "@/lib/promptHistory";
  * 그 캐릭터를 지울 때 같이 사라지니까요.
  * - **보유 에셋** (`character.assets` · `background.assets`): 한 인물·장소만 쓰는
  * 전용 무기·소품. 파일은 **주인 폴더 안** 에 «주인_에셋_번호» 로 들어갑니다(규칙 5).
- * (같은 무기라도 누구나 드는 것과 그 인물만 쓰는 것이 갈립니다 — 그래서 두 갈래입니다.)
+ * ()
  *
  * 안쪽의 «레퍼런스 → 분석 → 프롬프트» 흐름은 캐릭터·배경과 **똑같습니다.**
  *
  * 이 타입이 `lib/` 에 있는 이유: `projectTypes.ts`·`ProjectMediaContext.ts` 가 쓰는데,
  * 예전에는 `components/AssetLibraryDialog.tsx` 에 있어서 lib → components 로 거꾸로
- * 의존했습니다. 그 창을 없애고 에셋을 계보로 바꾸면서 여기로 옮겼습니다.
+ * 의존했습니다. 그 창을 없애면서(2026-09-08, 에셋 계보화) 여기로 옮겼습니다.
  */
 
 export interface VisualAssetImage {
@@ -37,7 +37,7 @@ export interface VisualAssetImage {
    *
    * 마그니픽은 `magnific_프롬프트_식별자` 로 내려 주고, 우리는 채택하면서 «가방_001» 로
    * 바꿉니다. 어느 생성물이었는지 되짚을 때 이것만 남습니다(`GeneratedImageAsset` 과 같은 이유).
-   * 에셋·에셋 변형에도 채택할 수 있게 되면서 여기에도 칸이 필요해졌습니다.
+   * 에셋·에셋 변형에도 채택할 수 있게 되면서(2026-09-08) 여기에도 칸이 필요해졌습니다.
    */
   sourceName?: string;
 }

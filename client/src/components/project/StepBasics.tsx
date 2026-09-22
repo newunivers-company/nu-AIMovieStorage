@@ -103,7 +103,7 @@ export default function StepBasics({
   return (
     <div className="space-y-4">
       {/*
-        「AI 로 일괄 생성」.
+        「AI 로 일괄 생성」. 
 
         새 프로젝트에서 가장 먼저 누를 단추라 맨 위에 둡니다. 비어 있을 때는 안내와
         함께 크게, 이미 뭔가 적어 두었으면 줄 하나로 접습니다.
@@ -350,7 +350,7 @@ export default function StepBasics({
 
       {/*
         **작품 대표 그림** — 보드 카드에 뜨는 한 장. 정하지 않으면 작품 안의 그림에서
-        저절로 고릅니다 — 한 장도 안 걸리면 보드에서 어느 작품인지 구별이 안 됩니다.
+        저절로 고릅니다().
       */}
       <Panel title="대표 그림" tour="basics-cover">
         <ProjectCoverPanel draft={draft} onChange={onChange} />

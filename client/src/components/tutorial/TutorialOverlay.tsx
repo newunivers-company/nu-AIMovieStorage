@@ -63,8 +63,7 @@ export default function TutorialOverlay() {
   /*
     **걸음이 바뀌어도 갈아 끼우지 않습니다.**
 
-    자리를 가리키는 상자가 걸음마다 화면 왼쪽 위(0,0)에서 날아와 눈이 어지러웠습니다.
-    상자는 **이전에 있던 자리**에서 다음 자리로 움직여야 합니다.
+    
 
     예전에는 `key={step.id}` 로 걸음마다 통째로 새로 만들었습니다. 그러면 잰 자리가 함께 버려져
     다음 걸음이 «자리 없음»(화면 전체 덮개)부터 시작하고, React 가 그 덮개 div 를 밝은 상자로
@@ -106,8 +105,8 @@ function clamp(value: number, low: number, high: number): number {
  */
 function labelOf(element: HTMLElement): string {
   /*
-    **적어 둔 이름이 먼저입니다.** 문 이름이 «@keyframes sp-dolly { 0%…» 처럼
-    뜬 적이 있습니다 — 무빙 아이콘 안에 `<style>` 이 들어 있어 `textContent` 가 그 CSS 까지 긁어 온 탓입니다.
+    **적어 둔 이름이 먼저입니다.** 사용자 2026-09-22 에 문 이름이 「@keyframes sp-dolly { 0%…」 로
+    떴습니다 — 무빙 아이콘 안에 `<style>` 이 들어 있어 `textContent` 가 그 CSS 까지 긁어 온 탓입니다.
     그래서 `title`·`aria-label` 을 먼저 보고, 글자를 읽을 때는 style·script 를 뺀 것만 셉니다.
   */
   const said = element.getAttribute("aria-label") || element.getAttribute("title");
@@ -124,9 +123,9 @@ function labelOf(element: HTMLElement): string {
  * `/project/:id` 는 «어느 작품인지» 가 없습니다. 프로젝트 화면 밖에서 그 걸음에 이르면
  * **연습용 예시 작품**을 엽니다 — 없으면 그 자리에서 만듭니다.
  *
- * 튜토리얼은 **그림이 들어 있는 한 작품**으로 돌아야 합니다 — 예전에는 «가장 최근에 고친
- * 작품» 을 열었는데, 그것이 갓 만든 빈 작품이면 가위도 시트도 뽑은 그림도 없어 걸음 절반이
- * «자리가 지금 화면에 없습니다» 로 헛돌았습니다.
+ * 「이미지가 등록된게 없으니까...시트에서 칸 잘라내기 같은 경우 볼 수가 없잖아」.
+ * 예전에는 «가장 최근에 고친 작품» 을 열었는데, 그것이 갓 만든 빈 작품이면 가위도 시트도 뽑은
+ * 그림도 없어 걸음 절반이 「자리가 지금 화면에 없습니다」 로 헛돌았습니다.
  *
  * 이미 프로젝트 안에서 튜토리얼을 열었으면 여기 오지 않습니다(`routeMatches` 가 먼저 참) —
  * 일하던 작품에서 끌어내지 않습니다.
@@ -160,7 +159,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
   const [made, setMade] = useState(false);
 
   /*
-    **끝낼 때 한 번 묻습니다.**
+    **끝낼 때 한 번 묻습니다.** 
 
     «건너뛰기» 와 X 는 안내 카드의 단추 두 개 중 둘이라 손이 미끄러지기 쉽습니다. 게다가 끝내는 것은
     «봤음» 으로 기록되어 처음 켤 때 저절로 뜨는 한 바퀴가 다시는 안 뜹니다 — 되돌리려면 설정까지
@@ -210,7 +209,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
 
   /*
     ── 2.5 인물 카드 창을 이 걸음에 맞춰 열거나 닫아 달라고 ──────────────────
-    떠야 할 자리에서 카드 창이 안 뜨고, 닫혀야 할 자리에서 안 닫혔습니다.
+    
 
     캐릭터 걸음은 카드 창 «안» 과 그 아래 «패널» 두 층에 걸쳐 있는데, 창을 사람이 손으로 맞춰야
     했습니다. 창이 덮고 있으면 «캐릭터 시트 제작» 이 안 보이고, 닫혀 있으면 «가위» 가 없습니다.
@@ -240,7 +239,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       return;
     }
     /*
-      **구도잡기 걸음이면 먼저 씬 구성으로.** 가리킬 자리가 든 화면을 먼저 열어야 합니다.
+      **구도잡기 걸음이면 먼저 씬 구성으로.** 
 
       구도잡기는 네 단계 중 하나가 아니라 **컷 카드에서 여는 창**입니다. 그래서 «그 단계를 열어 줘»
       라고 부탁할 데가 없고, 확인 단계에 서 있으면 구도잡기를 여는 «구도잡기» 단추조차 화면에
@@ -251,7 +250,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
 
   /*
     ── 시킨 것을 **실제로 해야** 넘어갑니다 ──────────────────────────────────
-    읽기만 하는 설명이 아니라, 게임 튜토리얼처럼 하나씩 **따라 해야** 넘어가게 합니다.
+    「이건 그냥 설명이잖아」.
 
     밝혀 둔 자리를 진짜로 누르거나(누르기 걸음), 그 칸에 글자가 들어가면(적기 걸음) 저절로 다음으로
     갑니다. 듣는 자리는 **문서 전체**이고 그 안에 앵커가 들어 있는지만 봅니다 — 단추가 다시 그려지거나
@@ -269,8 +268,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
     const onClick = (event: MouseEvent) => {
       if (advance !== "click" || !inAnchor(event.target)) return;
       /*
-        **고르는 묶음에서는 안 넘어갑니다.** 모양을 사각형에서 원으로 바꿔 보기만 해도
-        걸음이 넘어가면 안 됩니다.
+        **고르는 묶음에서는 안 넘어갑니다.** 
 
         자리가 단추 하나면 «그것을 누르면 다음» 이 맞습니다. 그런데 «앵커 지점 · 사각형 · 원 ·
         자유선» 처럼 **고르는 줄 전체**를 가리키는 자리도 있습니다. 거기서는 모양을 바꿔 보는 것이
@@ -300,7 +298,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
 
   /*
     ── 굳어 버린 «아무것도 못 누름» 풀기 ─────────────────────────────────────
-    안내 카드의 «다음» 조차 안 눌리는 자리가 있었습니다.
+    
 
     Radix 모달(구도잡기 창 · 확인 창 · 프롬프트 창)은 열려 있는 동안 **body 에
     `pointer-events: none`** 을 겁니다. 창 둘이 겹쳐 뜨거나 빠르게 닫히면 닫은 쪽이 그것을
@@ -323,9 +321,9 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
 
   /*
     ── **밝혀 둔 자리 말고는 안 눌립니다** ───────────────────────────────────
-    도는 동안에는 허락한 자리 말고 다른 단추가 눌리면 안 됩니다.
+    
 
-    걸음이 «이 자리를 누르세요» 라고 해 둔 동안 다른 단추가 눌리면 화면이 엉뚱한
+    맞는 지적입니다. 걸음이 «이 자리를 누르세요» 라고 해 둔 동안 다른 단추가 눌리면 화면이 엉뚱한
     데로 가고, 그때부터 남은 걸음이 전부 어긋납니다 — 지금까지 «자리가 없습니다» 로 보였던 것의
     상당수가 그것이었습니다.
 
@@ -336,10 +334,10 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
     누른 것만 막습니다. 갇히지 않게 «건너뛰기» 는 안내 카드 안에 있어 늘 눌립니다.
   */
   /*
-    **갇히지 않게.**
+    **갇히지 않게.** 
 
-    가리킬 자리도 못 찾고 눌러 줄 문도 없으면, 막기만 남습니다 — 안내 창은 «그 화면을 열면
-    표시됩니다» 라고 적어 놓고 정작 그 화면을 여는 단추까지 막아 버린 꼴입니다. 그래서 **길을 잃은
+    가리킬 자리도 못 찾고 눌러 줄 문도 없으면, 막기만 남습니다 — 안내 창은 「그 화면을 열면
+    표시됩니다」 라고 적어 놓고 정작 그 화면을 여는 단추까지 막아 버린 꼴입니다. 그래서 **길을 잃은
     동안에는 아무것도 막지 않습니다.** 손으로 찾아갈 수 있어야 합니다.
   */
   const stranded = Boolean(step.anchor) && !rect && !doorLabel;
@@ -352,7 +350,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       if (target.closest("[data-tutorial-lit]")) return true;
       if (step.anchor && target.closest(`[data-tour~="${step.anchor}"]`)) return true;
       /*
-        **막는 것은 «다른 단추» 뿐입니다.** 막기를 넓게 걸었더니 사각형조차 그려지지 않았습니다.
+        **막는 것은 «다른 단추» 뿐입니다.** 
 
         처음에는 밝혀 둔 자리 밖을 통째로 막았는데, 그러면 시킨 일 자체를 못 합니다 — 표시하기에서
         그림 위를 끌어 사각형을 그리는 것도, 목록을 스크롤하는 것도 막혔습니다. 화면을 엉뚱한 데로
@@ -385,7 +383,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       frame = 0;
 
       /*
-        **탭은 자리가 보이든 말든 한 번 눌러 줍니다.** 걸음이 말하는 탭으로는 저절로 옮겨 줘야 합니다.
+        **탭은 자리가 보이든 말든 한 번 눌러 줍니다.** 
 
         가위 창의 오른쪽 판(그리기 면·저장될 파일·업스케일)은 «자르기»·«표시하기»·«동선» 세 탭에서
         **다 그려집니다.** 그래서 동선 탭에 서 있어도 업스케일 자리가 «있다» 로 잡혀, 자리를 못
@@ -405,8 +403,8 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       /*
         **보이는 것 중 첫 번째**를 잡습니다.
 
-        `querySelector` 하나만 쓰다가, 화면에는
-        «구도잡기» 단추가 여럿 보이는데 «이 단계의 자리가 지금 화면에 없습니다» 가 떴습니다.
+        `querySelector` 하나만 쓰다가 화면에는
+        «구도잡기» 단추가 여럿 보이는데 「이 단계의 자리가 지금 화면에 없습니다」 가 떴습니다.
         같은 앵커가 컷마다·인물마다 붙어 있고(ANCHORS.md 가 «모든 것에 달아도 된다» 고 합니다),
         문서에서 첫 번째인 것이 하필 접힌 장면 안이라 크기가 0 이었습니다. 하나 보고 포기하면
         나머지가 멀쩡히 보이는데도 갇힙니다.
@@ -423,8 +421,10 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       if (!element || !box) {
         /*
           ── 자리가 없으면 **문을 가리킵니다** ─────────────────────────────────
+          「왜 자꾸 똑같은 수정을 반복하는거지?」.
+
           걸음의 자리 중 여럿은 **문 뒤**에 있습니다 — 창을 띄워야, 판을 펴야, 탭을 옮겨야 그려집니다.
-          예전에는 그냥 «자리가 지금 화면에 없습니다» 라고만 적고 «다음» 으로 넘겼습니다. 그러면
+          예전에는 그냥 「자리가 지금 화면에 없습니다」 라고만 적고 «다음» 으로 넘겼습니다. 그러면
           사람은 무엇을 해야 할지 모른 채 안내만 흘려보냅니다.
 
           이제 문을 찾아 **그 문을 밝히고** 「먼저 이것을 누르세요」 라고 적습니다. 문은 스스로
@@ -435,7 +435,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
           혼자 할 때 그 단추를 찾지 못합니다.
         */
         /*
-          **탭은 대신 눌러 주고, 창은 안내합니다.** 구도잡기 창 안에서도 탭은 저절로 넘어가야 합니다.
+          **탭은 대신 눌러 주고, 창은 안내합니다.** 
 
           둘을 한 가지로 다루었던 것이 잘못이었습니다. 탭이나 접이식은 **그 자리에서 보는 것만
           바뀝니다** — 공짜이고 되돌리기도 쉬우니 튜토리얼이 대신 눌러 줘도 됩니다
@@ -446,9 +446,8 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
           `~=` 는 «띄어쓰기로 나눈 목록에 그 낱말이 있는가» 입니다.
         */
         /*
-          **겹쳐 뜬 창이 있으면 그 안에서만 찾습니다.** 구도잡기가 이미 열려 있는데 그 아래
-          가려진 «구도잡기» 단추를 밝히고 «먼저 이것을 누르세요» 라고 가리켰습니다.
-          가려진 것도 크기는 있어서 «보인다» 로 셌던 탓입니다.
+          **겹쳐 뜬 창이 있으면 그 안에서만 찾습니다.** 구도잡기가 이미 열려 있는데 그 아래 가려진 «구도잡기» 단추를 밝히고 「먼저 이것을
+          누르세요」 라고 했습니다. 가려진 것도 크기는 있어서 «보인다» 로 셌던 탓입니다.
 
           그래서 창이 떠 있으면 찾는 범위를 그 창 안으로 좁힙니다 — 창 밖의 문은 지금 손이 닿지
           않으니 가리켜 봐야 헛일입니다.
@@ -458,8 +457,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
         const scope: ParentNode = dialogs.length ? dialogs[dialogs.length - 1] : document;
 
         /*
-          **한 걸음에 여러 번 눌러 줍니다.** 자리에 닿을 때까지는 대신 눌러 주거나, 무엇을
-          누르라고 일러 줘야 합니다.
+          **한 걸음에 여러 번 눌러 줍니다.** 「왜 자꾸 같은 수정을 계속 하게 만드는거야?」.
 
           예전에는 걸음마다 딱 한 번만 눌렀습니다. 그런데 자리에 닿는 데 두 번이 필요한 경우가
           흔합니다 — 구도잡기를 열고 «환경» 탭으로, 가위 창을 열고 «자르기» 탭으로. 한 번에서
@@ -484,7 +482,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
         const openerBox = opener?.getBoundingClientRect();
         if (opener && openerBox && (openerBox.width > 0 || openerBox.height > 0)) {
           /*
-            **창도 저절로 엽니다.** 걸음이 편집 화면 이야기를 하면 그 화면까지 들어가 있어야 합니다.
+            **창도 저절로 엽니다.** 
 
             여는 것 자체는 공짜입니다 — 돈이 드는 것은 창 안에서 «만들기» 를 누를 때이고, 그 자리는
             따로 «설명만» 으로 묶어 두었습니다(`COSTLY_ANCHORS`). 그래서 한 번 눌러 열어 주고,
@@ -517,8 +515,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       }
       setDoorLabel(null);
       /*
-        **가리키는 동안은 보이게 합니다.** 튜토리얼이 도는 동안에는 마우스를 올릴 수 없어,
-        가위 단추가 밝혀만 놓고 보이지 않았습니다.
+        **가리키는 동안은 보이게 합니다.** 
 
         그림 위의 단추들(가위·복사·폴더 열기)은 평소에 `opacity: 0` 으로 숨어 있다가 마우스를
         올려야 뜹니다. 자리는 DOM 에 있어서 튜토리얼이 찾기는 하는데, **밝혀 놓은 자리에 아무것도
@@ -532,7 +529,8 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
       }
 
       /*
-        **편한 자리에 올 때까지 끌어옵니다.** 가리킨 자리로 화면이 저절로 내려가지 않았습니다.
+        **편한 자리에 올 때까지 끌어옵니다.** ,
+        2026-09-23 「안내려가」.
 
         두 번 고쳤는데 두 번 다 조건이 너무 짰습니다. 처음에는 «완전히 화면 밖인가», 다음에는
         «세로로 48px 이상 드러났는가» — 가위 창 아래 띠(닫기·미리보기 새로 고침·저장)는 화면
@@ -558,7 +556,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
     };
     measure();
     /*
-      **«그리면 생기는 것» 을 지켜봅니다.** 사각형을 실제로 그려야 그 걸음이 끝난 것입니다.
+      **«그리면 생기는 것» 을 지켜봅니다.** 
       누르는 것이 아니라 그리는 걸음은 클릭으로 셀 수 없어, 걸음에 적어 둔 `until` 자리가 화면에
       나타나면 «했다» 로 봅니다. 나타나기 전에는 «다음» 이 잠깁니다.
     */
@@ -645,7 +643,8 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
     const below = rect.top + rect.height + GAP;
     const above = rect.top - GAP - card.h;
     /*
-      **넓은 자리는 가운데에 맞춥니다.** 타임라인 쪽 걸음에서 카드 자리가 크게 어긋났습니다.
+      **넓은 자리는 가운데에 맞춥니다.** 「타임라인쪽은 포지션 다
+      틀어졌네」.
 
       아래 타임라인·무빙 아이콘 줄·눈금자는 화면 폭을 꽉 채웁니다. 그런 자리에 왼쪽 끝을 맞추면
       카드가 화면 왼쪽 구석으로 날아가 «무엇을 가리키는지» 가 안 보입니다. 카드보다 한참 넓은
@@ -716,7 +715,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
           border: "1px solid oklch(0.62 0.22 290 / 45%)",
           transition: "top 0.2s, left 0.2s",
           /*
-            안내 카드의 «다음» 이 눌리지 않는 자리가 있었습니다.
+            
 
             카드는 `document.body` 로 내보냅니다. 그런데 Radix 의 모달은 열려 있는 동안
             **body 에 `pointer-events: none`** 을 겁니다. 카드도 body 의 자식이라 같이 죽습니다 —
@@ -795,7 +794,7 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
 
         {/*
           자리가 문 뒤에 있을 때. 밝혀 둔 것은 그 **문** 이고, 누르면 자리가 생기면서 안내가
-          저절로 그리로 옮겨 갑니다 — 무엇을 먼저 눌러야 하는지 말해 주지 않으면 거기서 멈춥니다.
+          저절로 그리로 옮겨 갑니다. 
         */}
         {doorLabel && (
           <p
@@ -848,8 +847,8 @@ function ActiveStep({ tutorial, step, index }: { tutorial: Tutorial; step: Tutor
             style={waiting || (step.until && !made) ? { background: "oklch(1 0 0 / 6%)", color: "oklch(0.60 0.01 265)" } : undefined}
           >
             {/*
-              누르기를 기다리는 동안에도 글자는 그냥 «다음» 입니다.
-              «건너뛰고» 를 붙이면 «하지 말고 넘어가라» 로 읽혀,
+              누르기를 기다리는
+              동안에도 글자는 «다음» 입니다. «건너뛰고» 를 붙이면 «하지 말고 넘어가라» 로 읽혀,
               시킨 일을 해 보지 않고 지나가게 부추깁니다.
             */}
             {step.until && !made ? t("해야 넘어갑니다") : last ? t("끝") : t("다음")}

@@ -1,12 +1,12 @@
 /**
  * **막대 그림에서 관절이 잡히는가** — 실측 시험대(헤드리스 크롬에서 돕니다).
  *
- * Sketch2Pose(그리스펜슬 막대 인간 → 리깅 캐릭터) 를 우리 앱에 들일 수 있는지 재 봅니다.
+ * 사용자 2026-09-21: Sketch2Pose(그리스펜슬 막대 인간 → 리깅 캐릭터) 를 보고
+ * 「우리 앱에 적용할 수 있는지 살펴봐」.
  *
  * 우리는 이미 MediaPipe 관절 검출기를 **한 장 모드**(`runningMode: "IMAGE"`)로 들고 있고,
  * 한 장에서 **3D 좌표**(`worldLandmarks`)까지 나옵니다. 그러니 「그림 한 장 → 포즈」 는
- * 새 알고리즘이 아니라 **잇는 일**입니다 — 단, «그림 한 장 → 포즈» 가 되려면
- * **막대 그림을 사람으로 봐 주느냐**가 걸립니다.
+ * 새 알고리즘이 아니라 **잇는 일**입니다 — 단, **막대 그림을 사람으로 봐 주느냐**가 걸립니다.
  * 이 모델은 «사람 사진» 으로 배웠기 때문입니다.
  *
  * 그래서 코드를 고치기 전에 먼저 잽니다. 그림을 점점 사람에 가깝게 그려 가며
@@ -176,7 +176,7 @@ function cartoon() {
   return ctx.canvas;
 }
 
-/** ⑥ 대조군 — 받아 둔 댄스 영상의 한 프레임(진짜 사람 사진). */
+/** ⑥ 대조군 — 사용자가 받아 둔 댄스 영상의 한 프레임(진짜 사람 사진). */
 async function videoFrame(name: string, at = 3): Promise<HTMLCanvasElement | null> {
   const video = document.createElement("video");
   video.crossOrigin = "anonymous";

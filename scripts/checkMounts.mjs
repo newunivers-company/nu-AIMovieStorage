@@ -2,7 +2,7 @@
  * 방 면에 **붙인 소품**이 제대로 앉는지 봅니다 — 붙이고, 방을 넓히고, 끌어 보고.
  *
  * 이 저장소에는 테스트 러너가 없어 esbuild 로 묶어 node 로 한 번 돌립니다.
- * (방 면 어디에나 붙일 수 있어야 하고, 방 크기를 바꿔도 따라붙는지가 핵심입니다.)
+ * (방 크기를 바꿔도 따라붙는지가 핵심입니다.)
  */
 import { build } from "esbuild";
 import { writeFileSync, rmSync } from "node:fs";
@@ -71,7 +71,7 @@ eq("끈 뒤에도 벽에 붙은 x", objectOf(state).position.x, -5 + objectOf(st
 eq("끈 대로 간 z", objectOf(state).position.z, 1);
 
 // ── 벽(널판) ────────────────────────────────────────────────────────
-// 벽에 붙인 널판이 엉뚱한 쪽을 보고 서던 자리 — 회전은 **라디안**입니다(도가 아닙니다).
+// 회전은 **라디안**입니다.
 const wall = m.addObjectInRoom(state, { id: "wall", label: "벽" }, roomId);
 state = wall.state;
 const wallOf = (s) => s.objects.find((item) => item.id === wall.id);

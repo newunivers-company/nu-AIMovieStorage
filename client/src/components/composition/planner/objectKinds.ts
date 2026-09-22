@@ -12,8 +12,8 @@ import type { ObjectKindEntry } from "@/lib/compositionEdit";
  *
  * 한쪽에만 «벽» 이 있고 다른 쪽엔 없는 일이 생기면 안 되어서 여기 한 군데에 둡니다(CLAUDE.md 규칙 1).
  *
- * **벽이 맨 앞**입니다. 벽을 세워 크기를 맞추고 거기에 뽑은 그림을 띄우는 것이 가장 잦은 길이라서입니다 —
- * 한 컷에 필요한 배경은 대개 «정면 한 장» 이라, 여섯 면을 다 갖춘 방보다 이 길이 빠릅니다.
+ * **벽이 맨 앞**입니다. 한 컷에 필요한 배경은 대개 «정면 한 장» 이라, 여섯 면을 다 갖춘 방보다
+ * 이 길이 빠릅니다.
  */
 export const OBJECT_KINDS: (ObjectKindEntry & { icon: typeof Box })[] = [
   { id: "wall", label: "벽", icon: RectangleHorizontal },
@@ -27,6 +27,7 @@ export const OBJECT_KINDS: (ObjectKindEntry & { icon: typeof Box })[] = [
 /**
  * 에셋 시트로 **바꿔 그릴 수 있는** 소품 갈래.
  *
- * 박스·구·실린더만 바꿔 그립니다. 벽은 그림을 입히는 판이고, 조명은 애초에 그려지는 물건이 아닙니다.
+ *
+ * 벽은 그림을 입히는 판이고, 조명은 애초에 그려지는 물건이 아닙니다.
  */
 export const SWAPPABLE_KINDS = ["box", "sphere", "cylinder", "table"];

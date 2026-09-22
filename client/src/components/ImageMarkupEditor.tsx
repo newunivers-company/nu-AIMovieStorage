@@ -1,8 +1,17 @@
 import { SURFACE_BOX, SURFACE_MEDIA } from "@/lib/imageSurface";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 import { loadImageForCanvas } from "@/lib/mediaLibrary";
+// PNG 로 굽는 결정은 한 곳에서 — 한 군데가 jpeg 로 새면 레퍼런스에 압축 자국이 남습니다.
+import { toBlob } from "@/lib/canvasBlob";
 import { drawImageMarks, markColor } from "@/lib/imageMarkDraw";
+import {
+  MOTION_MARK_COLOR,
+  hasMotionMarks,
+  isMotionMark,
+  paintMotionMask,
+} from "@/lib/motionMask";
 import {
   Camera,
   Circle as CircleIcon,
@@ -12,6 +21,7 @@ import {
   Square,
   Trash2,
   Undo2,
+  Waves,
 } from "lucide-react";
 
 /**
@@ -49,6 +59,16 @@ export interface ImageMark {
   note: string;
   /** rect·ellipse 는 두 점, free 는 지나간 점들. 모두 0~1 비율입니다. */
   points: { x: number; y: number }[];
+  /**
+   * 이 표시가 **«여기는 움직인다» 구역**인가.
+   *
+   * 모양(`shape`)과 따로 둡니다. 「사각형이면 구역」 처럼 모양에 뜻을 얹으면 같은 사각형을
+   * 다른 뜻으로 쓰고 싶은 날 갈 곳이 없습니다. 옛 자료에는 이 칸이 없어 `undefined` —
+   * 그대로 «움직임 아님» 입니다.
+   *
+   * 앵커에는 켜지지 않습니다(점이라 칠할 넓이가 없습니다 — `isMotionMark`).
+   */
+  motion?: boolean;
 }
 
 const SHAPE_LABELS: Record<MarkShape, string> = {
@@ -66,6 +86,7 @@ export default function ImageMarkupEditor({
   marks,
   onChange,
   onSave,
+  onSaveMask,
 }: {
   imageSrc: string;
   marks: ImageMark[];
@@ -80,13 +101,29 @@ export default function ImageMarkupEditor({
    * 파일로 남기면 원본은 깨끗한 채로 「앵커 A판」 「앵커 B판」 이 폴더에 쌓입니다.
    */
   onSave?: (file: File, stem: string, marks: ImageMark[]) => Promise<void> | void;
+  /**
+   * **움직임 마스크**를 파일로 넘깁니다 — 흰 구역만 움직이고 나머지는 검정인 흑백 PNG.
+   *
+   * `onSave`(표시한 그림)와 **같은 꼴**입니다. 받는 쪽이 이름·폴더 규칙을 한 벌로 쥐고
+   * 있어야 해서(`useCropperSave.saveExtra`), 여기서는 «무엇을 구웠는지» 만 다릅니다.
+   */
+  onSaveMask?: (file: File, stem: string, marks: ImageMark[]) => Promise<void> | void;
 }) {
+  const t = useT();
   const [saveName, setSaveName] = useState("표시");
   const [saving, setSaving] = useState(false);
   const surfaceRef = useRef<HTMLDivElement>(null);
   /** 표시 덮개 캔버스. 저장본과 같은 함수로 그립니다 */
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [shape, setShape] = useState<MarkShape>("rect");
+  /**
+   * 지금 그리면 «움직임 구역» 이 되는가.
+   *
+   * 모양 단추와 **따로 켜는 스위치**입니다. 다섯 번째 모양으로 만들지 않은 까닭은
+   * 「움직이는 사각형」 과 「움직이는 자유선」 이 둘 다 필요하기 때문입니다 — 모양에
+   * 뜻을 얹으면 그중 하나를 못 그립니다.
+   */
+  const [motion, setMotion] = useState(false);
   const [drawing, setDrawing] = useState<ImageMark | null>(null);
 
   /** 화면 좌표를 0~1 비율로 바꿉니다. */
@@ -108,6 +145,8 @@ export default function ImageMarkupEditor({
       shape,
       note: "",
       points: [point, point],
+      // 앵커는 점이라 칠할 넓이가 없습니다 — 스위치가 켜져 있어도 구역이 되지 않습니다.
+      ...(motion && shape !== "anchor" ? { motion: true } : {}),
     });
   };
 
@@ -188,7 +227,7 @@ export default function ImageMarkupEditor({
       // 화면 덮개와 **같은 함수** — 저장한 파일이 화면과 다르게 나오지 않게(`imageMarkDraw.ts`).
       drawImageMarks(context, marks, canvas.width, canvas.height);
 
-      return await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
+      return await toBlob(canvas);
     }
   };
 
@@ -200,6 +239,40 @@ export default function ImageMarkupEditor({
       if (!blob) return;
       const stem = saveName.trim();
       await onSave(new File([blob], `${stem}.png`, { type: "image/png" }), stem, marks);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * **움직임 마스크를 굽습니다** — 흰 구역만 움직이고 나머지는 검정인 흑백 PNG.
+   *
+   * 표시한 그림을 굽는 길(`renderMarkedBlob` → `onSave`)을 그대로 본떴습니다. 다른 것은
+   * «원본 그림 위에 도형» 대신 «검은 판 위에 흰 구역» 을 칠한다는 것뿐입니다. 크기는
+   * 원본 그대로여야 합니다 — 화면 크기로 구우면 생성기에서 구역이 어긋납니다.
+   *
+   * 원본을 굳이 한 번 읽는 까닭: **원본 픽셀 크기**가 필요해서입니다. 그림을 그리지는
+   * 않으니 마스크에 원본이 비칠 일은 없습니다.
+   */
+  const saveMask = async () => {
+    if (!onSaveMask) return;
+    if (!hasMotionMarks(marks)) {
+      toast.error(t("먼저 «움직임 구역» 을 켜고 움직일 자리를 그려 주세요."));
+      return;
+    }
+    setSaving(true);
+    try {
+      const image = await loadImageForCanvas(imageSrc);
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      paintMotionMask(context, marks, canvas.width, canvas.height);
+      const blob = await toBlob(canvas);
+      if (!blob) return;
+      // 이름은 «원본 이름_움직임» — 이름 칸은 «표시한 그림» 것이라 마스크는 제 이름으로 갑니다.
+      await onSaveMask(new File([blob], "움직임.png", { type: "image/png" }), "움직임", marks);
     } finally {
       setSaving(false);
     }
@@ -253,7 +326,7 @@ export default function ImageMarkupEditor({
       {/*
         저장 줄(이름 칸 · «표시한 그림 저장»)은 표시를 하나라도 찍어야 생깁니다. 튜토리얼이 그것을
         가리키면 아직 아무것도 안 그린 사람에게는 영영 안 보이므로, **늘 있는 이 도구줄**이 두 이름을
-        같이 받습니다 — 튜토리얼이 가리킬 자리는 늘 화면에 있거나, 아니면 대신 눌러 줘야 합니다.
+        같이 받습니다().
       */}
       <div className="flex flex-wrap items-center gap-2" data-tour="cropper-mark-shapes">
         {(["anchor", "rect", "ellipse", "free"] as MarkShape[]).map(item => {
@@ -277,10 +350,31 @@ export default function ImageMarkupEditor({
           );
         })}
 
+        {/*
+          «움직임 구역» 은 모양이 아니라 **스위치**입니다(위 `motion` 참조). 켜 둔 동안 그린
+          사각형·원·자유선이 그 구역이 되고, 색과 점선으로 갈라져 보입니다.
+        */}
+        <button
+          type="button"
+          onClick={() => setMotion(current => !current)}
+          disabled={shape === "anchor"}
+          title={t("켜 둔 동안 그린 자리가 «여기는 움직인다» 구역이 됩니다. 흑백 마스크로 구워 영상 생성기에 함께 올리면, 그 구역만 움직이고 나머지는 첫 프레임 그대로 붙박입니다.")}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold disabled:opacity-40"
+          style={{
+            background: motion ? `${MOTION_MARK_COLOR}2e` : "oklch(1 0 0 / 5%)",
+            border: `1px solid ${motion ? `${MOTION_MARK_COLOR}80` : "oklch(1 0 0 / 10%)"}`,
+            color: motion ? MOTION_MARK_COLOR : "oklch(0.62 0.01 265)",
+          }}
+        >
+          <Waves className="h-3.5 w-3.5" /> {t("움직임 구역")}
+        </button>
+
         <span className="text-[11px]" style={{ color: "oklch(0.45 0.01 265)" }}>
           {shape === "anchor"
             ? "카메라가 설 지점을 누르고, 정면으로 볼 쪽으로 끌어 놓으세요"
-            : "이미지 위에서 끌어 표시합니다"}
+            : motion
+              ? t("움직일 자리를 끌어 그리세요 — 마스크에서 흰색이 됩니다")
+              : "이미지 위에서 끌어 표시합니다"}
         </span>
 
         {marks.length > 0 && onSave && (
@@ -303,6 +397,24 @@ export default function ImageMarkupEditor({
             >
               <Save className="h-3 w-3" /> {saving ? "저장 중…" : "표시한 그림 저장"}
             </button>
+
+            {/*
+              마스크 단추는 **움직임 구역을 하나라도 그려야** 생깁니다. 늘 띄워 두면 아무것도
+              안 그린 채 눌러 «온통 검은 판» 이 폴더에 쌓입니다 — 그런 마스크는 영상 전체를
+              얼려서, 받아 본 사람은 까닭을 알 길이 없습니다.
+            */}
+            {onSaveMask && hasMotionMarks(marks) && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void saveMask()}
+                title={t("흰 구역만 움직이고 나머지는 검정인 흑백 PNG 를 원본 해상도로 굽습니다. «원본 이름_움직임» 으로 이 항목 폴더에 저장됩니다.")}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                style={{ background: `${MOTION_MARK_COLOR}26`, color: MOTION_MARK_COLOR }}
+              >
+                <Waves className="h-3 w-3" /> {saving ? "저장 중…" : t("움직임 마스크 저장")}
+              </button>
+            )}
           </div>
         )}
 
@@ -342,7 +454,7 @@ export default function ImageMarkupEditor({
         {/*
           표시 덮개 — 저장본과 **같은 함수**(drawImageMarks)로 CSS px 크기에 그립니다.
           예전 SVG(viewBox 0~100 을 늘려 그림)는 가로로 긴 그림에서 앵커 원이 타원이 되고
-          번호표가 DOM 배지라, 화면에서 보던 모양과 저장한 파일의 모양이 서로 달랐습니다.
+          번호표가 DOM 배지라 저장한 파일과 모양이 달랐습니다().
         */}
         <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>
@@ -361,13 +473,22 @@ export default function ImageMarkupEditor({
             >
               <span
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white"
-                style={{ background: markColor(index) }}
+                // 그림 위의 색과 같아야 목록의 ①번과 그림의 ①번이 이어집니다(`drawImageMarks`).
+                style={{ background: isMotionMark(mark) ? MOTION_MARK_COLOR : markColor(index) }}
               >
                 {index + 1}
               </span>
               <span className="shrink-0 text-[11px]" style={{ color: "oklch(0.50 0.01 265)" }}>
                 {SHAPE_LABELS[mark.shape]}
               </span>
+              {isMotionMark(mark) && (
+                <span
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: `${MOTION_MARK_COLOR}26`, color: MOTION_MARK_COLOR }}
+                >
+                  {t("움직임")}
+                </span>
+              )}
 
               <input
                 value={mark.note}

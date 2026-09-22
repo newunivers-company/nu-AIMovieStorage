@@ -153,6 +153,7 @@ def _apply_loras(opts):
         pipe.unload_lora_weights()
     except Exception as error:
         common.log("로라를 떼지 못했습니다(무시): {}".format(error))
+    rel_name = os.path.basename(wanted[0]["path"]) if wanted else ""
     names, weights = [], []
     for index, item in enumerate(wanted):
         path = item["path"]
@@ -165,7 +166,9 @@ def _apply_loras(opts):
         weights.append(float(item.get("weight", 1.0)))
     if names:
         pipe.set_adapters(names, adapter_weights=weights)
-        common.log("로라 {}개를 먹였습니다.".format(len(names)))
+        # 붙었는지 **세어 보고** 적습니다 — 안 붙어도 diffusers 는 조용합니다(`common.check_loras`).
+        got = common.check_loras(getattr(pipe, "transformer", pipe), wanted, rel_name)
+        common.log("로라 {}개를 먹였습니다.".format(got))
     _state["loras"] = signature
 
 
@@ -323,7 +326,9 @@ def generate(output, opts, report):
 
     result = common.run_attention_safe(pipe, lambda: pipe(**kwargs))
     report(95, "mp4 로 내보내는 중")
-    common.save_video(result.frames[0], output, fps)
+    # 「여기만 움직인다」 흑백 마스크가 왔으면 검은 곳을 첫 장면에 묶습니다(`common.freeze_by_mask`).
+    frames_out = common.freeze_by_mask(result.frames[0], opts.get("motion_mask"))
+    common.save_video(frames_out, output, fps)
     out = {
         "width": width,
         "height": height,

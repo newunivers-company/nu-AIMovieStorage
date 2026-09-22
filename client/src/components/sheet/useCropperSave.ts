@@ -5,8 +5,10 @@ import {
   editedStem,
   fileStem,
   saveProjectMediaAsset,
+  type EditAction,
   type ProjectAssetType,
 } from "@/lib/mediaLibrary";
+import { MOTION_MASK_ACTION } from "@/lib/motionMask";
 import { saveFaceSet } from "@/lib/faceSetSave";
 import {
   availableEngines,
@@ -109,8 +111,7 @@ export function useCropperSave({
   /**
    * 저장 직후 앱이 그 파일을 읽을 수 있는지 한 번 확인합니다.
    *
-   * 지우기로 만든 그림이 폴더에는 멀쩡히 저장됐는데 화면에는 깨진 그림으로 떴습니다 —
-   * 파일과 화면 중 어느 쪽이 잘못된 것인지 알 길이 없었습니다. 못 읽으면
+   * — 파일은 멀쩡한데 화면이 깨지면 사람이 원인을 알 길이 없었습니다. 못 읽으면
    * 경로와 크기를 알림으로 띄워 바로 짚을 수 있게 합니다. 등록은 그대로 진행합니다 — 받는 쪽이
    * 방금 만든 blob(`thumb`)을 폴백으로 보여 줍니다.
    */
@@ -127,34 +128,39 @@ export function useCropperSave({
     probe.src = src;
   };
 
-  /** 표시한 그림·파노라마를 **새 파일**로 남깁니다. 원본은 손대지 않습니다. */
+  /** 표시한 그림·동선·움직임 마스크·파노라마를 **새 파일**로 남깁니다. 원본은 손대지 않습니다. */
   const saveExtra = async (
     file: File,
     stem: string,
-    kind: "mark" | "motion" | "panorama",
+    kind: "mark" | "motion" | "motionMask" | "panorama",
     extraMarks?: ImageMark[],
   ) => {
-    // 표시한 그림은 «원본 이름_표시» — 파일 이름만 보고 무슨 일을 한 것인지 알아야 합니다. 표시 창의 이름 칸은
-    // 기본값이 «표시» 라 그대로면 두 번 붙지 않게 빼고, 다르게 적었으면 꼬리로 붙입니다.
-    // 파노라마는 면 이름(`front`·`equirect`)이 곧 무엇인지라 기존 규칙 그대로입니다.
-    const full =
-      kind === "mark" || kind === "motion"
-        ? editedStem({
-            prefix,
-            sourcePath,
-            ownerName,
-            // 동선은 «원본_동선» 으로 남습니다 — 무엇을 한 그림인지 이름만 보고 알아야 합니다(규칙 5).
-            action: kind === "motion" ? "동선" : "표시",
-            detail: stem.trim() === "표시" || stem.trim() === "동선" ? "" : stem,
-          })
-        : `${prefix}_${stem}`;
+    /*
+      그림 위에 얹은 것들은 «원본 이름_동작» — 무엇을 한 것인지 이름에 남깁니다.
+      편집 창의 이름 칸은 기본값이 그 동작 이름이라, 그대로면 두 번 붙지 않게 빼고 다르게
+      적었으면 꼬리로 붙입니다. 파노라마는 면 이름(`front`·`equirect`)이 곧 무엇인지라
+      기존 규칙 그대로입니다.
+
+      **규칙을 여기 한 벌만** 둡니다 — 마스크가 제 이름 규칙을 따로 들면 폴더 이름 바꾸기
+      (Rust `rename_owner_tree`)와 마그니픽 @태그가 그 한 종류만 못 따라옵니다.
+    */
+    const action: EditAction | null =
+      kind === "motion" ? "동선" : kind === "motionMask" ? MOTION_MASK_ACTION : kind === "mark" ? "표시" : null;
+    const full = action
+      ? editedStem({
+          prefix,
+          sourcePath,
+          ownerName,
+          action,
+          detail: stem.trim() === action ? "" : stem,
+        })
+      : `${prefix}_${stem}`;
     const result = await saveProjectMediaAsset(file, {
       projectName,
       assetType: markAssetType || assetType,
       ownerName,
       stem: full,
-      // 돔에 두르는 파노라마는 **별도 폴더**에. 돔을 고를 때는 파노라마만 떠야 하는데,
-      // 자리로 갈리지 않으면 낱장 그림과 섞여 목록에서 가려낼 길이 없습니다.
+      // 돔에 두르는 파노라마는 **별도 폴더**에. 자리로 갈려야 목록에서 가릴 수 있습니다.
       subdir: kind === "panorama" ? PANORAMA_DIR : undefined,
     });
     if (!result?.path) {
@@ -170,6 +176,7 @@ export function useCropperSave({
         name: fileStem(result.path),
         marks: extraMarks,
         // 동선 그림도 «표시한 그림» 갈래로 등록합니다 — 둘 다 그림 위에 얹은 것이라 쓰임이 같습니다.
+        // 마스크만 제 이름으로 갑니다(쓰임이 다릅니다 — `CropperSavedFile.kind` 참조).
         kind: kind === "motion" ? "mark" : kind,
         thumb: URL.createObjectURL(file),
       },
@@ -177,10 +184,17 @@ export function useCropperSave({
     toast.success(
       kind === "motion"
         ? "동선 그림을 저장했습니다."
-        : kind === "mark"
-          ? "표시한 그림을 저장했습니다."
-          : "보정한 파노라마를 저장했습니다.",
+        : kind === "motionMask"
+          ? "움직임 마스크를 저장했습니다. 영상 생성기에 그림과 함께 올리세요 — 흰 구역만 움직입니다."
+          : kind === "mark"
+            ? "표시한 그림을 저장했습니다."
+            : "보정한 파노라마를 저장했습니다.",
     );
+    /*
+      마스크를 구운 뒤에는 **창을 닫지 않습니다.** 마스크와 «표시한 그림» 을 둘 다 남기는 것이
+      흔한 쓰임인데, 여기서 닫으면 그려 둔 표시가 사라져 처음부터 다시 그려야 합니다
+      («지금 그림 업스케일» 이 창을 안 닫는 것과 같은 까닭).
+    */
     if (kind === "mark" || kind === "motion") onOpenChange(false);
   };
   /** 여섯 면 저장·업스케일의 진행 문구. 파노라마 탭 단추에 «정면 업스케일 중 1/6» 으로 보입니다. */
@@ -189,8 +203,7 @@ export function useCropperSave({
   /**
    * 파노라마에서 잘라낸 여섯 면을 **한 세트**로 저장합니다.
    *
-   * - 자리: 주인 폴더 안 `6면/`. 뿌리에 그냥 쏟으면 원본까지 여덟 장이 흩어져 보입니다 —
-   * 폴더로 갈라 두면 목록이 세트 카드 하나로 접힙니다.
+   * - 자리: 주인 폴더 안 `6면/` . 뿌리에 섞이지 않으니 목록이 세트 카드 하나로 접힙니다.
    * - 이름: `<접두>_<면>_<NNN>` — 면 이름을 **앞에 두지 않습니다.** 폴더 이름 바꾸기(Rust
    * `rename_owner_tree`)와 마그니픽 @태그가 «접두 먼저» 를 전제로 해서, 앞에 두면 장소 이름을
    * 바꿀 때 여섯 면이 옛 이름으로 남습니다. 화면은 `faceDisplayName` 이 «정면 · 장소 #1» 로 보여 줍니다.
@@ -347,7 +360,7 @@ export function useCropperSave({
       const saved: CropperSavedFile[] = [];
 
       // 지운 판 자체도 남깁니다. 원본은 그대로 두고 새 파일로.
-      // 이름은 «원본 이름_지움» — 파일 이름만 보고 무슨 일을 한 것인지 알아야 합니다.
+      // 이름은 «원본 이름_지움» — 
       if (erases.length) {
         const blob = await toBlob(clean);
         if (blob) {

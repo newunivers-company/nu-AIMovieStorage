@@ -58,7 +58,7 @@ export default function GeneratedImageShelf({
    * **지금 목록을 받아 다음 목록을 돌려주는 함수** 를 받습니다.
    *
    * 값으로 받던 때는 폴더 저장(수 초)이 끝난 뒤 «요청할 때의 목록» 으로
-   * 덮어써서, 그 사이 넣은 그림이 사라졌습니다.
+   * 덮어써서, 그 사이 넣은 그림이 사라졌습니다. (2026-09-05 검증)
    */
   onChange: (
     update: (current: GeneratedImageAsset[]) => GeneratedImageAsset[],
@@ -104,7 +104,7 @@ export default function GeneratedImageShelf({
     assetSrc(image.filePath) || image.thumb || "";
   /*
     ── 마그니픽에서 가져오기 ──────────────────────────────────────────────
-    값을 치르고 뽑아 둔 것을 **다시 뽑지 않고** 끌어옵니다.
+     값을 치르고 뽑아 둔 것을 **다시 뽑지 않고** 끌어옵니다.
     연결했을 때만 뜹니다 — 못 쓰는 단추는 자리만 차지합니다.
   */
   const magnific = useMagnificStatus();
@@ -228,8 +228,7 @@ export default function GeneratedImageShelf({
   };
 
   /*
-    낱장 업스케일은 여기 없습니다. 자르면 그림이 작아지니 키우는 일은 자르는 자리에서
-    이어서 하는 것이 자연스럽습니다 — 낱장 키우기는 가위로 여는 편집 창
+    낱장 업스케일은 여기 없습니다(2026-09-09). — 낱장 키우기는 가위로 여는 편집 창
     (`SheetPanelCropper`)의 «지금 그림 업스케일»·«업스케일해서 저장» 으로 갔습니다.
     여섯 장을 한 번에 덮어쓰는 세트 업스케일만 카드에 남습니다.
   */
@@ -248,7 +247,7 @@ export default function GeneratedImageShelf({
     );
 
   const sheets = images.filter((image) => image.isCompositeSheet);
-  // 6면 세트는 여덟 장으로 늘어놓지 않고 카드 한 장으로 — 한 장소가 목록을 다 먹습니다. 낱장은 `singles`.
+  // 6면 세트는 여덟 장으로 늘어놓지 않고 카드 한 장으로. 낱장은 `singles`.
   // `6면/` 밖의 이름 인식(legacy)은 배경에서만 — 캐릭터·에셋의 «정면»·«후면» 칸이 세트로 오인되지 않게.
   const { sets: faceSets, singles: plain } = splitFaceSets(
     images.filter((image) => !image.isCompositeSheet),
@@ -360,7 +359,7 @@ export default function GeneratedImageShelf({
       {plain.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {plain.map((image) => (
-            /* 레퍼런스 타일과 같은 규칙 — 눌러서 고르고 Ctrl+C 로 복사. 자리마다 다르면 손이 헷갈립니다. */
+            /* 레퍼런스 타일과 같은 규칙 — 눌러서 고르고 Ctrl+C 로 복사. (지시 121) */
             <div
               key={image.id}
               tabIndex={0}
@@ -384,16 +383,14 @@ export default function GeneratedImageShelf({
                   <img
                     src={previewOf(image)}
                     alt={image.name}
-                    // 썸네일을 누르면 크게 봅니다 — 작은 칸으로는 제대로 뽑힌 그림인지
-                    // 가릴 수가 없어서, 그림이 놓인 자리라면 어디서든 크게 열립니다.
+                    // 썸네일을 누르면 크게 봅니다. 「어디서든 이미지를 클릭하면 이미지를
+                    // 크게 보여줘야 제대로 된 이미지인지 체크하지」 (지시 255·273)
                     onClick={() =>
                       setViewing({ images: [toLightbox(image)], index: 0 })
                     }
                     data-tour-open="shelf-lightbox-nav"
                     /*
-                      **원본 크기를 재 둡니다** — 업스케일을 걸지 말지가 이 숫자에서 갈리는데,
-                      칸 안에 맞춰 보여 주므로 눈으로는 알 수 없습니다.
-                      어차피 브라우저가 받아 놓은 그림이라 `naturalWidth` 를 읽는 것이
+                      **원본 크기를 재 둡니다.** 어차피 브라우저가 받아 놓은 그림이라 `naturalWidth` 를 읽는 것이
                       가장 싸고 정확합니다 — 따로 `Image` 를 또 띄우면 같은 파일을 두 번 읽습니다.
                     */
                     onLoad={(event) => {
@@ -408,8 +405,7 @@ export default function GeneratedImageShelf({
                     className="h-full w-full cursor-zoom-in object-cover"
                     /*
                       저장된 파일을 못 읽으면 blob(thumb)으로 한 번 더 시도하고, 그것도 없으면 숨깁니다 —
-                      ReferenceImageUploader 와 같은 규칙(액박 대신 빈 칸). 파일은 멀쩡히 있는데 주소만
-                      막혀도 깨진 그림 표가 뜨면 지워진 줄 압니다. 막힌 경로는 콘솔에 남깁니다.
+                      ReferenceImageUploader 와 같은 규칙(액박 대신 빈 칸).  막힌 경로는 콘솔에 남깁니다.
                     */
                     onError={(event) => {
                       const fallback = image.thumb;
@@ -440,7 +436,7 @@ export default function GeneratedImageShelf({
                     ? "대표 이미지입니다 — 목록 카드와 스토리보드 칸에 이 장이 실립니다"
                     : "대표 이미지로"
                 }
-                // 왼쪽 위는 어느 타일에서나 «복사» 자리라 겹쳤습니다. 그래서 위 가운데로.
+                // 왼쪽 위는 공통 「복사」 자리라 겹쳤습니다. 위 가운데로. (지시 255)
                 //
                 // 대표는 **늘 보입니다.** 마우스를 올려야만 보이면 여러 장 중 어느 것이
                 // 스토리보드에 실릴지 알 수가 없어서, 한 장씩 짚어 보게 됩니다.
@@ -499,7 +495,7 @@ export default function GeneratedImageShelf({
             const target = images.find((image) => image.id === id);
             if (target) void remove(target);
           }}
-          // 정작 칸을 잘라내야 할 대상이 합성 시트입니다 — 여러 칸이 한 장에 들어 있으니까요.
+          // 정작 칸을 잘라내야 할 대상이 합성 시트입니다. (지시 215·217)
           onCrop={(id) => {
             const target = images.find((image) => image.id === id);
             if (target) setCropTarget(target);

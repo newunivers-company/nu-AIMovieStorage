@@ -68,8 +68,15 @@ export async function restoreBgmProjectsFromDisk(): Promise<BgmProject[]> {
     return projects;
   }
 
+  /*
+    **폴더를 읽은 뒤에 기록을 다시 읽습니다.**
+
+    앞에서 뜬 사본에 얹어 저장하면, 폴더를 훑는 몇 초 사이에 사람이 고친 프롬프트·가사가
+    통째로 옛 값으로 되돌아갑니다. 훑기는 «어떤 파일이 있더라» 만 알아 오는 일이고,
+    **무엇에 얹을지는 그때의 최신 기록**이어야 합니다.
+  */
   let changed = false;
-  const next = [...projects];
+  const next = [...loadBgmProjects()];
 
   for (const folder of folders) {
     if (!folder.files.length) continue;
@@ -88,9 +95,16 @@ export async function restoreBgmProjectsFromDisk(): Promise<BgmProject[]> {
     const owner = already ?? createBgmProject(folder.name);
     const tracks = [...(owner.tracks || [])];
     for (const [name, files] of byName) {
-      const seen = tracks.find((track) => (track.name || "").trim() === name);
-      if (seen) {
-        seen.resultPaths = [...(seen.resultPaths || []), ...files];
+      const at = tracks.findIndex((track) => (track.name || "").trim() === name);
+      if (at >= 0) {
+        /*
+          **찾은 곡을 제자리에서 고치지 않습니다.** 그 객체는 지금 화면이 들고 있는 것과
+          같은 것일 수 있어, 손대면 사람이 적던 글이 딸려 움직입니다. 파일 목록만 더한
+          새 객체로 갈아 끼웁니다 — 프롬프트·분위기·가사는 읽은 그대로 남습니다.
+        */
+        const had = tracks[at].resultPaths || [];
+        const add = files.filter((file) => !had.includes(file));
+        if (add.length) tracks[at] = { ...tracks[at], resultPaths: [...had, ...add] };
         continue;
       }
       tracks.push({
@@ -108,6 +122,37 @@ export async function restoreBgmProjectsFromDisk(): Promise<BgmProject[]> {
     changed = true;
   }
 
-  if (changed) saveBgmProjects(next);
-  return next;
+  if (!changed) return next;
+  /*
+    저장 직전에 **한 번 더** 최신을 읽어, 우리가 더한 곡만 얹습니다. 훑는 동안 사람이 새 곡을
+    만들었을 수도 있고, 그것까지 지우면 «만들자마자 사라졌다» 가 됩니다.
+  */
+  const latest = loadBgmProjects();
+  const merged = next.map((item) => {
+    const fresh = latest.find((other) => other.id === item.id);
+    if (!fresh) return item;
+    const ours = new Map(item.tracks.map((track) => [track.id, track]));
+    return {
+      ...fresh,
+      tracks: [
+        // 최신 쪽이 기준 — 사람이 고친 글이 거기 있습니다. 파일 목록만 우리 것과 합칩니다.
+        ...fresh.tracks.map((track) => {
+          const ourTrack = ours.get(track.id);
+          if (!ourTrack) return track;
+          const add = (ourTrack.resultPaths || []).filter(
+            (file) => !(track.resultPaths || []).includes(file),
+          );
+          return add.length ? { ...track, resultPaths: [...(track.resultPaths || []), ...add] } : track;
+        }),
+        // 우리가 새로 만든 곡(최신에는 아직 없는 것)만 뒤에 붙입니다.
+        ...item.tracks.filter((track) => !fresh.tracks.some((other) => other.id === track.id)),
+      ],
+    };
+  });
+  // 훑는 동안 사람이 새로 만든 BGM 프로젝트도 잃지 않습니다.
+  for (const fresh of latest) {
+    if (!merged.some((item) => item.id === fresh.id)) merged.push(fresh);
+  }
+  saveBgmProjects(merged);
+  return merged;
 }

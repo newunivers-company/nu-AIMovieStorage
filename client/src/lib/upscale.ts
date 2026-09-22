@@ -7,8 +7,8 @@ import { isEngineIncluded } from "@/lib/edition";
 /**
  * 업스케일 엔진 체계 — 프런트 쪽.
  *
- * ComfyUI 는 판이 오를 때마다 워크플로가 깨지니, **컴피 없이도 도는 길**이 있어야 합니다.
- * 그렇다고 하나만 두지 않습니다 — 엔진마다 잘하는 그림이 달라 여럿을 늘어놓고 고릅니다.
+ * 「SeedVR2로 부탁해 … 다른 로컬 업스케일링 도구들 리스트업 해서 골라서 사용할 수
+ * 있게 해줘」 「없어 넷 다 진행해」.
  *
  * 그래서 엔진은 앱 데이터 폴더 `upscale/engines/<id>/` 에 **각자 고정 환경**(uv venv + 고정
  * 커밋 코드 + 검증된 가중치)으로 설치되고, Rust(`src-tauri/src/upscale.rs`)가 상주 워커를
@@ -57,7 +57,6 @@ export interface UpscaleEngineInfo {
 /**
  * 파일 이름에 붙일 엔진 딱지 — «냥이_전신_업스케일_SeedVR2_001».
  *
- * 업스케일한 파일은 이름만 보고 **어느 엔진으로 키운 것인지** 알 수 있어야 합니다.
  * 엔진마다 결과 성격이 달라서(디테일을 만드는 것 / 선명하게만 하는 것) 나중에 견줄 때 이름으로
  * 가려야 합니다. 화면 이름(`name`)은 길어서 파일에 못 쓰고, 폴더 이름 규칙(`safeFileName`)에
  * 걸리지 않도록 **영문·숫자만** 씁니다.
@@ -104,7 +103,7 @@ export const UPSCALE_ENGINE_CATALOG: Record<UpscaleEngineId, UpscaleEngineInfo> 
   vosr: {
     id: "vosr",
     name: "디테일 생성 (실험) — VOSR 2.0",
-    // 4K·6K·8K 를 실제로 뽑아 확인했습니다(12번 문서 §5.2). 그래도 «실험» 인 이유는
+    // 2026-09-09 에 4K·6K·8K 를 실제로 뽑았습니다(12번 문서 §5.2). 그래도 «실험» 인 이유는
     // 성능이 아니라 구조입니다 — 모델을 상주시키지 못하고 장마다 CLI 를 새로 띄웁니다.
     purpose: "영웅 컷. 환각 적고 구조에 충실한 1스텝 확산형. 장마다 CLI 를 새로 띄워 한 장이 느림",
     license: "Apache 2.0",
@@ -142,7 +141,7 @@ export const SEEDVR2_MODEL_OPTIONS: { id: SeedVr2Model; label: string; extra: bo
 /**
  * spandrel 모델 — id 는 manifest 의 파일 이름(확장자 뺀 것)과 같아야 워커가 찾습니다.
  * 원래 표의 «속도» 모델 `4xNomos8k_span_otf_medium` 은 구글 드라이브에만 있어 자동으로 받을 수
- * 없어서 직접 받을 수 있는 SPAN 사전학습본으로 바꿨습니다.
+ * 없어서(2026-09-09 확인) 직접 받을 수 있는 SPAN 사전학습본으로 바꿨습니다.
  */
 export type SpandrelModel = "4xNomosWebPhoto_RealPLKSR" | "4xmssim_span_pretrain";
 export const SPANDREL_MODEL_OPTIONS: { id: SpandrelModel; label: string; hint: string }[] = [
@@ -187,8 +186,8 @@ export function needsUpscale(nativeSize: number, wantedSize: number): boolean {
  * 엔진별 **최대 배율** — 이 배율까지가 «모델이 없는 화소를 만들어 내는» 구간이고,
  * 그 위는 그냥 Lanczos 로 늘린 것입니다(워커의 `common.fit_to`).
  *
- * 목표 크기를 고를 때 «그 엔진이 원본에서 그 크기를 진짜로 만들 수 있는지» 를 알려 줘야
- * 합니다. spandrel·upscayl 은 4× 고정 모델이라 원본 1024 면 4096 이 상한이고,
+ * 사용자 2026-09-09: 목표 크기를 고를 때 «그 엔진이 원본에서 그 크기를 진짜로 만들 수 있는지»
+ * 를 알려 줘야 합니다. spandrel·upscayl 은 4× 고정 모델이라 원본 1024 면 4096 이 상한이고,
  * 6K·8K 를 골라도 4096 까지만 만든 뒤 늘립니다. 문서에 적힌 «spandrel 8K 도 타일로» 는
  * 오해를 부르는 문장이었습니다 — 타일은 **입력**을 나누는 것이지 배율을 늘리지 않습니다.
  *
@@ -206,7 +205,7 @@ export const UPSCALE_ENGINE_MAX_SCALE: Record<UpscaleEngineId, number | null> = 
   // Maxine SR 은 «한 패스» 가 4× 까지지만, 워커(`nvvfx.py` 의 `_passes`)는 남은 비율이 4 이하가
   // 될 때까지 `while True` 로 패스를 **몇 번이든** 이어 붙입니다 — 배율 상한이 없습니다.
   //
-  // 여기 16 을 적어 두었더니 원본 긴 변이 작은 그림(시트에서 잘라낸 칸, 얼굴
+  // 2026-09-09 지적: 여기 16 을 적어 두었더니 원본 긴 변이 작은 그림(시트에서 잘라낸 칸, 얼굴
   // 크롭 등)에서 8192/원본 > 16 이 되어, ▾ 메뉴가 실제로는 세 패스로 진짜 키우는 nvvfx 줄에
   // «늘리기» 딱지를 잘못 붙였습니다. 게다가 기본 엔진이면 «원본 1024px 이면 16384px 이 상한»
   // 이라는, 아무 데도 근거가 없는 문장이 늘 떠 있었습니다.
@@ -565,7 +564,7 @@ function ensureProgressHook(): Promise<void> {
     progressHooked = listen<UpscaleProgressEvent>("upscale-progress", (event) => {
       const payload = event.payload;
       if (!payload || typeof payload !== "object") return;
-      // «disk» 는 Rust 가 엔진 폴더 크기를 뒤에서 다시 잰 뒤 보내는 살림 신호 — 상태만 다시 읽고,
+      // «disk» 는 Rust 가 엔진 폴더 크기를 뒤에서 다시 잰 뒤 보내는 살림 신호(2026-09-22) — 상태만 다시 읽고,
       // 작업 진행을 듣는 쪽에는 넘기지 않습니다(빈 문구가 진행 줄을 지우면 안 됩니다).
       if (payload.stage === "disk") {
         if (payload.done) void listEngines();

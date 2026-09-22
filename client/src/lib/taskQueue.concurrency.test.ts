@@ -11,8 +11,8 @@ import {
 } from "@/lib/taskQueue";
 
 /*
-  한 줄로 하나씩만 받으면 너무 느립니다 — llm 줄은 설정한 수만큼 한꺼번에 돌고,
-  429 는 실패가 아니라 «쉬었다 다시» 입니다.
+  「지금은 너무 느리다」.
+  llm 줄은 설정한 수만큼 한꺼번에 돌고, 429 는 실패가 아니라 «쉬었다 다시» 입니다.
 */
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const job = (kind: string, projectId: string, label: string): NewTask => ({
@@ -75,7 +75,7 @@ describe("자동 동시 수 — 429 를 보며 스스로 찾기", () => {
     enqueueTasks(Array.from({ length: 3 }, (_, index) => job("fine", "p-자동", `잘 됨 ${index}`)));
     await tick();
     await tick();
-    const doubled = start * 2; // 자동에는 상한을 두지 않습니다 — 429 가 알려 줄 때까지 올립니다
+    const doubled = start * 2; // 자동에는 상한이 없습니다
     expect(effectiveLlmConcurrency()).toBe(doubled);
     registerTaskRunner("limited", async () => {
       throw new Error("openai 오류 429 Too Many Requests");

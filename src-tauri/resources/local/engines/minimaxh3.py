@@ -265,18 +265,45 @@ def unload():
     common.free_vram()
 
 
-def _network_alphas(state_dict):
-    """알파 = 랭크.
+def _fit_keys(state_dict):
+    """로라 키를 **이 모델이 아는 이름**으로 맞춥니다.
 
-    터보 로라는 어텐션·MLP 랭크 64, AdaLN 랭크 16 으로 **랭크가 섞여 있습니다.** 알파를
-    안 주면 diffusers 가 한 값으로 가정해 AdaLN 쪽 세기가 4배로 들어갑니다.
+    받아 온 로라마다 키 앞머리가 다릅니다 — 하나는 `diffusion_model.blocks.…`,
+    다른 하나는 `transformer_blocks.…`·`token_refiner.…` 로 시작합니다. diffusers 에
+    `prefix="transformer"` 로 넘기면 둘 다 한 개도 안 맞아 **조용히 아무 일도 안 일어납니다.**
+    그런데도 겉보기에는 성공이라, 뽑은 영상이 로라 없는 것과 바이트까지 같았습니다.
+
+    그래서 앞머리를 떼어 맞춥니다. `lora_A.default.weight` 처럼 중간에 낀 어댑터 이름도
+    뗍니다 — 그 이름은 저장할 때 붙은 것이고, 올릴 때는 우리가 다시 붙입니다.
     """
-    alphas = {}
+    out = {}
     for key, tensor in state_dict.items():
-        if key.endswith(".lora_B.weight") and getattr(tensor, "ndim", 0) > 1:
-            base = key[: -len(".lora_B.weight")]
-            alphas["{}.alpha".format(base)] = float(tensor.shape[1])
-    return alphas
+        name = key
+        for head in ("diffusion_model.", "transformer.", "model.diffusion_model."):
+            if name.startswith(head):
+                name = name[len(head):]
+                break
+        name = name.replace(".lora_A.default.weight", ".lora_A.weight")
+        name = name.replace(".lora_B.default.weight", ".lora_B.weight")
+        name = name.replace(".lora_A.default_0.weight", ".lora_A.weight")
+        name = name.replace(".lora_B.default_0.weight", ".lora_B.weight")
+        out[name] = tensor
+    return out
+
+
+def _lora_fits(model, state_dict):
+    """이 로라의 키가 모델의 모듈 이름과 **실제로 만나는가.**
+
+    diffusers 는 한 개도 안 맞아도 예외를 던지지 않고 경고만 찍고 넘어갑니다. 그래서
+    «먹였습니다» 라고 적어 놓고 아무 일도 안 한 채 돌던 것입니다. 여기서 미리 셉니다.
+    """
+    names = {name for name, _ in model.named_modules()}
+    hit = 0
+    for key in state_dict:
+        base = key.split(".lora_A")[0].split(".lora_B")[0]
+        if base in names:
+            hit += 1
+    return hit
 
 
 def _apply_loras(opts):
@@ -302,20 +329,35 @@ def _apply_loras(opts):
         path = item["path"]
         if not os.path.isfile(path):
             raise IOError("로라 파일을 찾지 못했습니다: {}".format(path))
-        state_dict = load_file(path, device="cpu")
+        state_dict = _fit_keys(load_file(path, device="cpu"))
+        hit = _lora_fits(pipe.transformer, state_dict)
+        if not hit:
+            # 한 개도 안 만나면 올려 봤자 아무 일도 안 일어납니다. 조용히 넘기면
+            # «먹였습니다» 라고 적어 놓고 로라 없는 것과 똑같은 결과가 나옵니다.
+            raise IOError(
+                "이 로라는 이 모델에 맞지 않습니다(맞는 자리가 하나도 없습니다): {}".format(
+                    os.path.basename(path)
+                )
+            )
         name = "lora{}".format(index)
         pipe.transformer.load_lora_adapter(
             state_dict,
-            prefix="transformer",
+            prefix=None,
             adapter_name=name,
-            network_alphas=_network_alphas(state_dict),
+            # 알파는 **넘기지 않습니다.** 키를 이미 이 모델의 이름으로 맞췄기 때문에
+            # `prefix=None` 으로 가는데, diffusers 는 그때 알파를 받으면 거절합니다
+            # («network_alphas cannot be None when prefix is None» — 조건이 뒤집혀 보이지만
+            # 뜻은 «앞머리를 안 줄 거면 알파도 주지 마라» 입니다). 랭크는 키마다 텐서 모양에
+            # 들어 있어 peft 가 스스로 읽습니다.
         )
+        common.log("로라 «{}» — 맞는 자리 {}곳.".format(os.path.basename(path), hit))
         names.append(name)
         weights.append(float(item.get("weight", 1.0)))
     if names:
         try:
             pipe.transformer.set_adapters(names, weights)
-            common.log("로라 {}개를 먹였습니다.".format(len(names)))
+            got = common.check_loras(pipe.transformer, wanted, os.path.basename(wanted[0]["path"]))
+            common.log("로라 {}개를 먹였습니다.".format(got))
         except Exception as error:
             # 겹쳐 켜기가 안 되는 판이면 마지막 것만 살아 있습니다 — 조용히 넘기지 않습니다.
             common.log("로라를 겹쳐 켜지 못했습니다(마지막 것만 듣습니다): {}".format(error))
@@ -395,8 +437,10 @@ def generate(output, opts, report):
 
     report(95, "영상과 소리를 한 파일로 합치는 중")
     # 소리는 따로 나옵니다. 여기서 합치지 않으면 **소리 없는 mp4** 가 남습니다.
+    # 「여기만 움직인다」 흑백 마스크가 왔으면 검은 곳을 첫 장면에 묶습니다(`common.freeze_by_mask`).
+    video_out = common.freeze_by_mask(results["videos"][0], opts.get("motion_mask"))
     encode_video(
-        results["videos"][0],
+        video_out,
         fps=FPS,
         output_path=output,
         audio=results["audio"][0],

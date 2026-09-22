@@ -86,8 +86,8 @@ import { isTypingTarget } from "@/lib/isTypingTarget";
  *
  * # 업스케일도 여기서 합니다
  *
- * 업스케일 손잡이를 이미지 편집 안에 둔 까닭 — 자르면 그림이 작아집니다. 시트 6000px 에서
- * 얼굴 칸을 떠내면 700px 이 되므로, **키우는 자리는 자른 직후**가 가장 자연스럽습니다. 그래서
+ * 시트 6000px 에서 얼굴 칸을 떠내면
+ * 700px 이 되므로, **키우는 자리는 자른 직후**가 가장 자연스럽습니다. 그래서
  *
  * - 미리보기 상태에서 «업스케일해서 저장» 을 켜면 저장한 파일을 그 자리에서 키웁니다.
  * - 편집하지 않고 그림만 키우고 싶으면 «지금 그림 업스케일»(원본 옆에 새 파일).
@@ -345,7 +345,7 @@ export default function SheetPanelCropper({
   // 이름 칸에 글자를 쓰는 중이면 그 칸의 되돌리기가 먼저입니다. 가로채면 안 됩니다.
   useEffect(() => {
     /*
-      **자르기 탭일 때만 듣습니다.**
+      **자르기 탭일 때만 듣습니다**(2026-09-18 점검).
 
       여태 `open` 만 보고 `tool` 을 안 봤습니다. 그래서 «표시» 탭에서는 이 되돌리기와
       `ImageMarkupEditor` 자체의 되돌리기가 **둘 다 살아 있어**, Ctrl+Z 한 번에
@@ -623,9 +623,8 @@ export default function SheetPanelCropper({
             <p className="flex items-center gap-2 text-sm font-semibold">
               시트에서 칸 잘라내기 · 지우기
               {/*
-                **원본 크기를 적어 둡니다.** 이 창은 그림을 창에 맞춰 줄여 보여 주므로 화면에서
-                보는 크기와 파일 크기가 다릅니다. 자른 칸이 몇 px 로 나올지, 업스케일이 필요한지가
-                여기서 갈립니다.
+                **원본 크기를 적어 둡니다.** 이 창은 그림을 창에 맞춰 줄여 보여 주므로 화면에서 보는 크기와 파일
+                크기가 다릅니다. 자른 칸이 몇 px 로 나올지, 업스케일이 필요한지가 여기서 갈립니다.
               */}
               {sourceSize && (
                 <span
@@ -654,8 +653,8 @@ export default function SheetPanelCropper({
             { id: "mark" as const, label: "표시하기", icon: MapPin, opens: "cropper-mark-shapes" },
             /*
               **동선**은 컷 카드의 «이미지 편집» 단추에 있던 것을 여기로 옮긴 것입니다.
-              그림 위에 화살표를 그리는 일은 컷의 성질이 아니라 그림의 성질이라, 컷에만 두면
-              캐릭터·배경에서는 같은 일을 못 합니다(표시하기와 같은 까닭, 규칙 1).
+              그림 위에 화살표를 그리는 일은 컷의
+              성질이 아니라 그림의 성질입니다(표시하기와 같은 까닭).
             */
             { id: "motion" as const, label: "동선", icon: PenLine, opens: "cropper-motion" },
             ...(wide
@@ -676,7 +675,6 @@ export default function SheetPanelCropper({
                 onClick={() => setTool(item.id)}
                 /*
                   탭은 그 자리에서 보는 것만 바뀝니다 — 튜토리얼이 대신 눌러 그 탭으로 넘어갑니다.
-                  사람이 탭을 옮기면 안내 걸음은 그대로라 가리키던 자리를 잃습니다 —
                   걸음마다 제 탭으로 저절로 가야 자리를 안 잃습니다.
                 */
                 data-tour-switch={item.opens}
@@ -733,6 +731,10 @@ export default function SheetPanelCropper({
               onSave={(file, stem, drawn) =>
                 saveExtra(file, stem, "mark", drawn)
               }
+              // 흑백 마스크도 **같은 길**로 저장합니다 — 이름은 «원본_움직임», 폴더는 이 항목의 폴더(규칙 5).
+              onSaveMask={(file, stem, drawn) =>
+                saveExtra(file, stem, "motionMask", drawn)
+              }
             />
             <p
               className="text-[11px] leading-relaxed"
@@ -745,6 +747,17 @@ export default function SheetPanelCropper({
               올려 주세요. <b>번호가 보여야</b> 생성기가 «①번 지점» 을
               알아봅니다. ComfyUI 인페인팅은 흑백 마스크를 따로 받으므로 이
               그림으로는 안 됩니다.
+            </p>
+            <p
+              className="text-[11px] leading-relaxed"
+              style={{ color: "oklch(0.45 0.01 265)" }}
+            >
+              <b>움직임 구역</b>을 켜고 그린 자리는 <b>움직임 마스크 저장</b>으로
+              흑백 PNG 가 됩니다(«원본 이름_움직임»). 흰 구역만 움직이고 나머지는
+              첫 프레임 그대로 붙박이라, 배경이 정지 이미지라서 통째로 얼어붙는
+              컷(달리는 차 안의 창밖)과, 인물만 붙들고 배경은 풀어 두고 싶은
+              캐릭터 스왑에 씁니다. 영상 생성기에 대표 그림과 <b>함께</b> 올리세요 —
+              마스크만 올리면 검은 판 한 장일 뿐입니다.
             </p>
           </div>
         ) : (
@@ -813,7 +826,7 @@ export default function SheetPanelCropper({
         {tool === "cut" && (
           <div
             /*
-              **바닥에 붙입니다.**
+              **바닥에 붙입니다.** 「자동으로 아래로 안내려가네」.
 
               이 띠는 스크롤을 쥔 `DialogContent` 의 직계 자식이라 본문과 **같이 흘러 내려갑니다.**
               시트처럼 세로가 긴 그림에서는 «저장» 이 창 밖으로 밀려, 끝까지 굴려야 보였습니다.

@@ -17,9 +17,6 @@ import type { Background, Character, Cut } from "@/lib/projectTypes";
 /**
  * 컷의 «캐릭터»·«배경» 선택과 구도잡기 씬을 맞춥니다.
  *
- * 컷에서 고른 인물·배경은 구도잡기를 열 때 이미 서 있어야 하고, 구도에서 세운 인물·배경은
- * 창을 닫았을 때 컷에 골라져 있어야 합니다. 안 그러면 같은 선택을 두 번 하게 됩니다.
- *
  * # 규칙 — 열 때는 컷이 기준, 닫을 때는 씬이 기준
  *
  * 양쪽이 서로를 채우면 **한쪽이 뺀 것을 다른 쪽이 되살립니다.** 컷에서 인물을 빼도 씬에는
@@ -95,7 +92,7 @@ function backgroundImages(background: Background): BackgroundImageEntry[] {
  *
  * 호리존 방은 그림을 안 붙이는 방입니다. 뷰포트는 색이 이겨 면 그림을 안 그리므로, 면 id 가
  * 남아 있어도 «걸린 배경» 이 아닙니다. 아래 읽기(`hasEnvironmentImage`·`environmentBackgroundIdOf`)와 쓰기
- * (`applyBackgroundIn`)가 같은 목록을 봐야, 걸었다는데 화면에는 안 보이면서 저장할 때만 컷 배경이 바뀌는 일이 없습니다.
+ * (`applyBackgroundIn`)가 같은 목록을 봐야 「걸었다는데 안 보이고, 저장하니 컷 배경이 그것으로 바뀐다」 가 안 생깁니다.
  */
 function imageRoomsOf(composition: CompositionState) {
   return roomsOf(composition).filter((room) => !isHorizonRoom(room));

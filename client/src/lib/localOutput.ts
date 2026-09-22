@@ -17,8 +17,8 @@ import { runLocal, type LocalEngineId, type LocalRunOptions } from "@/lib/localE
  *
  * # 그 자리에 쓰이지 **않습니다**
  *
- * «폴더에는 들어왔는데 화면은 깨진 그림» 의 정체가 이것입니다.
- * Rust 쪽(`generate_blocking`)은 **비어 있는 자리에만** 놓습니다 —
+ * 2026-09-17 에 라고 한 것이
+ * 이 이야기입니다. Rust 쪽(`generate_blocking`)은 **비어 있는 자리에만** 놓습니다 —
  * 같은 이름이 있으면 번호를 올려 원본을 지킵니다. 그런데 우리가 방금 만든 빈 파일이 바로
  * 그 «같은 이름» 이라, 결과는 늘 한 칸 옆(`소녀_로컬_001_001.png`)에 떨어집니다.
  *

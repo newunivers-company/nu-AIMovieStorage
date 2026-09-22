@@ -5,10 +5,6 @@ import { HOLDS_ENTITY_CARD } from "@/lib/tutorialPanels";
 /**
  * **튜토리얼 살림** — 켜짐 · 본 것 · 지금 따라가는 걸음.
  *
- * 켜고 끄기는 설정에 두고, 갈래는 나눕니다 — 설정부터 페이지 구성·구도잡기·씬 구성까지 한 바퀴
- * 도는 전체 한 벌과, 화면별·구도잡기별로 짧게 끊은 것들. 한 벌로 뭉치면 이미 아는 화면까지
- * 매번 다시 지나야 합니다.
- *
  * # 왜 React 상태가 아니라 모듈인가
  *
  * 안내 창(`TutorialOverlay`)은 앱 뿌리에 하나, 여는 단추는 위 띠(`TutorialMenu`)와 설정 화면 두 곳,
@@ -144,6 +140,8 @@ export function setTutorialsEnabled(enabled: boolean) {
 /**
  * **튜토리얼이 설 자리를 함께 마련합니다.**
  *
+ * 「튜토리얼 버튼 누르면 연습용 예시 작품을 만들어야지」.
+ *
  * 걸음 여럿은 «내용이 있어야 생기는» 자리를 가리킵니다 — 뽑은 그림이 없으면 가위가 없습니다. 그
  * 준비를 설정 화면의 단추 하나에 맡겨 두었더니, 갓 깐 사람은 그 단추를 볼 일이 없었습니다.
  * 그래서 **튜토리얼을 여는 순간** 마련합니다.
@@ -253,8 +251,7 @@ export function routeMatches(route: TutorialRoute, location: string): boolean {
  * 고릅니다.
  *
  * 구도잡기 창은 주소가 없습니다 — 대신 창이 열리는 동안 스스로 `planner` 라고 알립니다
- * (`CompositionPlanner`). 구도잡기 갈래는 그 창이 떠 있을 때만 목록에 나옵니다 —
- * 창이 닫혀 있는데 목록에 구도잡기 갈래가 늘어서 있으면 눌러도 가리킬 자리가 없습니다.
+ * (`CompositionPlanner`). * 창이 닫혀 있는데 목록에 구도잡기 갈래가 늘어서 있으면 눌러도 가리킬 자리가 없습니다.
  */
 export function pageForLocation(location: string, reported: TutorialPage | null): TutorialPage | null {
   if (location === "/") return "projects";
@@ -311,7 +308,7 @@ export const TUTORIAL_PAGE_EVENT = "tutorial:page";
 /**
  * 캐릭터 걸음은 **두 층**에 걸쳐 있습니다 — 인물 카드 창 «안»(레퍼런스·분석·프롬프트·뽑은 그림·가위)과
  * 그 아래 «패널»(인물 패널·캐릭터 추가·시트 제작·변형). 사람이 손으로 맞춰 열고 닫아야 했더니
- * 떠야 할 때 안 뜨고 닫혀야 할 때 안 닫혔습니다 — 창이 덮고 있으면 패널의 자리를
+ * 창이 덮고 있으면 패널의 자리를
  * 못 가리키고, 창이 닫혀 있으면 창 안의 자리를 못 가리킵니다.
  *
  * 규칙은 **앵커 이름에 이미 있습니다.** `card-…` 는 카드 안의 것이고, 아래 넷은 창 밖의 것입니다.
@@ -333,7 +330,7 @@ export function cardWantFor(anchor: string | undefined): TutorialCardWant | null
   /*
     **이름 앞머리로 짐작하지 않습니다.** 예전에는 `card-…` 로 시작하면 열고 나머지는 두었는데,
     가위 창(`cropper-…`)과 그림 위 아이콘(`image-actions`)처럼 **다른 이름으로 생긴 자리**가
-    카드 안에 있을 때마다 새어 나갔습니다(같은 모양으로 두 번). 이제 카드가 «내가 품었다» 고
+    카드 안에 있을 때마다 새어 나갔습니다. 이제 카드가 «내가 품었다» 고
     적어 둔 목록 그대로 봅니다 — 새 자리를 그 목록에 넣으면 여기도 저절로 맞습니다.
   */
   if (INSIDE_THE_CARD.has(anchor)) return "open";

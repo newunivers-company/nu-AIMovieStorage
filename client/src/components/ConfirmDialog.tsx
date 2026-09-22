@@ -52,7 +52,7 @@ export function ConfirmDialogHost() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" && event.key !== "Enter") return;
       /*
-        **여기서 키를 끊습니다.**
+        **여기서 키를 끊습니다.** (지시 159)
 
         확인 창이 떠 있는데 Escape 를 누르면 뒤에 있는 편집 창도 같이
         받습니다. 그러면 확인만 닫으려던 것이 편집 창까지 닫아 버려서
@@ -82,7 +82,7 @@ export function ConfirmDialogHost() {
   return (
     <div
       // 튜토리얼 안내 카드(z-1001)보다 위여야 합니다 — 「정말 끝낼까요?」 가 그 뒤에 숨으면
-      // 무엇을 누르라는 것인지 알 수 없습니다 — 튜토리얼을 닫겠냐는 물음이 안내 카드 뒤에 깔린 적이 있습니다.
+      // 무엇을 누르라는 것인지 알 수 없습니다().
       data-tutorial-layer=""
       className="fixed inset-0 z-[1100] flex items-center justify-center p-6"
       style={{
@@ -99,7 +99,7 @@ export function ConfirmDialogHost() {
         pointerEvents: "auto",
       }}
       /*
-        **이 창에서 일어난 눌림은 여기서 끝냅니다.**
+        **이 창에서 일어난 눌림은 여기서 끝냅니다.** (지시 159)
 
         확인 창은 편집 창(Radix Dialog) 바깥, 페이지 뿌리에 그려집니다.
         Radix 는 「콘텐츠 밖에서 눌렸다」 를 «창을 닫으라» 로 읽습니다.

@@ -20,9 +20,11 @@ import { repairPerson, type RepairLevel } from "@/lib/motionRepair";
 /**
  * **모션 캡처 분석 살림** — 창 밖에 삽니다.
  *
- * 분석 하나가 몇 분씩 걸립니다. 그동안 창을 붙들고 기다릴 수는 없으니 여럿을 걸어 두고 다른 일을
- * 하게 두어야 하고, 창을 닫아도 분석이 이어져야 합니다. 예전에는 창을 닫는 순간 올린 영상과
- * 분석 결과가 통째로 사라졌습니다 — 무엇을 이미 분석했는지 나중에 알 길도 없었습니다.
+ * 사용자 2026-09-16:
+ * - 「분석을 한 번에 눌러 두면 순차적으로 데이터 뽑게 해 줘… 이거 분석 오래 걸리는데 마냥 기다릴 수는 없잖아」
+ * - 「모달을 닫아도 분석은 유지되는 거고」
+ * - 「모달 끄고 다시 영상 올려서 캐릭터에 모션 입히기 버튼 누르니까 그동안 올리고 분석한 데이터 전부 사라졌네???
+ * 프로젝트별로 관리가 되어야지, 나중에 내가 어떤 걸 분석했는지 알지」
  *
  * 그래서 목록도 진행 중인 분석도 **React 상태가 아니라 이 모듈**에 둡니다. 창이 사라져도 살아 있고, 다시 열면
  * 그대로 보입니다. 프로젝트마다 따로 담고(`byProject`), 앱을 껐다 켜도 남게 **프로젝트 폴더**에 영상과 결과를
@@ -48,7 +50,6 @@ export interface MocapSource {
   /**
    * 이 영상이 **원래 초당 몇 장**인가. 화면이 한 번 재어 적어 둡니다(`requestVideoFrameCallback`).
    *
-   * 10·15·30·60 중에 고르는 것만으로는 부족합니다 — 원본과 초당 장수가 어긋나면 동작이 미끄러집니다.
    * HTML 영상은 초당 장수를 알려 주지 않아서, 장이 넘어가는 간격을 두 번 재어 가까운 흔한 값으로 맞춥니다.
    */
   nativeFps?: number;
@@ -186,8 +187,6 @@ export function removeMocapSource(project: string, id: string) {
 
 /**
  * 올린 영상을 **프로젝트 폴더**에 넣습니다(`<프로젝트>/mocap/<영상 이름>/`).
- *
- * 올린 영상도 프로젝트 것입니다 — 임시 자리에 두면 앱을 껐다 켰을 때 무엇으로 뽑은 동작인지 알 길이 없습니다.
  */
 export async function saveMocapVideo(
   project: string,
@@ -196,8 +195,7 @@ export async function saveMocapVideo(
   if (!project.trim() || !isDesktopApp()) return null;
   /*
     올린 영상 이름을 **그대로** 폴더로 쓰고 있었습니다. 유튜브에서 받은 이름에는 이모지와
-    해시태그가 줄줄이 붙어 폴더 이름이 200자를 넘었습니다 — 다른 저장 자리와 같은 규칙으로
-    깎습니다. 원래 이름은 `MocapSource.name` 에 그대로 남으니 잃지 않습니다.
+    해시태그가 줄줄이 붙어 폴더 이름이 200자를 넘었습니다(). 원래 이름은 `MocapSource.name` 에 그대로 남으니 잃지 않습니다.
   */
   const owner = mediaOwnerName(file.name);
   const saved = await saveProjectMediaAsset(file, {
@@ -287,8 +285,6 @@ let running: { project: string; id: string; abort: AbortController } | null = nu
 
 /**
  * 분석을 **줄에 세웁니다.** 이미 서 있거나 도는 중이면 아무 일도 하지 않습니다.
- *
- * 여러 영상을 한 번에 걸어 두고 차례로 돌게 하려는 것입니다 — 하나씩 지켜보고 있을 수 없습니다.
  */
 export function enqueueMocap(project: string, id: string) {
   const source = (store.byProject[project] ?? []).find((item) => item.id === id);

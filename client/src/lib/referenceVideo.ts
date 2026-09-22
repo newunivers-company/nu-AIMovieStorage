@@ -17,8 +17,13 @@ export interface ReferenceVideoOptions {
   fps: number;
   /** 초 단위 길이 */
   duration: number;
-  /** 해당 시각의 화면을 그리고 결과가 담긴 캔버스를 돌려줍니다. */
-  drawFrame: (time: number, index: number) => HTMLCanvasElement;
+  /**
+   * 해당 시각의 화면을 그리고 결과가 담긴 캔버스를 돌려줍니다.
+   *
+   * **기다릴 수 있습니다.** 배경에 건 영상은 되감기가 끝나야 그 프레임이 올라와서, 그리는 쪽이
+   * 먼저 기다린 뒤 그려야 합니다 — 안 기다리면 배경만 한 프레임씩 밀린 영상이 나옵니다.
+   */
+  drawFrame: (time: number, index: number) => HTMLCanvasElement | Promise<HTMLCanvasElement>;
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -32,8 +37,8 @@ export interface ReferenceVideoResult {
 /**
  * 나눠 뽑기의 **조각 경계**. 길이로 나누든(5·10·15·30초·1·2분) 노래 구간으로 나누든 여기서 한 꼴이 됩니다.
  *
- * AI 영상은 대개 14초 단위이고 길이를 늘리면 비용이 크게 뜁니다 — 그래서 레퍼런스 영상도
- * 그 단위에 맞춰 **정확히** 잘라 뽑아야 합니다.
+ * ,
+ * 「AI 영상은 기본 14초 단위니까, 연장하는 건 비용이 크게 뛰니까」.
  *
  * 경계는 **프레임 번호**로 셉니다. 초를 더해 가며 자르면 조각마다 한 프레임씩 밀리거나 겹쳐서, 이어 붙였을 때
  * 통째로 뽑은 것과 길이가 달라집니다. 조각 k 의 i 번째 프레임 = 전체의 k×조각프레임+i 번째입니다.
@@ -141,7 +146,7 @@ export async function renderReferenceVideo(options: ReferenceVideoOptions): Prom
       if (options.signal?.aborted) throw new DOMException("취소했습니다.", "AbortError");
       if (encodeError) throw encodeError;
 
-      const canvas = options.drawFrame(index / fps, index);
+      const canvas = await options.drawFrame(index / fps, index);
       const frame = new VideoFrame(canvas, {
         timestamp: Math.round(index * microsecondsPerFrame),
         duration: Math.round(microsecondsPerFrame),

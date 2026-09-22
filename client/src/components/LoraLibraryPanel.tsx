@@ -31,7 +31,7 @@ import {
 /**
  * **로라 서랍** — 엔진마다 찾고, 받고, 정리합니다.
  *
- * 로컬 모델에 먹일 로라를 엔진별·갈래별로 찾아 받고 한자리에 건사합니다.
+ *
  *
  * # 엔진마다 갈라 두는 까닭
  *
@@ -43,12 +43,12 @@ import {
  *
  * Civitai 는 로라마다 **어느 밑모델용인지**를 적어 둡니다(「MiniMax H3」「Wan Video 2.2 I2V-A14B」).
  * 엔진별로 그 이름을 알고 있으면 판마다 «이 엔진 것» 을 가릴 수 있습니다. 이름은 짐작이 아니라
- * 검색 결과에서 모은 것입니다(`lib/localLoras.ts` 의 `CIVITAI_FILTER` 주석). Civitai 에 없는
- * 로라는 허깅페이스에 있어, 두 곳을 같이 찾고 결과마다 출처를 답니다.
+ * 검색 결과에서 모은 것입니다(`lib/localLoras.ts` 의 `CIVITAI_FILTER` 주석). 2026-09-22 부터
+ * 허깅페이스도 같이 찾고, 결과마다 출처를 답니다.
  * «이 엔진 것만» 을 끄면 다른 엔진 것까지 보이지만 그건 이 엔진에 안 맞습니다.
  */
 
-// 엔진 → Civitai 그물은 `lib/localLoras.ts` 의 `CIVITAI_FILTER` 한 벌입니다(규칙 하나에 두 벌을 두지 않으려고 옮겼습니다).
+// 엔진 → Civitai 그물은 `lib/localLoras.ts` 의 `CIVITAI_FILTER` 한 벌입니다(2026-09-22 옮김).
 const mb = (bytes: number) => `${(bytes / 1_000_000).toFixed(0)} MB`;
 
 export default function LoraLibraryPanel() {
@@ -115,8 +115,7 @@ export default function LoraLibraryPanel() {
 
   /**
    * 규칙 3 — 화면에서 지우면 폴더의 원본도 지웁니다. 되돌릴 수 없으니 반드시 한 번 묻고,
-   * 받아 둔 목록의 휴지통과 검색 결과의 「지우기」 가 **이 하나**를 씁니다 — 로라는 한 장씩
-   * 지울 수 있어야 하는데, 지우는 길이 둘이면 한쪽만 원본을 남깁니다.
+   * 받아 둔 목록의 휴지통과 검색 결과의 「지우기」 가 **이 하나**를 씁니다.
    */
   const remove = async (fileName: string, name: string) => {
     const ok = await confirmDialog({
@@ -330,7 +329,7 @@ export default function LoraLibraryPanel() {
 
         {/*
           Civitai 에 갈래가 없는 엔진은 «이 엔진 것만» 을 켜도 이름에 든 낱말로만 거릅니다.
-          말없이 두면 결과가 적거나 없을 때 «필터가 고장났나» 로 읽힙니다.
+          말없이 두면 결과가 적거나 없을 때 «필터가 고장났나» 로 읽힙니다(2026-09-22).
         */}
         {narrow && !civitaiKnowsEngine(engine) && (
           <p className="text-[10px]" style={{ color: "oklch(0.72 0.14 60)" }}>
@@ -427,7 +426,7 @@ export default function LoraLibraryPanel() {
 
       {/*
         ── 로그인은 앱이 합니다 ─────────────────────────────────────────────
-        Civitai 는 상당수 로라를 로그인한 계정에만
+         Civitai 는 상당수 로라를 로그인한 계정에만
         내주고, 프로그램에 허용된 로그인은 API 키뿐입니다. 여기 한 번 넣어 두면 «받기» 마다 붙습니다.
         허깅페이스 토큰은 로컬 엔진 설정의 그 줄과 같은 저장소라 어느 쪽에서 넣어도 같습니다.
       */}

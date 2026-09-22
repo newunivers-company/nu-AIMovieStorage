@@ -9,7 +9,8 @@ import type { Vector3Value } from "@/lib/composition";
 /**
  * **그림 한 장에서 포즈를 읽어 인형에 얹습니다.**
  *
- * 막대 인간 그림을 리깅 캐릭터 포즈로 옮기는 Sketch2Pose 와 같은 일을 이 앱 안에서 합니다.
+ * 사용자 2026-09-21: Sketch2Pose(그리스펜슬 막대 인간 → 리깅 캐릭터)를 보고 「우리 앱에
+ * 적용할 수 있는지 살펴봐」 → 「실측해봐」 → 「순서대로 다 만들어」.
  *
  * # 왜 새로 만들 것이 거의 없나
  *
@@ -17,7 +18,7 @@ import type { Vector3Value } from "@/lib/composition";
  * (`runningMode: "IMAGE"`)이고, 한 장에서 **3D 좌표**(`worldLandmarks`)까지 나옵니다.
  * 관절 → 본 회전을 푸는 `retargetPerson` 도 **프레임 단위**라 한 장 = 한 프레임입니다.
  *
- * # 실측으로 알아낸 것 (`scripts/runSketchPoseBench.mjs`)
+ * # 실측으로 알아낸 것 (2026-09-21, `scripts/runSketchPoseBench.mjs`)
  *
  * | 그림 | 잡히는가 | 관절 |
  * | --- | --- | --- |

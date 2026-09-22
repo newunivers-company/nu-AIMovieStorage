@@ -9,8 +9,7 @@ import { newBackground, type Background } from "@/lib/projectTypes";
 /**
  * 구도잡기의 **방 하나**를 그대로 담은 장소 카드.
  *
- * 배경 만들기가 따로 떨어진 탭일 이유가 없습니다 — 배경과 배경 에셋을 만들어 짝짓는 일이
- * 구도잡기 안에서 한 번에 돕니다.
+ *
  *
  * # 크기를 두 번 적지 않게
  *

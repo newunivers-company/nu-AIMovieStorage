@@ -7,18 +7,28 @@ import {
   COMPOSITION_CUBE_FACES,
   CUBE_FACE_LABELS,
   HORIZON_COLOR_PRESETS,
+  ROOM_DRIFT_MAX,
   ROOM_SIZE_MIN,
+  ROOM_VIDEO_SECONDS,
+  isDomeRoom,
   isHorizonRoom,
   isPanoramaAspect,
+  roomDriftOf,
+  roomVideoFaceOf,
   type CompositionCubeFace,
   type CompositionRoom,
   type CompositionState,
+  type RoomVideoFace,
 } from "@/lib/composition";
+import LocalGenerateButton from "@/components/LocalGenerateButton";
+import { safeFileName } from "@/lib/mediaLibrary";
+import type { LocalPromptInput } from "@/lib/localPrompt";
 import {
   addObjectInRoom,
   mountObjectToFaceIn,
   objectGroupOf,
   objectsInRoom,
+  patchRoomIn,
   roomsOf,
   setObjectSwapIn,
   setRoomDimsIn,
@@ -37,23 +47,24 @@ import FaceSetCard from "@/components/FaceSetCard";
 import RoomList from "./RoomList";
 import type { FaceSet } from "@/lib/faceSets";
 import type { RoomPreset } from "@/lib/roomPreset";
-import type { PlannerBackground } from "./usePlannerMedia";
+import type { PlannerBackground, PlannerVideo } from "./usePlannerMedia";
 import type { SectionToggles } from "./PlannerChrome";
 
 /**
  * 환경 탭 — **방을 세우고, 방마다 그 속성**.
  *
- * # 속성을 방 아래로 모은 까닭
+ * # 2026-09-16 개편
  *
- * 6면 세트·파노라마 목록·배경 이미지 목록이 방과 따로 떨어져 있으면 어느 방에 무엇이 붙었는지
- * 화면에서 읽히지 않고, 방이 여럿일 때 엉뚱한 방에 세트를 겁니다. 게다가 실내와 실외는 필요한
- * 속성이 서로 다른데, 한 목록으로는 그 차이가 드러나지 않습니다.
+ * ,
+ * 「실외에는 뒤를 가릴 면이 필요 없잖아? 그리고 실내도… 공간마다 뒤를 가릴 면을 선택하는 거고」,
+ * 「6면 세트의 경우 실내 방의 속성으로 들어가야 하고, 6면 적용하는 건 지금은 큰 의미 없는 것 같아… 삭제해」,
+ * 「배경 이미지 목록도 지금은 필요 없겠네… 파노라마 이미지 리스트는 실외 방의 속성으로 들어가면 될 거고」.
  *
  * 그래서 이 탭에는 **목록 하나**만 있습니다 — 방 목록. 방을 누르면 그 아래가 펴지고, 그 방의 것만 나옵니다.
  *
  * 실내 방 : 치수 · 뒤를 가릴 면 · 외벽 투시 · 장소(전개도 만들기) · 6면 세트
  * 실외 방 : 치수 · 장소(파노라마 만들기) · 파노라마 그림 목록
- * 호리존 : 치수 · 호리존 색 (그림 없이 여섯 면이 한 가지 색인 제품 컷 스튜디오)
+ * 호리존 : 치수 · 호리존 색 
  *
  * 세 갈래 모두 그 아래에 «이 방의 소품» 이 옵니다 — 호리존의 제품도 소품입니다.
  *
@@ -62,6 +73,49 @@ import type { SectionToggles } from "./PlannerChrome";
  */
 /** 이 창을 열면 생기는 자리들 — 장소 카드 몸통과 그 안의 가위(전개도·파노라마) 전부. */
 const PLACE_LIBRARY_OPENS = HOLDS_ENTITY_CARD;
+
+/**
+ * **배경 루프 영상 프롬프트** — 그 면 그림이 «살아 있는» 짧은 루프가 되게 적습니다.
+ *
+ * 장소 카드의 프롬프트를 바탕에 깔고(그 배경이 무엇인지는 거기 다 적혀 있습니다) 뒤에 «무엇이
+ * 움직이는가» 만 덧붙입니다. 카메라는 **못 박습니다** — 배경 영상이 흔들리면 그 면만 흔들려
+ * 방이 통째로 미끄러지고, 구도잡기의 카메라 무빙과 섞여 무엇이 움직인 것인지 알 수 없게 됩니다.
+ *
+ * 함수인 까닭: 방 이름·면·장소 프롬프트가 그때그때 다릅니다. 모듈 상수로 굳히면 방을 바꿔도
+ * 앞 방의 말이 그대로 갑니다.
+ */
+function backgroundLoopPrompt(
+  place: { ko?: string; en?: string } | undefined,
+  roomName: string,
+  face: RoomVideoFace,
+): LocalPromptInput {
+  const where = face === "panorama" ? "파노라마 돔" : `${CUBE_FACE_LABELS[face]} 벽`;
+  const whereEn = face === "panorama" ? "panoramic dome" : `${face} wall`;
+  return {
+    ko: [
+      place?.ko?.trim(),
+      `이 그림을 첫 프레임으로 두고, ${roomName || "방"} 의 ${where}에 걸 ${ROOM_VIDEO_SECONDS}초짜리 배경 루프를 만드세요.`,
+      "카메라는 삼각대에 올린 듯 완전히 고정합니다 — 흔들림·줌·패닝·시점 이동 없음.",
+      "움직이는 것은 배경 자체뿐입니다: 멀리 지나가는 사람과 차, 흔들리는 나뭇잎·천·간판, 흐르는 구름과 물, 깜빡이는 조명, 피어오르는 김과 먼지, 천천히 변하는 그림자.",
+      "구도·색·빛·원근은 첫 프레임 그대로 지키고, 마지막 프레임이 첫 프레임으로 자연스럽게 이어지게 합니다.",
+      "새 물체나 글자를 만들지 말고, 장면 전환 없이 한 장면으로 갑니다.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    en: [
+      place?.en?.trim(),
+      `Use this image as the first frame and make a ${ROOM_VIDEO_SECONDS}-second seamless background loop for the ${whereEn}.`,
+      "Locked-off tripod camera: no camera movement, no zoom, no pan, no parallax.",
+      "Only the scene itself moves: distant people and vehicles passing, leaves and fabric and signs swaying, clouds and water flowing, lights flickering, steam and dust drifting, shadows creeping.",
+      "Keep the composition, colours, lighting and perspective of the first frame; the last frame must blend back into the first.",
+      "Do not invent new objects or text, and do not cut to another shot.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    negativeKo: "카메라 움직임, 줌, 흔들림, 장면 전환, 글자, 새 물체, 색 변화",
+    negativeEn: "camera movement, zoom, shake, scene cut, text, new objects, colour shift",
+  };
+}
 
 export interface EnvironmentPanelProps extends SectionToggles {
   state: CompositionState;
@@ -76,12 +130,12 @@ export interface EnvironmentPanelProps extends SectionToggles {
   /**
    * 파노라마 파일을 **바깥에서 바로** 들여옵니다(고르기 또는 끌어다 놓기).
    *
-   * 여태는 앱에서 뽑은 것만 목록에 올랐습니다 — 밖에서 만든 360° 사진(블록케이드 스카이박스·실촬 360)을
-   * 쓸 길이 없었습니다. 끌어다 놓기도 같이 받습니다.
+   * 여태는 앱에서 뽑은 것만 목록에 올랐습니다. 밖에서 만든 360° 사진
+   * (블록케이드 스카이박스·실촬 360)을 쓸 길이 없었습니다.
    */
   onImportPanorama?: (file: File) => void | Promise<void>;
   /**
-   * 목록에서 파노라마 한 장을 **지웁니다** — 들여오기가 생겼으니 잘못 들여온 것을 뺄 길도 있어야 합니다.
+   * 목록에서 파노라마 한 장을 **지웁니다**().
    * 폴더의 원본 파일도 함께 지웁니다 — 이 앱의 규칙이고, 안 지우면 폴더를 다시 읽을 때 되살아납니다.
    */
   onDeletePanorama?: (background: PlannerBackground) => void | Promise<void>;
@@ -104,7 +158,7 @@ export interface EnvironmentPanelProps extends SectionToggles {
   /**
    * 프로젝트에 이미 있는 **장소 카드 목록**과 그중 하나를 이 방에 잇는 길.
    *
-   * 한 번 고르면 잠기던 것을 풀었습니다 — 고른 뒤에도 목록은 그대로 있고, 빈 칸을 고르면 이음을 끊습니다.
+   * * 고른 뒤에도 목록은 그대로 있고, 빈 칸을 고르면 이음을 끊습니다.
    */
   places?: { id: string; name: string }[];
   onPickPlace?: (backgroundId: string) => void;
@@ -116,9 +170,6 @@ export interface EnvironmentPanelProps extends SectionToggles {
     remove: (id: string) => void;
     /**
      * **다른 작품에서 방 끌어오기** 를 여는 자리. 안 주면 단추가 안 보입니다.
-     *
-     * 끌어올 때 그 방에 **적용된** 6면 이미지·파노라마도 같이 따라옵니다(그 작품의 그림 전부가 아니라
-     * 적용된 것만) — 치수만 와서는 빈 상자라 다시 붙이는 일이 그대로 남습니다.
      */
     borrow?: () => void;
   };
@@ -126,24 +177,40 @@ export interface EnvironmentPanelProps extends SectionToggles {
   onOpenGallery: () => void;
   /**
    * **장소 라이브러리**(옛 배경 단계) 열기 — 계보(관계도)·보유 에셋을 봅니다.
-   * 배경 단계를 걷으면서 이 자리가 그 몫을 그대로 이어받습니다 — 에셋 관계도도, 방(배경) 관계도도
-   * 볼 곳이 없어지면 안 됩니다.
    */
   onOpenLibrary?: () => void;
   /**
    * **배경 소품**에 이어 붙일 시트들(에셋만) — 소품을 «무엇으로 바꿔 그릴까» 에 씁니다.
    *
-   * 배치 탭은 캐릭터와 캐릭터 소품, 환경 탭은 배경과 배경 소품으로 갈라 둡니다 — 그래야 배치한 소품과
-   * 소품 에셋이 짝을 이루고, 프롬프트에서 @ 로 거는 이름도 한쪽에서만 나옵니다.
+   * , 「그래야 소품 에셋이랑 배치한 소품도 매칭시킬 수 있고… 프롬프트 작성할 때 @로 링크 걸어 주기도 편할 거고」.
    */
   assetOptions?: { kind: "character" | "asset" | "background"; id: string; name: string; group: string }[];
   /** 고른 소품의 에셋 카드를 만들어 바로 잇거나, 이미 이어 둔 카드를 엽니다. */
   onCreateAsset?: (objectId: string, label: string) => void;
-  /** 묶음(덩어리) 쪽 에셋 — 낱개가 아니라 묶음으로 만들었다는 것이 표시에도 그대로 남습니다. */
+  /** 묶음(덩어리) 쪽 에셋.  */
   onCreateGroupAsset?: (groupId: string, label: string) => void;
   /** 3D 화면에서 그 소품을 고릅니다(«object:<id>»). */
   selected?: string;
   setSelected?: (value: string) => void;
+  /**
+   * **배경 영상** 한 벌 — 고를 목록, 그 면 그림으로 만들 자리, 만든 것을 목록에 더하는 길.
+   *
+   * 안 주면 «배경 영상» 칸 자체가 안 보입니다(구도잡기를 프로젝트 밖에서 열었을 때) — 걸 영상도
+   * 만들 폴더도 없는 자리에 켜기만 하는 단추를 두면 «켰는데 아무 일도 안 일어난다» 가 됩니다.
+   */
+  roomVideo?: {
+    /** 장소 폴더에서 읽은 영상들. 이 방뿐 아니라 이 작품의 장소 전부입니다(같은 루프를 두 방에 걸 수 있게). */
+    videos: PlannerVideo[];
+    projectName: string;
+    /** 만든 영상을 넣을 폴더의 주인 — 이 방에 이어 둔 **장소 카드 이름**(규칙 5: 폴더는 인물·장소당 하나). */
+    ownerName?: string | null;
+    /** 그 장소 카드의 프롬프트 — 「이 배경이 이렇게 움직인다」 를 적을 바탕입니다. */
+    prompt?: { ko?: string; en?: string };
+    /** 방금 만든 영상을 목록에 더합니다(폴더는 창을 열 때만 읽습니다). */
+    remember: (filePath: string, name: string) => void;
+    /** 그 면에 걸린 그림의 **파일 경로** — i2v 의 첫 프레임입니다. */
+    faceImagePath: (roomId: string, face: RoomVideoFace) => string | undefined;
+  };
   /** 되돌리기에 **안 쌓는** 갱신 — 손잡이를 끄는 동안 씁니다. 까닭은 `PlannerRange`. */
   setStateRaw: UpdateComposition;
   mark: () => void;
@@ -172,6 +239,7 @@ export function EnvironmentPanel({
   onCreateGroupAsset,
   selected,
   setSelected,
+  roomVideo,
   openSections,
   toggleSection,
   setStateRaw,
@@ -187,8 +255,7 @@ export function EnvironmentPanel({
       */}
       <PanelSection title="방" tour="env-room-section" open onToggle={() => undefined}>
         {/*
-          방은 **처음에 없습니다** — 기본 방을 하나 깔아 두면 쓰지도 않는 상자가 늘 화면에 서 있습니다.
-          «방 추가» 로 필요한 것만 세웁니다.
+          방은 **처음에 없습니다**().
           목록에서 방을 누르면 그 아래가 펴지고, 거기부터가 그 방의 속성입니다.
         */}
         <RoomList
@@ -217,6 +284,7 @@ export function EnvironmentPanel({
               onCreateGroupAsset={onCreateGroupAsset}
               selected={selected}
               setSelected={setSelected}
+              roomVideo={roomVideo}
               setStateRaw={setStateRaw}
               mark={mark}
             />
@@ -234,8 +302,7 @@ export function EnvironmentPanel({
 
       {/*
         ── 장소 라이브러리 ───────────────────────────────────────────────
-        배경 탭을 걷어내도 계보를 다루던 자리는 남아야 합니다 — 에셋 관계도도, 방(배경) 관계도도
-        여기서 그대로 설정합니다. 장소를 **만드는** 일은 방 속성에서 하고, 목록 전체를 봐야 하는 일
+         장소를 **만드는** 일은 방 속성에서 하고, 목록 전체를 봐야 하는 일
         (계보·다른 원본·보유 에셋)은 여기서 창으로 엽니다 — 씬 탭에 있던 그 화면 그대로입니다.
       */}
       {onOpenLibrary && (
@@ -243,9 +310,9 @@ export function EnvironmentPanel({
           type="button"
           onClick={onOpenLibrary}
           /*
-            **장소 카드는 이 창 안에 있습니다.** 전개도 여섯 면·파노라마·앵커 찍기·표시하기는 장소
-            그림에서 하는 일인데, 그 카드로 가는 길이 여기 하나뿐입니다. 안내가 이 문을 먼저 열어 주지
-            않으면 안쪽 앵커가 아직 없어서 안내 풍선이 붙을 자리를 못 찾습니다.
+            **장소 카드는 이 창 안에 있습니다.** 
+            전개도 여섯 면·파노라마·앵커 찍기·표시하기는 장소 그림에서 하는 일인데, 그 카드로 가는
+            길이 여기 하나뿐이라 안내 창이 먼저 이 문을 눌러 줍니다.
           */
           data-tour-open={PLACE_LIBRARY_OPENS}
           className="flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-semibold"
@@ -273,8 +340,7 @@ export function EnvironmentPanel({
           onToggle={() => toggleSection("roomLibrary")}
         >
           {/*
-            목록은 **이 작품 것만** 입니다(`draft.roomPresets`) — 모든 작품의 방이 한 목록에 쌓이면
-            금세 길어져 정작 이 작품 방을 찾지 못합니다. 다른 작품 것은 이 단추로 **복사해** 들여옵니다.
+            목록은 **이 작품 것만** 입니다(`draft.roomPresets`) —  다른 작품 것은 이 단추로 **복사해** 들여옵니다.
           */}
           {roomLibrary.borrow && (
             <button
@@ -394,10 +460,33 @@ export function EnvironmentPanel({
 }
 
 /**
+ * **배경 흐름의 네 방향** — 이름과 부호를 한 벌로 둡니다.
+ *
+ * 부호는 «그림이 움직여 보이는 쪽» 입니다. UV 오프셋은 **표집 창**을 옮기는 값이라 그림은
+ * 반대로 흘러갑니다 — offset.x 를 키우면 창이 오른쪽으로 가고 그림은 왼쪽으로 지나갑니다
+ * (세로도 같습니다. three 는 `flipY` 라 offset.y 가 커지면 그림이 아래로 내려갑니다).
+ * 이 뒤집기를 화면과 뷰포트가 따로 셈하면 한쪽만 거꾸로 흐릅니다.
+ *
+ * 기준은 **정면 벽**입니다. 상자 안쪽은 옆 네 면의 uv 를 거울로 되돌려 붙이므로
+ * (`buildBackgroundCubeGeometry`) 네 벽은 서로 같은 쪽으로 흐르고, 천장·바닥은 그 반대입니다 —
+ * 「천장이 어느 쪽으로 흘러야 맞는가」 는 답이 없는 물음이라 그대로 둡니다.
+ */
+const ROOM_DRIFT_DIRECTIONS = [
+  { id: "left", label: "왼쪽으로", x: 1, y: 0 },
+  { id: "right", label: "오른쪽으로", x: -1, y: 0 },
+  { id: "up", label: "위로", x: 0, y: -1 },
+  { id: "down", label: "아래로", x: 0, y: 1 },
+] as const;
+
+/** 흐름을 처음 켤 때의 속도(초당 그림의 몇 배) — 20초에 한 바퀴. 차창 밖 풍경이 흐르는 느낌의 언저리입니다. */
+const ROOM_DRIFT_DEFAULT_SPEED = 0.05;
+
+/**
  * 방 하나의 속성 — **그 방 아래에** 펴집니다.
  *
- * 실내와 실외는 필요한 것이 다릅니다. 실외는 뒤를 가릴 면이 없고 돔이라 여섯 면도 없습니다 —
- * 파노라마 한 장이 전부입니다. 호리존은 그림 자체가 없습니다 — 치수와 색 하나뿐입니다.
+ * 실내와 실외는 필요한 것이 다릅니다().
+ * 실외는 돔이라 가릴 벽도, 여섯 면도 없습니다 — 파노라마 한 장이 전부입니다.
+ * 호리존은 그림 자체가 없습니다 — 치수와 색 하나뿐입니다.
  */
 function RoomProperties({
   room,
@@ -421,6 +510,7 @@ function RoomProperties({
   onCreateGroupAsset,
   selected,
   setSelected,
+  roomVideo,
   setStateRaw,
   mark,
 }: {
@@ -448,6 +538,7 @@ function RoomProperties({
   onCreateGroupAsset?: (groupId: string, label: string) => void;
   selected?: string;
   setSelected?: (value: string) => void;
+  roomVideo?: EnvironmentPanelProps["roomVideo"];
 }) {
   const outdoor = room.outdoor === true;
   /**
@@ -459,7 +550,7 @@ function RoomProperties({
    * 실외를 **무엇으로 두르는가**. 돔이면 파노라마 한 장, 상자면 여섯 면입니다.
    * 실내는 늘 상자입니다.
    */
-  const domeLike = outdoor && room.outdoorShape !== "box";
+  const domeLike = isDomeRoom(room);
   /** 파노라마를 끌어다 놓는 중인가 — 테두리로 «여기 놓으면 됩니다» 를 보입니다. */
   const [dropping, setDropping] = useState(false);
   /** 목록이 비어 있든 아니든 **이 칸 어디에나** 놓을 수 있게, 손잡이를 한 벌 만들어 씁니다. */
@@ -481,6 +572,38 @@ function RoomProperties({
       }
     : {};
   const boxLike = !domeLike && !horizon;
+  /*
+    ── 배경 흐름 ────────────────────────────────────────────────────────
+    지금 걸린 값에서 «방향» 과 «속도» 를 되읽습니다. 저장은 {x, y} 한 쌍뿐이라
+    (`CompositionRoom.drift`) 방향·속도를 따로 저장하지 않습니다 — 두 벌로 두면 손으로 고친
+    저장본에서 둘이 어긋나고, 어느 쪽이 참인지 판단하는 규칙이 또 하나 늘어납니다.
+  */
+  const drift = roomDriftOf(room.drift);
+  const driftSpeed = drift ? Math.max(Math.abs(drift.x), Math.abs(drift.y)) : ROOM_DRIFT_DEFAULT_SPEED;
+  const driftDirection =
+    ROOM_DRIFT_DIRECTIONS.find(
+      (item) => Math.sign(drift?.x ?? 0) === item.x && Math.sign(drift?.y ?? 0) === item.y,
+    ) ?? ROOM_DRIFT_DIRECTIONS[0];
+  /** 방향 × 속도 → 저장할 {x, y}. 속도 0 이면 정규화가 «안 흐름» 으로 떨어뜨립니다. */
+  const setDrift = (
+    direction: (typeof ROOM_DRIFT_DIRECTIONS)[number],
+    speed: number,
+    raw = false,
+  ) =>
+    (raw ? setStateRaw : setState)((current) =>
+      patchRoomIn(current, room.id, (item) => ({
+        ...item,
+        drift: roomDriftOf({ x: direction.x * speed, y: direction.y * speed }),
+      })),
+    );
+  /*
+    ── 배경 영상 ────────────────────────────────────────────────────────
+    걸 자리는 **지금 방 모양**이 정합니다(`roomVideoFaceOf`) — 돔으로 바꾼 방에 옛 «정면» 이 남아
+    있으면 안 보이는 면에 걸려 「켰는데 아무 일도 안 일어난다」 가 됩니다. 첫 프레임은 그 면에 걸린
+    그림의 **파일 경로**입니다(로컬 생성기는 `asset://` 을 못 엽니다).
+  */
+  const videoFace = roomVideoFaceOf(room);
+  const faceImage = roomVideo?.faceImagePath(room.id, videoFace);
   const assets = (assetOptions ?? []).filter((item) => item.kind === "asset");
   const panorama = room.panorama
     ? listedBackgrounds.find((item) => item.id === room.panorama)
@@ -499,8 +622,7 @@ function RoomProperties({
         여기서 확정하고 «만들기» 로 갑니다.
       */}
       {/*
-        **돔은 구면이라 숫자가 하나입니다.** 가로·깊이를 따로 받을 까닭이 없습니다 — 셋을 따로 받으면
-        서로 어긋난 «찌그러진 돔» 을 만들 수 있는데, 화면에도 프롬프트에도
+        **돔은 구면이라 숫자가 하나입니다.** 가로·깊이·높이를 따로 받으면 셋이 어긋난 «찌그러진 돔» 을 만들 수 있는데, 화면에도 프롬프트에도
         그런 모양은 없습니다. 안에는 여전히 가로=깊이=지름, 높이=반지름으로 적어 둡니다 — 축척·인물 비율·저장본이
         전부 그 셋을 보고 돌아갑니다.
       */}
@@ -558,8 +680,231 @@ function RoomProperties({
       </p>
 
       {/*
+        ── 배경 흐름 ─────────────────────────────────────────────────────
+        면·돔 그림이 정지 이미지면 레퍼런스 영상에 배경 움직임이 **한 프레임도 안 찍히고**,
+        영상 모델은 그걸 그대로 따라 배경을 얼립니다. 차 안에서 창밖이 흘러야 하는 컷이
+        특히 어색했습니다. 그림을 다시 뽑지 않고 그 사실만 영상에 남기는 길입니다.
+
+        **기본은 꺼짐**입니다 — 쓰던 사람의 배경이 어느 날 갑자기 흐르면 놀랍니다.
+        호리존은 그림이 아니라 색 하나라 흐를 것이 없어 칸 자체가 없습니다.
+
+        속도 손잡이는 끄는 동안 `setStateRaw` 로 갑니다(까닭은 `PlannerRange` 머리말) —
+        한 번의 끌기가 되돌리기 한 칸입니다.
+      */}
+      {!horizon && (
+        <div data-tour="env-room-drift" className="space-y-1.5">
+          <label
+            className="flex cursor-pointer items-center gap-2 text-[9px] font-semibold"
+            style={{ color: "oklch(0.52 0.01 265)" }}
+            title="면·돔 그림을 흘립니다 — 레퍼런스 영상에도 그대로 찍힙니다"
+          >
+            <input
+              type="checkbox"
+              checked={!!drift}
+              onChange={(event) =>
+                setDrift(driftDirection, event.target.checked ? driftSpeed : 0)
+              }
+            />
+            배경 흐름 — 그림을 흘려 배경을 움직입니다
+          </label>
+          {drift && (
+            <>
+              <div className="grid grid-cols-4 gap-1">
+                {ROOM_DRIFT_DIRECTIONS.map((item) => {
+                  const on = item.id === driftDirection.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setDrift(item, driftSpeed)}
+                      className="rounded px-1 py-1 text-[9px] font-semibold"
+                      style={{
+                        background: on ? "oklch(0.72 0.16 60 / 22%)" : "oklch(1 0 0 / 5%)",
+                        border: `1px solid ${on ? "oklch(0.72 0.16 60 / 45%)" : "transparent"}`,
+                        color: on ? "oklch(0.86 0.14 60)" : "oklch(0.60 0.01 265)",
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-[9px]" style={{ color: "oklch(0.52 0.01 265)" }}>
+                <span className="flex items-center justify-between">
+                  <span>속도 — 초당 그림의 몇 배</span>
+                  <span className="tabular-nums">
+                    {driftSpeed.toFixed(3)} · 한 바퀴 {Math.round(1 / driftSpeed)} 초
+                  </span>
+                </span>
+                <PlannerRange
+                  min={0.002}
+                  max={ROOM_DRIFT_MAX}
+                  step={0.002}
+                  value={driftSpeed}
+                  mark={mark}
+                  onChange={(next) => setDrift(driftDirection, next, true)}
+                  className="mt-1 w-full"
+                  title="그림 한 장이 한 바퀴 지나가는 데 걸리는 시간으로 가늠하세요"
+                />
+              </div>
+              <p className="text-[9px] leading-relaxed" style={{ color: "oklch(0.45 0.01 265)" }}>
+                재생·눈금 끌기·<b>레퍼런스 영상</b>에 모두 그 시각대로 찍힙니다. 그림이 한 장을 넘어가면 좌우가
+                이어 붙으므로, 이음매가 안 맞는 사진은 느리게 두거나 «흐름» 을 켤 면만 남기는 편이 낫습니다.
+                {boxLike && " 네 벽은 같은 쪽으로 흐르고 천장·바닥은 반대로 갑니다."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/*
+        ── 배경 영상 ─────────────────────────────────────────────────────
+        **흐름과 별개의 단추입니다.** 흐름(UV)은 그림 전체가 한 방향으로 미끄러지는 것뿐이라
+        구름·터널 조명에는 맞지만 지나가는 차·파도·사람에는 모자랍니다. 그 면에 진짜 영상을 걸면
+        레퍼런스 영상에 그 움직임이 그대로 찍히고, 영상 모델이 「이 구역은 이렇게 움직인다」 를 읽습니다.
+
+        둘을 **함께** 켤 수 있습니다(흐르는 영상). 서로를 끄지 않습니다 — 한쪽을 켤 때 다른 쪽을
+        꺼 버리면 「왜 갑자기 흐름이 풀렸지」 가 되고, 실제로 창밖 풍경은 «흐르면서 움직이는» 것입니다.
+
+        **기본은 꺼짐**이고, 호리존은 색 하나라 걸 자리가 없습니다(흐름과 같은 사정).
+      */}
+      {!horizon && roomVideo && (
+        <div data-tour="env-room-video" className="space-y-1.5">
+          <label
+            className="flex cursor-pointer items-center gap-2 text-[9px] font-semibold"
+            style={{ color: "oklch(0.52 0.01 265)" }}
+            title="면·돔에 영상을 걸어 배경이 실제로 움직이게 합니다 — 레퍼런스 영상에도 그대로 찍힙니다"
+          >
+            <input
+              type="checkbox"
+              checked={!!room.video}
+              onChange={(event) =>
+                setState((current) =>
+                  patchRoomIn(current, room.id, (item) => ({
+                    ...item,
+                    // 켤 때 면은 지금 방 모양에 맞춰 정합니다 — 돔이면 돔 전체, 상자면 정면(카메라가 보는 벽).
+                    video: event.target.checked
+                      ? { face: roomVideoFaceOf(item), source: item.video?.source ?? "" }
+                      : undefined,
+                  })),
+                )
+              }
+            />
+            배경 영상 — 면에 영상을 걸어 실제로 움직입니다
+          </label>
+          {room.video && (
+            <>
+              {/*
+                어느 면에 걸까. 돔은 고를 것이 없습니다 — 파노라마 한 장이 곧 둘레 전부입니다.
+                면 이름은 `CUBE_FACE_LABELS` 한 벌에서 옵니다(여기서 따로 적으면 배경 표시 도구와 말이 달라집니다).
+              */}
+              {domeLike ? (
+                <p className="text-[9px]" style={{ color: "oklch(0.52 0.01 265)" }}>
+                  돔 <b>전체</b>에 겁니다 — 등장방형 영상 한 편이 둘레를 두릅니다.
+                </p>
+              ) : (
+                <label className="flex items-center gap-1.5 text-[9px]" style={{ color: "oklch(0.52 0.01 265)" }}>
+                  <span className="shrink-0">어느 면</span>
+                  <select
+                    value={videoFace}
+                    onChange={(event) =>
+                      setState((current) =>
+                        patchRoomIn(current, room.id, (item) => ({
+                          ...item,
+                          video: {
+                            face: event.target.value as RoomVideoFace,
+                            source: item.video?.source ?? "",
+                          },
+                        })),
+                      )
+                    }
+                    className="min-w-0 flex-1 rounded px-1 py-0.5 text-[9px] outline-none"
+                    style={{
+                      background: "oklch(0.18 0.01 265)",
+                      border: "1px solid oklch(1 0 0 / 8%)",
+                      color: "oklch(0.82 0.01 265)",
+                    }}
+                  >
+                    {COMPOSITION_CUBE_FACES.map((face) => (
+                      <option key={face} value={face}>
+                        {CUBE_FACE_LABELS[face]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <select
+                value={room.video.source}
+                onChange={(event) =>
+                  setState((current) =>
+                    patchRoomIn(current, room.id, (item) => ({
+                      ...item,
+                      video: { face: roomVideoFaceOf(item), source: event.target.value },
+                    })),
+                  )
+                }
+                title="장소 폴더에 있는 영상들입니다"
+                className="w-full rounded-md px-2 py-1.5 text-[10px] outline-none"
+                style={{
+                  background: "oklch(0.11 0.008 265)",
+                  border: "1px solid oklch(1 0 0 / 10%)",
+                  color: "oklch(0.86 0.01 265)",
+                }}
+              >
+                <option value="">
+                  {roomVideo.videos.length
+                    ? `걸 영상 고르기 — ${roomVideo.videos.length}편`
+                    : "걸 영상이 없습니다 — 아래에서 만드세요"}
+                </option>
+                {roomVideo.videos.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              {/*
+                **만드는 길은 이미 있는 것을 씁니다**(공통 규칙 1) — 컷·카드가 쓰는 그 단추입니다.
+                그 면에 걸린 그림을 첫 프레임으로 준 i2v 라, 배경이 지금 보이는 그림 그대로 움직입니다.
+                면 그림이 없으면 단추를 안 냅니다 — 글만으로 뽑으면 배경이 딴 곳이 됩니다.
+              */}
+              {roomVideo.ownerName && faceImage && (
+                <LocalGenerateButton
+                  kind="video"
+                  label="이 면 그림으로 영상 만들기"
+                  seconds={ROOM_VIDEO_SECONDS}
+                  firstFrame={faceImage}
+                  prompt={backgroundLoopPrompt(roomVideo.prompt, room.name, videoFace)}
+                  projectName={roomVideo.projectName}
+                  assetType="background-generated"
+                  ownerName={roomVideo.ownerName}
+                  // 장소 폴더 안에서 «장소_배경영상_번호» 로 쌓입니다(규칙 5 — 번호는 저장 쪽이 붙입니다).
+                  stem={safeFileName(`${roomVideo.ownerName}_배경영상`)}
+                  onDone={(filePath, name) => {
+                    roomVideo.remember(filePath, name);
+                    setState((current) =>
+                      patchRoomIn(current, room.id, (item) => ({
+                        ...item,
+                        // 만들자마자 이 면의 «배경 영상» 이 됩니다 — 만들고 또 고르게 하지 않습니다.
+                        video: { face: roomVideoFaceOf(item), source: filePath },
+                      })),
+                    );
+                  }}
+                />
+              )}
+              <p className="text-[9px] leading-relaxed" style={{ color: "oklch(0.45 0.01 265)" }}>
+                재생하면 같이 돌고, 멈추면 멈추고, 눈금을 옮기면 그 시각의 프레임이 뜹니다 — <b>레퍼런스 영상</b>에도
+                그대로 찍힙니다. 2~4초 루프면 이음매가 눈에 안 띕니다.
+                {!faceImage && " 이 면에 그림이 없어 «만들기» 가 안 보입니다 — 먼저 전개도나 파노라마를 거세요."}
+                {!roomVideo.ownerName && " 이 방에 이어 둔 장소가 없어 «만들기» 가 안 보입니다 — 아래에서 장소를 고르거나 만드세요."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/*
         ── 호리존: 색 ─────────────────────────────────────────────────
-        제품 컷은 배경 그림이 아니라 **한 가지 색**이 배경입니다. 그래서 호리존 방만 방의 색을 직접 고릅니다.
+        
 
         색 고르기 창(`<input type="color">`)은 **끄는 동안 한 눈금마다** change 가 옵니다 — 슬라이더와 같습니다.
         그대로 되돌리기에 쌓으면 한 번의 색 고르기가 앞의 기록을 통째로 밀어냅니다(`PlannerRange` 머리말).
@@ -625,13 +970,12 @@ function RoomProperties({
 
       {/*
         ── 뒤를 가릴 면 — **실내만** ───────────────────────────────────
-        가릴 면은 방마다 다릅니다 — 어느 쪽을 등지고 찍느냐가 공간마다 다르기 때문입니다.
-        실외는 돔이라 가릴 벽이 아예 없어서 칸 자체를 안 냅니다.
+        
+        실외는 돔이라 가릴 벽이 없습니다.
       */}
       {/*
         ── 실외를 무엇으로 두를까 ────────────────────────────────────────
-        실외라고 다 돔은 아닙니다 — 카메라가 어떻게 움직이느냐에 따라 필요한 그림이 갈립니다.
-        그래서 방형(6면 세트)과 돔(파노라마 한 장) 중에 고릅니다.
+        
 
         **돔**은 각도만 맞습니다 — 제자리에서 도는 컷이면 이음매 없이 깔끔하고 그림 한 장이면 됩니다.
         **상자**는 여섯 면이 실제 기하라 카메라가 옮겨 다녀도 앞뒤·가림이 맞습니다(대신 모서리와 여섯 장의 색을 맞춰야 합니다).
@@ -721,8 +1065,7 @@ function RoomProperties({
 
       {/*
         ── 이 방의 장소 ────────────────────────────────────────────────
-        이 칸은 **앞에서 만들어 둔 공간을 가져오는** 자리입니다. 고르자마자 파노라마 만들기 창이 뜨면
-        이미 있는 것을 쓰려던 사람이 매번 새로 뽑는 창을 닫아야 하고, 이어 둔 공간을 바꿀 길도 막힙니다.
+        
 
         그래서 **고르기는 고르기만** 합니다(창이 안 뜹니다). 창은 «열기» 나 «만들기» 를 눌렀을 때만 뜹니다.
         호리존에는 이 칸이 없습니다 — 장소 카드가 없는 방이라, 두면 «전개도 만들기» 가 단색 벽에 그림을 뽑으려 듭니다.
@@ -731,8 +1074,7 @@ function RoomProperties({
         <div className="space-y-1.5">
           {/*
             ── 이 공간의 장소 ────────────────────────────────────────
-            이어 둔 장소를 **뺄** 길이 있어야 합니다. 빼고 나면 «만들기» 가 저절로 돌아오니
-            «새 장소로» 같은 단추를 따로 둘 까닭이 없습니다.
+            
 
             그래서 이어 둔 장소가 있으면 «열기 + ×», 없으면 «만들기» 하나입니다. 실외 목록에는 파노라마 카드만 뜹니다.
             실내는 6면 세트를 고르는 것이 곧 장소를 고르는 것이라(아래) 드롭다운을 따로 두지 않습니다.
@@ -819,7 +1161,7 @@ function RoomProperties({
 
       {/*
         ── 실외: 파노라마 그림 ─────────────────────────────────────────
-        파노라마는 실외 돔에만 걸립니다 — 그래서 목록도 그 방의 속성 안에 둡니다.
+        
       */}
       {domeLike && (
         <div
@@ -837,8 +1179,8 @@ function RoomProperties({
             </span>
             <div className="flex items-center gap-1">
               {/*
-                **바깥에서 바로 들여오기.** 여태는 앱에서 뽑은 것만 목록에 올라, 밖에서 만든
-                360°(스카이박스 생성기·실촬)를 쓸 길이 없었습니다. 끌어다 놓기도 같이 받습니다.
+                **바깥에서 바로 들여오기.** 
+                여태는 앱에서 뽑은 것만 목록에 올라, 밖에서 만든 360°(스카이박스 생성기·실촬)를 쓸 길이 없었습니다.
               */}
               {onImportPanorama && (
                 <label
@@ -943,7 +1285,7 @@ function RoomProperties({
 
       {/*
         ── 실내: 6면 세트 ──────────────────────────────────────────────
-        6면 세트는 상자 방에만 걸립니다 — 그래서 그 방의 속성 안에 둡니다. 면 하나하나 고르는 칸은 걷었습니다 —
+         면 하나하나 고르는 칸은 걷었습니다 —
         세트를 누르면 여섯 면이 한 번에 걸리고, 이름이 «…외벽» 인 세트는 바깥 껍질로 갑니다.
       */}
       {boxLike && (
@@ -997,9 +1339,9 @@ function RoomProperties({
 
       {/*
         ── 이 방의 소품 ───────────────────────────────
-        배치 탭은 캐릭터와 캐릭터 소품, 환경 탭은 배경과 배경 소품으로 갈라 둡니다 — 그래야 배치한
-        소품과 소품 에셋이 짝을 이루고, 프롬프트에서 @ 로 거는 이름도 한쪽에서만 나옵니다.
-        다만 갈랐다고 기능을 덜면 안 됩니다 — 묶기도, 방 벽에 붙이기도 여기 그대로 있습니다.
+        ,
+        「그래야 소품 에셋이랑 배치한 소품도 매칭시킬 수 있고… 프롬프트 작성할 때 @로 링크 걸어 주기도 편할 거고」,
+        「소품들 그룹화 시킬 수 있는 거… 방 벽에 붙일 수 있는 기능… 다 있어야 해」.
 
         소품은 «세우기 · 붙이기 · 묶기 · 에셋 잉기» 네 가지가 한자리에 있어야 합니다 — 세운 뒤 다른 탭으로 건너가면
         무엇을 세웠는지 잊습니다.
@@ -1110,9 +1452,7 @@ function RoomProps({
               {picked.label}
             </span>
             {/*
-              투시 — 벽만 투시되고 소품은 안 되면 벽 너머로 소품이 가로막고, 거꾸로 벽을 막았는데 소품만
-              비쳐도 어색합니다. 그래서 소품에도 같은 스위치를 둡니다.
-              시간대별로 바꾸려면 타임라인의 그 소품 줄에 키를 찍습니다.
+              투시 —  시간대별로 바꾸려면 타임라인의 그 소품 줄에 키를 찍습니다.
             */}
             <button
               type="button"
@@ -1137,8 +1477,7 @@ function RoomProps({
           </div>
 
           {/*
-            붙일 면 — 소품은 결국 바닥이든 벽이든 천장이든 어딘가에 닿아 있습니다. 떠 있는 소품을 손으로
-            맞추면 방 치수를 고칠 때마다 다시 맞춰야 합니다.
+            붙일 면. 
             붙이면 닿는 축만 방이 잡고 나머지는 끄는 대로 미끄러집니다 — 방을 넓혀도 따라붙습니다.
           */}
           <label className="flex items-center gap-1 text-[9px]" style={{ color: "oklch(0.52 0.01 265)" }}>
@@ -1172,9 +1511,7 @@ function RoomProps({
           </label>
 
           {/*
-            **벽과 조명에는 에셋이 없습니다.** 에셋은 «이 덩어리를 무엇으로 바꿔 그릴까» 인데,
-            벽과 조명은 그릴 물건이 아니라 공간과 빛이라 바꿔 그릴 것이 없습니다 — 박스·구·실린더에만 답니다.
-          */}
+            **벽과 조명에는 에셋이 없습니다.*          */}
           {SWAPPABLE_KINDS.includes(picked.kind) && (
             <>
               <select

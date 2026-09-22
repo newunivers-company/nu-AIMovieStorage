@@ -45,9 +45,10 @@ import { mannequinBody } from "@/lib/rig";
 /**
  * **영상에서 모션 가져오기** 창.
  *
- * 손으로 키를 찍어 만들 수 없는 움직임(춤·격투)을 영상에서 그대로 떠 옵니다. 관절만이 아니라
- * **이동과 몸통 회전**까지 가져옵니다 — 관절만 오면 제자리에서 춤추는 사람이 됩니다.
- * 검출 모델은 업스케일 엔진처럼 골라 씁니다.
+ * ,
+ * 「관절만 추적하면 안 되고 이동이랑 몸체 회전도」, 「업스케일링처럼 모델 선택해서 분석할 수 있게」, 「뮤직비디오 같은 경우 캐릭터
+ * 1개당 영상(솔로 영상) 하나를 매칭 시킬 수도 있어야 해」, 「캐릭터마다 영상 매칭 또는 한 영상에서 추적할 인물 선택해서 캐릭터에
+ * 매칭이 혼합적으로 가능해야 해」.
  *
  * # 영상이 여러 개
  *
@@ -73,7 +74,6 @@ const textColor = (lightness: number) => `oklch(${lightness} 0.01 265)`;
 /**
  * 초당 몇 장을 볼지.
  *
- * 모션 캡처의 질은 결국 **빠른 동작을 몇 장까지 쫓느냐**가 가릅니다 — 그래서 고를 수 있게 둡니다.
  * 분석은 영상의 **모든 장**을 볼 수 있습니다(30 fps 영상이면 30). 60 은 60 fps 로 찍은 영상에서만 뜻이 있습니다 — 30 fps 영상에
  * 60 을 주면 같은 장을 두 번 봅니다. 키도 그 간격 그대로 들어가 1/30 초 동작까지 남습니다.
  */
@@ -84,8 +84,8 @@ const BUILTIN_ENGINE = "mediapipe";
 
 /**
  * 목록 한 줄. **창 밖의 저장소**(`lib/mocapStore.ts`)가 들고 있습니다 — 창을 닫아도 분석이 이어지고,
- * 프로젝트마다 따로 남습니다 — 분석은 몇 분씩 걸려 창을 붙들고 기다릴 수 없고,
- * 무엇을 분석해 뒀는지는 그 작품 안에서 보여야 합니다.
+ * 프로젝트마다 따로 남습니다(, 「프로젝트별로
+ * 관리가 되어야지, 나중에 내가 어떤 걸 분석했는지 알지」).
  */
 type VideoSource = MocapSource;
 
@@ -112,8 +112,7 @@ export function MotionCaptureDialog({
   /**
    * 타임라인 인물 줄의 **오른쪽 단추**로 열었을 때 «무엇을 하러 왔는가».
    *
-   * 모션을 다른 것으로 갈거나 다시 분석하는 일이 잦습니다.
-   * 창을 열고 줄을 다시 찾게 하면 그 줄에서 연 뜻이 없습니다 — 그 줄을 골라 두고,
+   * 창을 열고 줄을 다시 찾게 하면 우클릭으로 연 뜻이 없습니다 — 그 줄을 골라 두고,
    * 그 사람을 1번에 짝지어 두고, «재분석» 이면 곧바로 줄에 세웁니다.
    */
   openWith?: {
@@ -123,7 +122,7 @@ export function MotionCaptureDialog({
   } | null;
   onClose: () => void;
 }) {
-  // 걸음이 이 창 밖을 가리키면 물러납니다 — 규칙은 `useTutorialPanel` 한 곳에만 둡니다.
+  // 걸음이 이 창 밖을 가리키면 물러납니다 — 규칙은 `useTutorialPanel` 한 곳.
   useTutorialPanel({ open: true, holds: HOLDS_MOCAP, onClose });
 
   const sources = useMocapSources(projectName);
@@ -216,7 +215,7 @@ export function MotionCaptureDialog({
     patchMocapSource(projectName, id, update);
 
   /*
-    창을 닫아도 **분석을 멈추지 않습니다** — 몇 분씩 걸리는 일이라 창을 붙들고 기다릴 수 없습니다.
+    창을 닫아도 **분석을 멈추지 않습니다**().
     blob 주소도 저장소가 들고 있으므로 여기서 풀지 않습니다 — 풀면 다시 열었을 때 미리보기가 깨집니다.
   */
   const sourcesRef = useRef(sources);
@@ -256,12 +255,11 @@ export function MotionCaptureDialog({
     setSelectedId(source.id);
   };
 
-  /** 브라우저에서 고른 파일은 **프로젝트 폴더에 넣고** 그 경로로 씁니다 — blob 은 앱을 닫으면 죽습니다. */
+  /** 브라우저에서 고른 파일은 **프로젝트 폴더에 넣고** 그 경로로 씁니다. */
   const addFile = async (file: File) => {
     const saved = await saveMocapVideo(projectName, file).catch(() => null);
     /*
-      **화면에도 정리된 이름으로 올립니다.**
-      폴더 이름은 다듬어 두고 목록만 이모지투성이 원본 이름이면
+      **화면에도 정리된 이름으로 올립니다**(). 폴더는 「춤선이 너무 예뻤던…」 인데 목록은 이모지투성이 원본 이름이면
       같은 영상인지 알 수가 없습니다. 결과 JSON 의 이름도 이것을 따릅니다.
     */
     addSource(mediaOwnerName(file.name), saved, saved ? null : URL.createObjectURL(file));
@@ -274,7 +272,7 @@ export function MotionCaptureDialog({
         const paths = await invoke<string[]>("choose_video_files");
         /*
           **고른 영상을 프로젝트 폴더로 담습니다.** 여태 경로만 기억해서, 프로젝트를 통째로
-          옮기면 분석 결과만 남고 원본은 남의 폴더에 있었습니다.
+          옮기면 분석 결과만 남고 원본은 남의 폴더에 있었습니다().
           담지 못하면 원래 경로로 그냥 씁니다 — 분석은 되어야 하니까요.
         */
         for (const path of paths) {
@@ -343,7 +341,7 @@ export function MotionCaptureDialog({
 
   /*
     ── 겹쳐 그리기: 지금 보는 장의 뼈대와 번호 ──────────────────────────
-    **장마다 다시 그립니다.** 뼈가 영상을 못 따라가면 분석이 제대로 됐는지 눈으로 가릴 수가 없습니다.
+    **장마다 다시 그립니다.** 
 
     예전에는 React 상태(`previewTime`)가 바뀔 때만 그렸는데, 그 상태를 채우는
     `timeupdate` 는 **초당 네 번쯤**만 옵니다. 30 fps 영상이면 일곱 장에 한 번만
@@ -455,8 +453,7 @@ export function MotionCaptureDialog({
 
 
   /**
-   * 분석을 **줄에 세웁니다.** 여러 개를 눌러 두면 하나씩 차례로 돕니다 — 하나가 끝날 때까지
-   * 지켜보고 다음을 누르게 하면 영상 다섯 개에 사람이 묶입니다.
+   * 분석을 **줄에 세웁니다.** 여러 개를 눌러 두면 하나씩 차례로 돕니다.
    * 실제 분석은 창 밖의 저장소가 하므로 창을 닫아도 이어집니다.
    */
   const analyze = (source: VideoSource) => enqueueMocap(projectName, source.id);
@@ -566,7 +563,7 @@ export function MotionCaptureDialog({
         /*
           대형은 영상마다 따로 잽니다 — 서로 다른 영상의 사람끼리는 간격을 알 수 없습니다.
           **넣는 것도 영상마다** 따로 부릅니다. 한꺼번에 넣으면 어느 트랙이 어느 모션에서
-          왔는지 적을 수가 없어, 레이어에 «수화(춤선…)» 처럼 모션 이름을 띄울 수 없습니다.
+          왔는지 적을 수가 없어, 레이어에 «수화(춤선…)» 을 띄울 수 없습니다.
         */
         let built = next;
         for (const source of snapshot) {
@@ -740,7 +737,7 @@ export function MotionCaptureDialog({
                     <Film className="h-3 w-3 shrink-0" style={{ color: textColor(0.6) }} />
                     {/*
                       **이름은 두 번 눌러 고칩니다.** 타임라인 레이어에 «수화(춤선…)» 으로
-                      뜨는 것이 이 이름이라, 받은 파일 이름 그대로면 무슨 춤인지 알 수 없습니다.
+                      뜨는 것이 이 이름이라, 「KakaoTalk_2026…」 으로는 무슨 춤인지 모릅니다.
                       파일은 그대로 두고 **부르는 이름만** 바꿉니다.
                     */}
                     {renaming === source.id ? (
@@ -928,8 +925,7 @@ export function MotionCaptureDialog({
                     </span>
                   ))}
                   {/*
-                    마지막 칸은 **영상 그대로**입니다 — 정해진 10·15·30·60 으로는 영상의 초당 장수와 어긋납니다.
-                    영상이 24fps 면 24, 59.94fps 면 60 처럼 그 영상의 초당 장수를 씁니다.
+                    마지막 칸은 **영상 그대로**입니다. 영상이 24fps 면 24, 59.94fps 면 60 처럼 그 영상의 초당 장수를 씁니다.
                     한 장도 건너뛰지 않아야 빠른 동작이 살아납니다.
                   */}
                   {row(
@@ -964,8 +960,7 @@ export function MotionCaptureDialog({
                     "연습실 거울을 찍은 영상처럼 좌우가 뒤집힌 영상 — 분석 전에 정하세요",
                   )}
                   {/*
-                    분석 중에도 아래 단추를 **누를 수 있습니다.** 하나가 끝나기를 기다렸다 눌러야 한다면
-                    영상 여러 개를 맡겨 두고 자리를 뜰 수가 없습니다. 누르면 줄에 서고,
+                    분석 중에도 아래 단추를 **누를 수 있습니다.** 누르면 줄에 서고,
                     저장소가 하나씩 돌려 끝나는 대로 프로젝트 폴더에 적습니다(`lib/mocapStore.ts`).
                   */}
                   {busy(selected) ? (

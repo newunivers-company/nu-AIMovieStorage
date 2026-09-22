@@ -37,7 +37,7 @@ export default function StepScenes({
   onChange: (updater: (current: ProjectDraft) => Partial<ProjectDraft>) => void;
 }) {
   /*
-    **장면은 기본으로 전부 펴 둡니다.**
+    **장면은 기본으로 전부 펴 둡니다.** 
 
     여태 첫 장면 하나만 펴 두었더니, 장면이 넷이면 나머지 셋은 컷이 몇 개인지도 안 보였습니다.
     여기는 «훑어보는 자리» 가 아니라 컷을 만드는 자리라 다 보이는 편이 맞습니다.
@@ -49,8 +49,8 @@ export default function StepScenes({
     setClosedIds((now) => (now.includes(id) ? now.filter((item) => item !== id) : [...now, id]));
   /*
     장소 칸은 **장면이 하나도 없을 때만 펴 둡니다.**
-    배경과 배경 에셋은 구도잡기에서 함께 만들어 짝지으므로 새 작품은 장소부터 시작하지만,
-    장면이 쌓인 뒤로는 컷이 먼저 보여야 합니다.
+    새 작품은 장소부터
+    만들지만, 장면이 쌓인 뒤로는 컷이 먼저 보여야 합니다.
   */
 
   const add = () => {
@@ -61,6 +61,8 @@ export default function StepScenes({
 
   /*
     ── 튜토리얼이 컷 하나를 펴 둡니다 ─────────────────────────────────────
+    
+
     접힌 컷은 머리줄(«구도잡기» · «구도 불러오기»)만 보입니다. 그 아래 `cut-…` 자리들은 펴야
     생기므로, 그런 걸음에 이르면 첫 컷을 펴 둡니다. 장면이나 컷이 아직 없으면 만들어서라도 —
     없는 자리를 가리키며 「여기 있습니다」 라고 할 수는 없습니다.
@@ -101,8 +103,7 @@ export default function StepScenes({
 
   const { projectName } = useProjectMedia();
   const remove = async (scene: Scene) => {
-    // 화면에서 지우면 폴더의 원본도 지웁니다. 캐릭터·배경과 같은 규칙입니다 — 파일이 남으면
-    // 폴더를 다시 읽을 때 되살아납니다.
+    // 화면에서 지우면 폴더의 원본도 지웁니다. 캐릭터·배경과 같은 규칙입니다. (지시 307)
     const ok = await confirmDialog({
       title: `${scene.title || "이름 없는 장면"} 을 지울까요?`,
       description:
@@ -123,8 +124,9 @@ export default function StepScenes({
     <div className="space-y-3">
       {/*
         ── 장소·배경 에셋은 **구도잡기 안**에 있습니다 ───────────────────
-        만드는 차례가 «방 추가 → 빈 방에 인물을 놓아 크기 가늠 → 방 수치 확정 → 전개도 생성 → 전개도를 입히고 소품 배치 →
-        소품에 연결된 에셋 시트 생성 → 소품과 에셋 짝짓기» 라, 그 흐름이 전부 구도잡기 안에서 이어집니다.
+        , 「방 추가 → 전개도 입혀지지 않은 방에서 캐릭터
+        배치랑 공간 크기 보고 → 방 수치 세팅 완료 후 전개도 생성 → 전개도 입힌 다음 오브젝트 배치 → 오브젝트에 연결된 에셋 시트
+        생성 → 오브젝트랑 에셋 매칭」.
 
         배경은 «혼자 만드는 것» 이 아니라 구도잡기에서 방을 세울 때 필요한 것이라, 만드는 자리도 거기입니다. 여기 씬 단계에는
         장면과 컷만 남습니다.
@@ -335,8 +337,7 @@ function SceneCard({
               videoModel={draft.magnific?.videoModel}
               videoAspect={draft.aspect?.video}
               /*
-                **이 프로젝트에서 잡아 둔 구도들.** 같은 공간에서 구도만 바꿔 찍을 때 인물을 처음부터
-                다시 세우지 않으려고, 다른 컷의 구도를 그대로 가져옵니다.
+                **이 프로젝트에서 잡아 둔 구도들.** 
                 지금 컷은 뺍니다 — 제 구도를 제게 불러올 일은 없습니다.
               */
               savedShots={draft.scenes.flatMap((other, otherIndex) =>

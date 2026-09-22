@@ -20,8 +20,7 @@ import { copyImageWithNotice, revealFile, sendImagesToMagnific } from "@/lib/med
  * 복사와 잘라내기는 원본 파일이 있어야 제대로 됩니다. 화면에 띄운 썸네일만으로도
  * 되기는 하지만 화질이 떨어지므로, 경로가 없으면 폴더 열기는 아예 감춥니다.
  *
- * 오른쪽 가운데에 있던 «업스케일 ▾» 은 뺐습니다. 자르면 그림이 작아지니 키우기는 자르는
- * 자리에서 이어서 하는 것이 자연스럽습니다. 키우기는 이제 가위로 여는
+ * 오른쪽 가운데에 있던 «업스케일 ▾» 은 뺐습니다(2026-09-09). 키우기는 이제 가위로 여는
  * 편집 창(`SheetPanelCropper`)의 «업스케일해서 저장»·«지금 그림 업스케일» 한 곳에서만 합니다 —
  * 두 곳에 두면 목표 크기·엔진 규칙이 갈립니다. 여섯 장을 한 번에 하는 6면 세트 카드
  * (`FaceSetCard` 의 «세트 업스케일»)만 예외로 남겼습니다.
@@ -98,7 +97,7 @@ export default function ImageActions({
    * 주면 위 가운데에 별이 붙습니다 — 이 그림을 정체성 기준으로.
    *
    * 정체성 기준(부모 시트)을 잘라 다듬은 그림으로 바꾸고 싶을 때. 기준을 «빼는» 것은
-   * 여전히 안 되고(규칙 6) «다른 그림으로 바꾸는» 것만 됩니다.
+   * 여전히 안 되고(규칙 6) «다른 그림으로 바꾸는» 것만 됩니다. 
    */
   onMakeIdentity?: () => void;
   /** 마우스를 올리지 않아도 보이게 합니다. */
@@ -111,7 +110,7 @@ export default function ImageActions({
     /*
       앵커는 **바깥 상자**에 답니다. 안쪽 묶음은 `display: contents` 라 제 상자가 없어
       `getBoundingClientRect()` 가 0×0 으로 나옵니다 — 튜토리얼은 크기가 0 이면 «없다» 로 보므로
-      영영 못 찾습니다 — 그림 위 여섯 아이콘을 가리켜야 할 걸음이 아무것도 못 가리킵니다.
+      영영 못 찾습니다().
     */
     <div data-tour="image-actions" className={`pointer-events-none absolute inset-0 ${visible}`}>
       <div className="pointer-events-auto contents">

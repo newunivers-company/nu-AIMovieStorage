@@ -182,6 +182,44 @@ def plain_attention(pipe):
         log("전역 어텐션을 되돌리지 못했습니다: {}".format(error))
 
 
+def lora_adapter_count(model):
+    """이 모델에 **실제로 붙어 있는** 로라 어댑터 수.
+
+    diffusers 는 키가 한 개도 안 맞아도 예외를 던지지 않고 경고만 찍고 넘어갑니다.
+    그래서 «먹였습니다» 라고 적어 놓고 아무 일도 안 한 채 도는 일이 실제로 있었습니다 —
+    로라를 켠 영상과 끈 영상이 **바이트까지 같았습니다.** 겉보기로는 성공이라 눈으로는
+    「로라가 약한가 보다」 로 넘어갑니다.
+
+    그래서 올린 뒤에 세어 봅니다. 세는 법은 모델마다 다를 수 있어 아는 길을 차례로 봅니다.
+    """
+    for attr in ("peft_config", "_hf_peft_config_loaded"):
+        value = getattr(model, attr, None)
+        if isinstance(value, dict) and value:
+            return len(value)
+    found = set()
+    for module in getattr(model, "modules", lambda: [])():
+        names = getattr(module, "lora_A", None)
+        if hasattr(names, "keys"):
+            found.update(names.keys())
+    return len(found)
+
+
+def check_loras(model, wanted, where=""):
+    """올린 뒤 **한 개도 안 붙었으면 알립니다.** 붙은 수를 돌려줍니다."""
+    if not wanted:
+        return 0
+    got = lora_adapter_count(model)
+    if not got:
+        raise IOError(
+            "로라가 한 개도 붙지 않았습니다{} — 이 모델에 맞는 로라인지 확인해 주세요.".format(
+                " ({})".format(where) if where else ""
+            )
+        )
+    if got < len(wanted):
+        log("로라 {}개 가운데 {}개만 붙었습니다.".format(len(wanted), got))
+    return got
+
+
 """빠른 어텐션이 못 돌 때 내는 말들.
 
 「sage」·「attention」 만 보고 있었더니 **「No available kernel. Aborting execution.」** 을
@@ -504,6 +542,56 @@ def step_reporter(report, total_steps, base=10, span=85):
         return kwargs
 
     return callback
+
+
+def freeze_by_mask(frames, mask_path):
+    """**«여기만 움직인다»** — 흰 곳은 그대로 두고, 검은 곳은 첫 장면으로 되돌립니다.
+
+    화면에서 흑백 마스크를 그려 보내 놓고 워커가 그 칸을 안 보면, 그린 사람 눈에는
+    「먹히긴 하는데 약하다」 로 보입니다(프롬프트 한 줄은 들어가니까요). 실제로는
+    아무 일도 안 일어납니다 — 로라가 조용히 안 붙던 것과 같은 모양의 사고입니다.
+
+    모델을 바꾸지 않고 **뽑은 뒤에** 섞는 까닭은, 엔진마다 안쪽이 전부 달라서
+    한 벌로 둘 수 있는 자리가 여기뿐이기 때문입니다. 배경은 첫 장면에 붙들어 두고
+    사람·차만 움직이게 하는, 실제로 쓰는 쓰임새에는 이것으로 충분합니다.
+
+    마스크는 첫 장면과 크기가 달라도 됩니다 — 늘려서 맞춥니다. 회색은 그 비율만큼
+    섞이므로 가장자리가 부드럽게 이어집니다.
+    """
+    if not mask_path or not os.path.isfile(mask_path):
+        return frames
+    if not frames:
+        return frames
+    try:
+        import numpy as np
+        from PIL import Image
+    except Exception as exc:
+        log("움직임 구역을 못 읽어 그냥 갑니다: {}".format(exc))
+        return frames
+
+    first = frames[0]
+    size = first.size if hasattr(first, "size") else (first.shape[1], first.shape[0])
+    mask = Image.open(mask_path).convert("L")
+    if mask.size != size:
+        mask = mask.resize(size, Image.BILINEAR)
+    # 흰(255) = 움직인다 = 새 프레임을 그대로. 검은(0) = 첫 장면으로.
+    alpha = (np.asarray(mask).astype("float32") / 255.0)[:, :, None]
+    if float(alpha.max()) <= 0.0:
+        # 전부 검으면 영상이 정지 사진이 됩니다 — 그릴 때 실수한 쪽이 훨씬 잦아 그냥 둡니다.
+        log("움직임 구역이 전부 검습니다 — 무시하고 그대로 내보냅니다.")
+        return frames
+
+    base = np.asarray(first.convert("RGB") if hasattr(first, "convert") else first).astype("float32")
+    out = [frames[0]]
+    moved = 0
+    for frame in frames[1:]:
+        arr = np.asarray(frame.convert("RGB") if hasattr(frame, "convert") else frame).astype("float32")
+        mixed = arr * alpha + base * (1.0 - alpha)
+        out.append(Image.fromarray(mixed.clip(0, 255).astype("uint8")))
+        moved += 1
+    log("움직임 구역 적용 — {}프레임을 첫 장면에 묶었습니다({:.0f}%가 움직임).".format(
+        moved, 100.0 * float(alpha.mean())))
+    return out
 
 
 def save_video(frames, path, fps):

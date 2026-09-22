@@ -1,12 +1,12 @@
 //! **마그니픽 다리** — 클립보드로 보내기, 그리고 «구성»(그림 → 생성기 자동).
 //!
-//! `lib.rs` 에서 떼어 냈습니다. 창 제어(`magnific_window`) · CDP 로 페이지에
+//! 2026-09-18 에 `lib.rs` 에서 떼어 냈습니다. 창 제어(`magnific_window`) · CDP 로 페이지에
 //! 직접 명령 보내기(`magnific_cdp`) · 보드 클립보드 형식(`pikaso`) 세 덩이가 여기 모여
 //! 있는데, 셋 다 **바깥 프로그램의 속사정**이라 우리 앱의 파일 살림과 섞여 있으면
-//! 우리 규칙인지 마그니픽 규칙인지를 매번 되짚어야 했습니다.
+//! 「이건 우리 규칙인가 마그니픽 규칙인가」 를 매번 되짚어야 했습니다.
 //!
 //! 「구성」은 마그니픽 데스크톱을 **우리 앱이 켰을 때만** 됩니다 — 디버그 포트 9556 으로
-//! CDP 에 붙기 때문입니다. 사람이 직접 켠 창에는 못 붙습니다.
+//! CDP 에 붙기 때문입니다. 사용자가 직접 켠 창에는 못 붙습니다.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use crate::{ensure_inside, err, extension_allowed, file_fingerprint, LockSafe, R
 #[cfg(target_os = "windows")]
 /// 클립보드 잠금. OS 클립보드는 하나뿐인데 «구성» 을 여러 개 동시에 돌리면 스레드마다
 /// 열고·비우고·쓰기가 겹칩니다. 한쪽이 EmptyClipboard 로 비운 메모리를 다른 쪽이 계속 쓰면
-/// 힙 손상(STATUS_HEAP_CORRUPTION)입니다 — 구성을 여러 개 돌리다 실제로 그렇게 죽었습니다.
+/// 힙 손상(STATUS_HEAP_CORRUPTION)입니다 — 실제로 그렇게 죽었습니다(2026-09-08, 구성 여러 개).
 /// 여기 안에서는 await 하지 않습니다(짧게 잡고 놓음).
 pub static CLIPBOARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -45,7 +45,7 @@ pub fn magnific_compose_busy() -> bool {
 /// 켜기 확인(`launch_magnific_desktop_verified`)이 최대 20초라, 그 사이 다시 누르면 `find_target` 이
 /// 아직 None 이라 **두 번째 인스턴스를 또 spawn** 합니다 — 단일 인스턴스 넘겨주기로 곧 꺼지고
 /// 「곧 꺼졌습니다 … 완전히 끝내고」 와 「켰습니다」 가 잇달아 떠 멀쩡히 켜지는 마그니픽을 끄게
-/// 했습니다. 뒤 누름은 앞 켜기가 끝나길 여기서 기다렸다가 그 창을 찾아 붙여넣습니다.
+/// 했습니다(2026-09-22 검토). 뒤 누름은 앞 켜기가 끝나길 여기서 기다렸다가 그 창을 찾아 붙여넣습니다.
 /// «구성» 의 `COMPOSE_LOCK` 과 따로 두는 까닭: 구성은 몇 분씩 걸리는데 보내기가 그것을 기다릴 일은 없습니다.
 pub static SEND_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
 
@@ -125,7 +125,7 @@ pub mod magnific_window {
 
     /// 붙여넣을 창을 고릅니다.
     ///
-    /// 데스크톱 앱이 불안정할 때는 크롬으로 마그니픽을 씁니다. EnumWindows 는 창을
+    /// 사용자가 데스크톱 앱이 불안정할 때 크롬으로 마그니픽을 씁니다. EnumWindows 는 창을
     /// «위에서 아래로»(Z 순서) 주므로, 보이는 후보 중 **가장 위에 있는 것** — 곧 가장 최근에
     /// 쓴 창 — 을 고릅니다. 데스크톱 앱과 크롬 탭이 둘 다 떠 있으면 마지막으로 만진 쪽입니다.
     /// 보이는 것이 없으면 트레이에 숨은 데스크톱 앱. 브라우저 창 제목은 «앞 탭» 의 제목이라,
@@ -223,7 +223,7 @@ pub mod magnific_window {
     ///
     /// 마그니픽 캔버스의 붙여넣기는 `clipboardData.files` 를 읽습니다. 비트맵으로
     /// 넣으면 6000 시트가 144MB 가 되고 파일 이름도 잃지만, 파일 목록이면 가볍고
-    /// 이름(= @태그)이 그대로 노드 이름이 됩니다. (번들을 뜯어 확인한 것)
+    /// 이름(= @태그)이 그대로 노드 이름이 됩니다. (2026-09-07 번들 분석)
     pub fn set_clipboard_files(paths: &[std::path::PathBuf]) -> Result<(), String> {
         let _clipboard = super::clipboard_guard();
         use windows::Win32::Foundation::HANDLE;
@@ -279,8 +279,8 @@ pub mod magnific_window {
     /// 창 가운데를 한 번 클릭합니다.
     ///
     /// 창을 앞으로 가져와도 키보드 초점은 웹뷰 껍데기(Chrome_WidgetWin_1)에 머물러
-    /// 페이지의 캔버스까지 키가 가지 않았습니다. 손으로 할 때와 같이
-    /// «캔버스 클릭 → Ctrl+V» 순서로 맞춥니다. 캔버스는 창 가운데를 차지합니다.
+    /// 페이지의 캔버스까지 키가 가지 않았습니다(2026-09-07 진단). 사용자가 손으로 할
+    /// 때처럼 «캔버스 클릭 → Ctrl+V» 순서로 맞춥니다. 캔버스는 창 가운데를 차지합니다.
     pub fn click_center(hwnd: HWND) {
         let mut rect = RECT::default();
         unsafe {
@@ -358,7 +358,7 @@ pub mod magnific_window {
     /// 창 크기·줌 배율과 무관합니다. 좌표 더블클릭으로 편집을 열던 예전 시도는 다섯 번 실패했습니다.
     /// 스포트라이트 검색어(query)로 노드를 만들고 그 안에 붙여넣습니다. 쓰는 건 "text"(텍스트 노드)뿐.
     /// 검색은 라벨이 아니라 키워드로도 되므로 한국어 UI 에서도 영어 검색어가 맞습니다.
-    /// 이미지 생성기는 "image generator"·"picture"·모델 슬러그 세 검색어가 다 안 맞아
+    /// 이미지 생성기는 "image generator"·"picture"·모델 슬러그 세 검색어가 다 안 맞아(2026-09-07)
     /// 스포트라이트로 만들지 않고 magnific_paste_flow(복사 형식 JSON 붙여넣기)로 만듭니다.
     pub fn paste_into_new_node(hwnd: HWND, query: &str) {
         use windows::Win32::UI::Input::KeyboardAndMouse::{VK_ESCAPE, VK_N, VK_RETURN};
@@ -379,7 +379,7 @@ pub mod magnific_window {
         // 노드(id·연결)는 복사되지 않아 생성기를 이을 수 없습니다. Esc 는 한 번만 — 두 번이면
         // 캔버스의 «선택 해제» 로 넘어갑니다.
         // 칩 변환은 붙여넣기 뒤 워커에서 비동기로 돕니다. 0.4초 뒤 Esc 는 너무 일러 맨글자로
-        // 남았습니다 — 맞는 그림이 보드에 있는데도 그랬습니다. 넉넉히 기다립니다.
+        // 남았습니다(2026-09-07, 냥이_001 그림이 있는데도). 넉넉히 기다립니다.
         wait(1800);
         tap(VK_ESCAPE, false);
     }
@@ -415,7 +415,7 @@ pub mod magnific_window {
             }
             let result = (|| {
                 // 형식이 없을 때 GetClipboardData 를 부르지 않고, 크기를 모르면 읽지 않습니다.
-                // CDP 구성 중에 앱이 힙 손상(0xc0000374)으로 죽은 적이 있어 안전 검사를 더 겁니다.
+                // 앱이 힙 손상(0xc0000374)으로 죽은 적이 있어(2026-09-08, CDP 구성 중) 안전 검사를 더 겁니다.
                 if IsClipboardFormatAvailable(format).is_err() {
                     return None;
                 }
@@ -549,7 +549,7 @@ pub mod magnific_window {
 /// 마그니픽 데스크톱은 Tauri + WebView2 입니다. 우리가 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
 /// 에 `--remote-debugging-port=9556` 을 넣어 실행하면 페이지에 직접 명령을 보낼 수 있습니다
 /// (우리 앱 자신을 시험할 때 쓰는 방식과 같음). OS 로 보내는 Ctrl+C 는 데스크톱 창에서 페이지까지
-/// 가지 않았지만, CDP 로 페이지 안에 넣는 키는 갑니다(Ctrl+A·Ctrl+C 로 확인).
+/// 가지 않았지만(2026-09-07), CDP 로 페이지 안에 넣는 키는 갑니다(Ctrl+A·Ctrl+C 확인, 2026-09-08).
 /// 창이 앞에 있을 필요도 없습니다. 이미 떠 있는 창에는 못 붙으니 마그니픽은 우리 앱에서 켭니다.
 pub mod magnific_cdp {
     use futures_util::{SinkExt, StreamExt};
@@ -562,7 +562,7 @@ pub mod magnific_cdp {
 
     /// CDP 호출 하나(보내기 + 우리 id 의 응답 받기)의 마감.
     ///
-    /// 실측한 것입니다 — «구성» 을 눌렀는데 17분째 «구성하는 중…» 에 묶여 있었습니다. 마그니픽
+    /// 2026-09-21 실측: «구성» 을 눌렀는데 17분째 «구성하는 중…» 에 묶여 있었습니다. 마그니픽
     /// 페이지가 멈추면 우리 id 의 응답은 영영 안 오는데, 여기엔 마감이 없어서 그대로 기다렸습니다.
     /// 정상은 밀리초지만 6000×6000 시트를 붙여넣어 렌더러가 디코딩하는 동안은 dispatchKeyEvent
     /// 응답이 몇 초 늦을 수 있어 짧게 잡으면 헛발질합니다 — 30초.
@@ -902,8 +902,8 @@ pub fn with_mention_chips(prompt: &str, creations: &[CopiedCreation]) -> String 
 /// 마그니픽은 «복사» 형식(PKS_ JSON)을 붙여넣으면 요소 id 를 새로 매겨 재생성하고, **같이 붙여넣은
 /// 요소끼리의** 연결은 확실히 다시 잇습니다(이미 있던 요소와 잇는 외부 연결은 시험에서 안 됐음).
 /// 칩(`@[id:이름:output]`)은 id 로 찾는데, 붙여넣을 때 id 를 고쳐 주는 필드는 «이미지 생성기의 prompt»
-/// 등뿐이고 텍스트 노드 본문은 안 고쳐 줍니다(번들 mentionHelpers 의 목록, 시험에서도
-/// 텍스트 노드 칩만 취소선이었습니다). 그래서 프롬프트를 텍스트 노드가 아니라 **생성기의 prompt 칸에** 넣습니다.
+/// 등뿐이고 텍스트 노드 본문은 안 고쳐 줍니다(번들 mentionHelpers 의 목록, 2026-09-07 시험에서
+/// 텍스트 노드 칩만 취소선). 그래서 프롬프트를 텍스트 노드가 아니라 **생성기의 prompt 칸에** 넣습니다.
 /// 그림은 같은 creationIdentifier 로 사본을 넣어(마그니픽의 그림 노드 복사·붙여넣기와 같음, 재업로드
 /// 없음) 그림→생성기(reference)를 내부 연결로 만듭니다.
 pub fn build_flow_payload(
@@ -972,8 +972,7 @@ pub fn build_flow_payload(
             copies.iter().map(|c| connection(&c.id, "output", gen_id, "reference", "image")).collect();
         /*
             ── 이미지 생성기 / 영상 생성기 ──────────────────────────────
-            구도잡기에서 뽑은 영상을 레퍼런스 삼아 바로 영상을 뽑는 길입니다. 러닝타임도
-            노드에 함께 박아 두어야 생성기 설정을 손으로 다시 맞추지 않습니다.
+            
 
             노드 종류와 data 만 갈립니다 — 붙여넣는 방법(그림 먼저, 새 노드 감지, 사본 +
             생성기 JSON)은 완전히 같습니다. 영상에는 `durationSeconds` 가 더 붙습니다.
@@ -1058,7 +1057,7 @@ pub fn magnific_desktop_exe() -> Option<PathBuf> {
 ///
 /// spawn 만 하는 원시 함수입니다 — spawn 성공은 CreateProcess 성공일 뿐, 1초 뒤 꺼져도 모릅니다.
 /// «실제로 떴는가» 는 [`launch_magnific_desktop_verified`] 가 봅니다. 켜는 명령은 전부 그쪽을
-/// 씁니다 — 이 원시 함수를 바로 부르고 «켰다» 고 하면 거짓말이 될 수 있습니다
+/// 씁니다 — 이 원시 함수를 바로 부르고 「켰다」 고 하면 2026-09-21 처럼 거짓말이 됩니다
 /// (`send_prompt_to_magnific` 이 동기 명령이라 그렇게 하다가 async 로 바꿨습니다).
 pub fn launch_magnific_desktop() -> Res<std::process::Child> {
     let exe = magnific_desktop_exe().ok_or("마그니픽 데스크톱을 찾지 못했습니다. magnific.com/desktop 에서 설치하세요.")?;
@@ -1086,7 +1085,7 @@ const HANDOFF_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 /// 무엇이 떠야 «켜졌다» 인가.
 ///
 /// «구성» 은 CDP 로 붙으니 **포트**가 열려야 하고, «마그니픽» 보내기는 창에 Ctrl+V 뿐이라 **창**만
-/// 뜨면 됩니다. 문구를 한 벌로 합치며 «구성» 의 기준(포트)이 보내기에도 씌워져,
+/// 뜨면 됩니다. 2026-09-22 검토: 문구를 한 벌로 합치며 «구성» 의 기준(포트)이 보내기에도 씌워져,
 /// 콜드 스타트에 창은 15초에 뜨고 포트는 20초 뒤에 열리면 「디버그 포트가 아직 안 열렸습니다 …
 /// 완전히 끝내고」 라고 해서, 화면에 멀쩡히 뜬 마그니픽을 사람이 끄게 했습니다.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1113,7 +1112,7 @@ pub enum LaunchOutcome {
 
 /// 마그니픽을 켜고 **실제로 떴는지** 확인합니다.
 ///
-/// 실측한 것입니다 — «구성» 이 «마그니픽을 켰습니다» 라고 했는데 마그니픽이 안 떴습니다. 예전
+/// 2026-09-21 실측: «구성» 이 「마그니픽을 켰습니다」 라고 했는데 마그니픽이 안 떴습니다. 예전
 /// `launch_magnific_desktop` 은 spawn 한 Child 를 그 자리에서 버려서, 켜지자마자 꺼져도 «켰다» 고
 /// 알렸습니다. 확인 신호 셋(다 이미 있던 재료): ① Child.try_wait 로 생존(upscale.rs 의 고리와 같은
 /// 모양) ② `find_app_page` 로 9556 이 열렸는가(NO_PORT 만 «아직», 로그인 화면 등 다른 오류는 포트가
@@ -1164,8 +1163,8 @@ pub async fn launch_magnific_desktop_verified(need: LaunchNeed) -> Res<LaunchOut
 }
 
 /// 켜기 결과를 사람 말로. «구성»(`compose_body`)과 «마그니픽» 보내기(`send_prompt_to_magnific`)가
-/// **같은 한 벌**을 씁니다. 한때 «구성» 만 켜기 확인을 넣고 보내기는 spawn 직후
-/// «실행했습니다» 로 남겨 두었는데, 그 뒤로 보내기는 켰다는데 안 뜨는 일이 그대로였습니다 —
+/// **같은 한 벌**을 씁니다. 2026-09-21 에 «구성» 만 켜기 확인을 넣고 보내기는 spawn 직후
+/// 「실행했습니다」 로 남겨 두었는데, 그 뒤로 보내기는 켰다는데 안 뜨는 일이 그대로였습니다 —
 /// 문구를 두 벌 두면 한쪽만 고쳐지는 모양이라 여기 하나로 모읍니다.
 /// `button` 은 다시 누를 단추 이름(«구성»·«마그니픽»), `when_up` 은 떴을 때 다음에 할 일.
 pub fn launch_outcome_message(outcome: LaunchOutcome, button: &str, when_up: &str) -> String {
@@ -1175,7 +1174,7 @@ pub fn launch_outcome_message(outcome: LaunchOutcome, button: &str, when_up: &st
             "마그니픽을 켰지만 곧 꺼졌습니다(종료 코드 {}). 트레이에 남은 마그니픽을 완전히 끝내고 {button} 을 다시 누르세요. 그래도 안 되면 마그니픽을 직접 켜서 뜨는지 보세요.",
             code.map(|c| c.to_string()).unwrap_or_else(|| "없음".into())
         ),
-        // 느린 기동과 «환경변수 없는 옛 창» 을 여기서는 못 가립니다 — 정상 기동 중인 창을 끄라고 단정하면 안 됩니다.
+        // 느린 기동과 «환경변수 없는 옛 창» 을 여기서는 못 가립니다 — 정상 기동 중인 창을 끄라고 단정하면 안 됩니다(2026-09-21 검토).
         LaunchOutcome::WindowNoPort => format!(
             "마그니픽 창은 떴는데 디버그 포트(9556)가 아직 안 열렸습니다. 몇 초 뒤 {button} 을 다시 눌러 보고, 그래도 안 되면 마그니픽을 완전히 끝내고(트레이 포함) 다시 누르세요."
         ),
@@ -1199,7 +1198,7 @@ pub struct ComposeResult {
 /// 2. 새 노드가 선택돼 있는지 확인(아니면 클릭해 고름) → 페이지 안 Ctrl+C → 클립보드에서 업로드 id 읽기.
 /// 올라가는 중이면 id 가 placeholder 라 될 때까지 되풀이.
 /// 3. 선택이 **방금 올린 그 노드들과 정확히 같을 때만** Delete(원본은 사본으로 대체되므로 중복).
-/// 원본 정리까지 자동이어야 캔버스가 사본과 원본으로 두 배가 되지 않습니다. 우리가 방금 만든 노드만 지웁니다.
+/// 사용자가 «원본 삭제까지 자동으로» 를 원했고(2026-09-08), 우리가 방금 만든 노드만 지웁니다.
 /// 4. 그림 사본 + 생성기(프롬프트·칩) JSON 을 클립보드에 넣고 붙여넣기 → 새 노드 감지.
 ///
 /// 여기는 잠금과 **전체 마감**만 쥡니다. 본체는 [`compose_body`].
@@ -1211,7 +1210,7 @@ pub async fn magnific_compose_auto(
     model: String,
     aspect_ratio: String,
     count: u32,
-    // "image" 또는 "video" — 한 컷이 그림이 아니라 영상으로 나갈 수도 있습니다.
+    // "image" 또는 "video". 
     // 안 넘기면 예전처럼 이미지입니다(옛 호출을 안 깨뜨리려고).
     kind: Option<String>,
     // 영상일 때 러닝타임(초). 구도잡기 타임라인이 정한 값이 그대로 옵니다.
@@ -1228,7 +1227,7 @@ pub async fn magnific_compose_auto(
     let _one_at_a_time = compose_lock().lock().await;
     /*
       ── 전체 마감 ──────────────────────────────────────────────────────
-      실측한 것입니다 — «구성» 이 17분째 «구성하는 중…» 에 묶여 있었고, 단추는 잠긴 채 다음 «구성» 은
+      2026-09-21 실측: «구성» 이 17분째 «구성하는 중…» 에 묶여 있었고, 단추는 잠긴 채 다음 «구성» 은
       «앞 구성이 끝나면 이어서» 만 띄웠습니다. 명령이 안 돌아오니 화면 쪽 finally 가 영영 안 돌았습니다.
       마감은 Rust 한 벌입니다 — TS 에 Promise.race 를 두면 이 명령은 계속 돌며 잠금을 쥐고 있어
       다음 «구성» 도 또 매달립니다.
@@ -1313,8 +1312,7 @@ async fn compose_body(
     };
 
     // 레퍼런스 그림이 없으면(에셋·아직 그림 없는 인물) 올리기·id 읽기·원본 정리를 건너뛰고
-    // 프롬프트만 든 생성기를 붙여넣습니다 — 걸 그림이 없다고 «구성» 자체가 막히면
-    // 아직 그림이 없는 카드에서는 이 길을 영영 못 씁니다.
+    // 프롬프트만 든 생성기를 붙여넣습니다().
     let (creations, removed, fingerprints): (Vec<CopiedCreation>, bool, Vec<String>) = if paths.is_empty() {
         (Vec::new(), true, Vec::new())
     } else {
@@ -1357,7 +1355,7 @@ async fn compose_body(
         // ── 2. 업로드 id 읽기(선택 → 페이지 안 Ctrl+C → 클립보드) ───────────────────
         /*
           ── 영상은 노드가 **늦게** 섭니다 ──────────────────────────────────
-          실측한 것입니다 — mp4 와 시트를 같이 붙여넣었는데 1번 단계의 10초 안에는 시트 노드만
+          2026-09-21 국호 씬 1 실측: mp4 와 시트를 같이 붙여넣었는데 1번 단계의 10초 안에는 시트 노드만
           생겼고, 영상은 마그니픽이 변환을 끝낸 뒤에야 노드가 섰습니다. 그런데 아래
           복사 고리는 1번에서 잡아 둔 `new_ids` 만 60번 되풀이해 골랐으므로 영상은 한 번도
           선택·복사되지 않았고, 100초 뒤 「업로드 id 를 읽지 못했습니다(복사된 그림:
@@ -1511,7 +1509,7 @@ pub fn resolve_image_files(base_directory: &str, paths: &[String]) -> Res<(Vec<P
         }
         let real = ensure_inside(&base, target)?;
         // canonicalize 는 `\?\D:\…` 꼴(verbatim)을 돌려줍니다. 탐색기 복사는 `D:\…` 로
-        // 넣고, 크로미움은 `\?\` 경로를 파일로 받지 않았습니다. 접두를 뗍니다.
+        // 넣고, 크로미움은 `\?\` 경로를 파일로 받지 않았습니다(2026-09-07). 접두를 뗍니다.
         let shown = real.to_string_lossy().to_string();
         let shown = shown
             .strip_prefix(r"\\?\UNC\")
@@ -1562,7 +1560,7 @@ pub fn send_images_to_magnific(base_directory: String, paths: Vec<String>) -> Re
 /// 왜 따로 뗐는가: **막는 함수**입니다 — 창 제어와 `paste_into_new_node` 의 sleep 을 합치면 4초 남짓
 /// 스레드를 붙잡습니다. 비동기 명령 안에서 그대로 부르면 tokio 워커 하나가 그만큼 막히고(다른
 /// 비동기 명령의 진행이 늦어짐), HWND 가 await 너머로 남아 future 가 Send 가 아니게 됩니다(Tauri
-/// 비동기 명령 조건). 그래서 `spawn_blocking` 안에서 부릅니다 — 둘 다 뿌리에서 풀립니다.
+/// 비동기 명령 조건). 그래서 `spawn_blocking` 안에서 부릅니다 — 둘 다 뿌리에서 풀립니다(2026-09-22 검토).
 /// 예전 동기 명령은 이 4초 동안 메인 스레드(화면)를 세웠습니다.
 #[cfg(target_os = "windows")]
 fn paste_prompt_into_window(text: &str) -> Option<String> {
@@ -1583,7 +1581,7 @@ fn paste_prompt_into_window(text: &str) -> Option<String> {
 
 /// 보내기 알림에 늘 붙는 한 줄. 켜기 확인이 어떻게 끝났든 **프롬프트는 클립보드에 있으니** 그 말은
 /// 해야 합니다 — 옛 문구가 늘 달고 있던 힌트인데, 문구를 한 벌로 합치며 켜진 갈래 말고는 빠졌었습니다
-/// 켜진 갈래·못 켜진 갈래가 같은 이 한 줄을 씁니다.
+/// (2026-09-22 검토). 켜진 갈래·못 켜진 갈래가 같은 이 한 줄을 씁니다.
 #[cfg(target_os = "windows")]
 const CLIPBOARD_HINT: &str = "화면이 뜨면 캔버스를 누르고 Ctrl+V 하세요 — 프롬프트는 클립보드에 있습니다.";
 
@@ -1593,8 +1591,8 @@ const CLIPBOARD_HINT: &str = "화면이 뜨면 캔버스를 누르고 Ctrl+V 하
 /// 마그니픽이 안 떠 있으면 켜기만 하고, 붙여넣기는 사람이 합니다 — 로그인
 /// 화면이 뜨는 데 시간이 걸리고 어디에 커서가 있을지 알 수 없습니다.
 ///
-/// 왜 async 인가: «구성» 이 «켰습니다» 라고 했는데 마그니픽이 안 뜬 적이 있습니다. 이 명령도
-/// 같은 원시 spawn 직후 «실행했습니다» 라고 단정했으니 같은 거짓말을 할 수 있었습니다. 동기
+/// 왜 async 인가: 2026-09-21 «구성» 이 「켰습니다」 라고 했는데 마그니픽이 안 떴습니다. 이 명령도
+/// 같은 원시 spawn 직후 「실행했습니다」 라고 단정했으니 같은 거짓말을 할 수 있었습니다. 동기
 /// 명령은 떴는지를 못 기다리므로(sleep 하면 메인 스레드가 멈춤) async 로 바꿔 «구성» 과 같은
 /// [`launch_magnific_desktop_verified`] 를 쓰고, 결과마다 사실대로 말합니다. 다만 기준은 **창**입니다
 /// ([`LaunchNeed::Window`]) — 보내기는 포트를 안 씁니다.

@@ -19,7 +19,7 @@ import type { PlannerMedia } from "@/components/composition/planner/usePlannerMe
  * **구도잡기 위에 겹쳐 뜨는 창 모음** — 배경 전체보기 · 장소 라이브러리 · 방 끌어오기 ·
  * 장소 카드 · 배경 에셋 · 인물 줄 메뉴 · 모캡 · 블렌더 지시문.
  *
- * `CompositionPlanner.tsx` 에서 떼어 냈습니다. 여덟 개가 전부 «조건이
+ * 2026-09-18 에 `CompositionPlanner.tsx` 에서 떼어 냈습니다. 여덟 개가 전부 «조건이
  * 맞을 때만 뜨는 덮개» 라, 본문(3D 화면 + 오른쪽 판)과 섞여 있으면 화면을 고칠 때마다
  * 덮개를 지나쳐 스크롤해야 했습니다. 여는 열쇠는 전부 부모가 들고 있으므로 여기는
  * **그리기만** 합니다.
@@ -130,8 +130,7 @@ export default function PlannerOverlays({
           {galleryOpen && (
             <BackgroundGallery
               /*
-                낱장이 아니라 **세트**를 늘어놓습니다 — 여기 모인 것은 전개도에서 잘라낸 6면 세트라,
-                낱장 하나를 고르면 방의 한 면만 갈리고 나머지 다섯 면이 어긋납니다. 공간에 앉는 단위가 세트입니다.
+                낱장이 아니라 **세트**를 늘어놓습니다. 
               */
               sets={media.faceSets}
               // 전개도 원본(자르기 전 한 장)도 같이 — 라이브러리니까요.
@@ -174,8 +173,7 @@ export default function PlannerOverlays({
             <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
               <DialogContent
                 /*
-                  관계도는 가로로 뻗는 그림이라 **화면 폭을 그대로** 씁니다 — 좁은 창에 넣으면 관계도가
-                  접혀서 무엇이 무엇에 이어졌는지 안 보입니다.
+                  관계도는 가로로 뻗는 그림이라 **화면 폭을 그대로** 씁니다().
                   구도잡기·시트 합성 창과 같은 크기입니다.
                 */
                 className="h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-y-auto sm:max-w-none"
@@ -227,7 +225,7 @@ export default function PlannerOverlays({
 
           {/*
             ── 배경 에셋(공용) ───────────────────────────────────────────
-            씬 탭에 있던 목록을 구도잡기 안으로 들였습니다 — 소품에 이어 둘 시트를 만들려고 화면을 오갈 일이 없게.
+            씬 탭에 있던 목록을 구도잡기 안으로 들였습니다().
             띄우는 것은 캐릭터·장소 화면이 쓰던 **같은 목록**입니다(공통 규칙 1).
           */}
           {onChangeSharedAssets && (
@@ -253,8 +251,7 @@ export default function PlannerOverlays({
 
           {/*
             ── 인물 줄 오른쪽 단추 메뉴 ───────────────────────────────
-            인물에 걸린 모션을 **이미 분석해 둔 것 중에서 바꾸거나, 그 자리에서 다시 분석**합니다 —
-            모션 하나 갈아 끼우려고 창을 나갔다 들어올 일이 없게.
+            
 
             «분석된 모션 중에서 고르기» 는 모캡 창이 이미 다 갖고 있습니다(목록·미리보기·
             보정·번호↔캐릭터). 그래서 메뉴는 **그 창을 알맞게 열어 주는 일**만 합니다 —

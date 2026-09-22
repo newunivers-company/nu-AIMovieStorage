@@ -6,7 +6,7 @@ import { ERASE_COLOR, boxRect, cropColor, type BoxMode, type CropBox } from "@/l
 /**
  * **그리기 면** — 시트를 띄우고 그 위에 자를 칸·지울 자리를 끌어 그립니다.
  *
- * `SheetPanelCropper.tsx` 에서 떼어 냈습니다. 그림 한 장과 그 위의
+ * 2026-09-18 에 `SheetPanelCropper.tsx` 에서 떼어 냈습니다. 그림 한 장과 그 위의
  * 상자들, 그리고 바로 아래 «자르기/지우기·되돌리기» 줄까지가 한 덩이입니다 —
  * 오른쪽의 «저장될 파일» 목록과 섞여 있으면 어느 손잡이가 그리기에 걸린 것인지
  * 읽어 낼 수가 없었습니다.
@@ -61,8 +61,7 @@ export default function CropperSurface({
           onPointerUp={endDraw}
           onPointerCancel={endDraw}
           /*
-            **창에 들어가는 만큼만 키웁니다.** 자르는 자리를 정확히 보려면 그림이 뽑힌
-            제 크기로 서야 합니다.
+            **창에 들어가는 만큼만 키웁니다.** 
 
             예전에는 `w-full` 이라 그림을 **칸 너비에 맞춰 늘였습니다.** 창이 넓으면 1024px 짜리
             세로 그림이 1450px 로 부풀어 세로가 2000px 을 넘고, 아래 띠(저장·닫기)가 화면 밖으로

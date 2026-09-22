@@ -82,7 +82,7 @@ export function buildCutPrompt(input: CutPromptInput): CutPromptResult {
   /*
     **«구도 씀» 을 끄면 구도를 안 읽습니다.**
 
-    화면의 스위치는 하나도 빠짐없이 프롬프트에 닿아야 합니다. 그런데 이 스위치가
+    이 스위치가
     **무시되고 있었습니다.** 컷 카드에서 «구도 안 씀» 으로 꺼도 여기서 `cut.composition`
     을 그대로 읽어, 샷 크기·앵글·거리·무빙 문장을 프롬프트에 박았습니다. 안 올린 배치도를
     설명해 봐야 생성기가 맞출 것이 없는데도요.
@@ -144,7 +144,7 @@ export function buildCutPrompt(input: CutPromptInput): CutPromptResult {
       /*
         화면에서의 자리는 **공용 함수**가 냅니다(`framePlaceOf`).
 
-        점검에서 드러난 것 — 여기 있던 가로 화각 식이 `summarizeCompositionCamera` 것과
+        2026-09-21 점검: 여기 있던 가로 화각 식이 `summarizeCompositionCamera` 것과
         **달랐습니다** — 이쪽은 각도에 비율을 그냥 곱했고(`fov × 16/9 / 2`) 저쪽은
         제대로 `atan(tan(fov/2) × 비율)` 이었습니다. 같은 구도인데 컷 프롬프트와 영상
         프롬프트가 인물을 **다른 자리에 적고** 있었습니다.
@@ -175,7 +175,7 @@ export function buildCutPrompt(input: CutPromptInput): CutPromptResult {
       framePosition: item.position.en,
       /*
         **화면에서의 자리를 숫자로도** 넘깁니다(왼쪽 0% · 오른쪽 100%).
-        Seedance 2.5 는 `x 42%, y 44%` 를 받아 줍니다 — 말로 「왼쪽에」
+        사용자 2026-09-21: Seedance 2.5 가 `x 42%, y 44%` 를 받아 줍니다 — 말로 「왼쪽에」
         라고만 하면 컷마다 옮겨 가는데 숫자는 안 흔들립니다. 받아 주지 않는 모델에는
         그냥 무시되는 값이라 해가 없습니다.
       */

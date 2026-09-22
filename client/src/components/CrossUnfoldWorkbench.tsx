@@ -59,7 +59,7 @@ export default function CrossUnfoldWorkbench({
   const frameRef = useRef<HTMLDivElement | null>(null);
   /*
     ── 정확히 맞추기 — 확대 · 돋보기 · 방향키 ─────────────────────────────
-    틀을 눈대중으로 맞추면 몇 px 씩 어긋나고, 그 어긋남이 여섯 면 전부에 그대로 남습니다.
+    , 「하단으로 더 이상 내려오지도 않아」.
 
     - 자동으로 찾은 자리는 이제 원본 해상도에서 마무리합니다(`refineCrossFromPixels`).
     - 그래도 손으로 고칠 때를 위해 **확대**(단추·Ctrl+휠), 끄는 동안 **8배 돋보기**, 고른 선을 **방향키로
@@ -311,7 +311,8 @@ export default function CrossUnfoldWorkbench({
         data-tour="cropper-cross-lines"
         className="relative mx-auto select-none overflow-hidden"
         /*
-          돋보기는 **마우스가 있는 자리**를 따라갑니다. 처음엔 선을 끌기 시작한 자리만 비춰서, 긴 가로선을 오른쪽에서 잡고 왼쪽 끝을 보고 있으면 돋보기는 엉뚱한
+          돋보기는 **마우스가 있는 자리**를 따라갑니다. 
+          처음엔 선을 끌기 시작한 자리만 비춰서, 긴 가로선을 오른쪽에서 잡고 왼쪽 끝을 보고 있으면 돋보기는 엉뚱한
           오른쪽을 보여 줬습니다. 마우스를 올린 곳을 비추고, 그 자리를 그림 위에 노란 네모로 표시합니다.
         */
         onPointerMove={(event) => {
@@ -364,8 +365,7 @@ export default function CrossUnfoldWorkbench({
             /*
               잡는 띠(10 px) **한가운데**에 선을 긋습니다 — `flex items-center`. 예전엔 안쪽 선에 `my-auto` 만 걸었는데
               블록 흐름에서는 세로 auto 여백이 가운데로 안 모아 줘서, 가로선이 실제 자리보다 5 px 위(회색 위)에 그려졌습니다.
-              돋보기는 원본 자리에 그어 맞게 보이는데 전체 화면에서만 선이 회색 영역 위로 올라가 둘이 달라 보였습니다.
-              자르는 값 자체는 처음부터 맞았고 그리기만 틀렸습니다.
+              돋보기는 원본 자리에 그어 맞게 보이니 둘이 달라 보였습니다(). 자르는 값 자체는 처음부터 맞았고 그리기만 틀렸습니다.
             */
             className="absolute left-0 flex w-full cursor-ns-resize items-center"
             style={{ top: `calc(${value * 100}% - 5px)`, height: 10 }}

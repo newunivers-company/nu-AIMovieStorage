@@ -141,9 +141,9 @@ function ownersOf(draft: ProjectDraft): Owner[] {
   }
   /*
     ── 장면도 폴더를 가집니다 ──────────────────────────────────────────
-    이름을 고치면 폴더가 곧바로 따라가야 합니다(규칙 5).
+    
 
-    장면은 여태 이 목록에 **없었습니다.** 그래서 제목을 바꿔도
+    장면은 여태 이 목록에 **없었습니다.** 그래서 제목을 「레지스탕스 회합」 으로 바꿔도
     `storyboard/장면 2/` 폴더는 그대로였고, 다음에 구운 시트만 새 폴더로 가 한 장면의
     파일이 두 곳에 갈렸습니다.
 
@@ -477,8 +477,8 @@ export function applyMovedPaths(draft: ProjectDraft, moved: Map<string, string>)
     });
     /*
       장면 폴더를 옮겼으면 **그 안의 파일 경로도** 따라가야 합니다.
-      안 따라가면 시트·구도·영상이 전부 옛 자리를 가리켜 화면이 까맣게 됩니다 —
-      이름을 고친 그 자리에서 바로 보입니다.
+      안 따라가면 시트·구도·영상이 전부 옛 자리를 가리켜 화면이 까맣게 됩니다
+      ().
     */
     const movedCuts = cuts.map((cut) => {
       const guide = followId(cut.guideImagePath);

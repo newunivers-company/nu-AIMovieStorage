@@ -2,9 +2,10 @@
  * 표시(앵커·사각형·원·자유선)를 캔버스에 그리는 **한 벌**.
  *
  * 화면(표시 창의 덮개 캔버스)과 저장본(원본 해상도로 구운 PNG)이 같은 함수를 씁니다.
- * 예전에는 화면은 SVG, 저장본은 캔버스라 저장한 파일이 화면과 모양이 다르게 나왔습니다.
+ * 예전에는 화면은 SVG, 저장본은 캔버스라 저장한 파일이 화면과 다르게 나왔습니다.
  *
- * 모양은 **예전 화면(SVG)의 것** 을 그대로 따릅니다 — 둘 중 그쪽이 더 읽기 좋았습니다. 즉
+ * 모양은 **예전 화면(SVG)의 것** 을 그대로 따릅니다 — 사용자가 그쪽을 더 좋아했습니다
+ * (「원래 있던 앵커 표시가 더 마음에 드는데」). 즉
  * - 앵커: 가로 2.2%·세로 2.2% 의 반투명 타원(가로로 긴 그림에서는 납작한 «땅 위의 자리»)
  * + 가는 테두리 + 가운데 점, 끌었으면 정면 화살표
  * - 사각형·원·자유선: 가는 선
@@ -13,10 +14,22 @@
  * 너무 작다고 느껴지면 여기 숫자만 키우면 화면·저장본이 같이 바뀝니다.
  */
 
+// 움직임 구역의 «무엇을 그것으로 치는가»(`isMotionMark`)와 색은 `motionMask.ts` 한 곳에 —
+// 화면 덮개·저장본·마스크 굽기가 같은 판정을 봐야 미리 본 것과 구워진 것이 같습니다.
+import { MOTION_MARK_COLOR, isMotionMark } from "@/lib/motionMask";
+
 export interface DrawableMark {
   shape: "rect" | "ellipse" | "free" | "anchor";
   /** 0~1 비율. rect·ellipse·anchor 는 두 점, free 는 지나간 점들 */
   points: { x: number; y: number }[];
+  /**
+   * «여기는 움직인다» 구역인가(`motionMask.ts`).
+   *
+   * 모양과 **따로** 둔 까닭: 사각형이든 자유선이든 그대로 쓰면서 뜻만 갈라야 합니다.
+   * 새 모양으로 만들었다면 그릴 때·글로 옮길 때·시트에 얹을 때마다 「이건 어느 쪽?」 이
+   * 늘고, 그중 한 곳이 빠지는 날이 옵니다.
+   */
+  motion?: boolean;
 }
 
 const MARK_COLORS = ["#ff5b5b", "#ffb020", "#4ade80", "#38bdf8", "#c084fc", "#f472b6"];
@@ -91,11 +104,17 @@ export function drawImageMarks(
   context.lineCap = "round";
 
   marks.forEach((mark, index) => {
-    const color = markColor(index);
+    /*
+      «움직임 구역» 은 **색·점선·반투명 채우기** 셋으로 갈라집니다. 색 하나로만 가르면 번호 색
+      여섯과 헷갈리고, 색각 차이가 있는 사람에게는 아무 표도 아닙니다.
+    */
+    const motion = isMotionMark(mark);
+    const color = motion ? MOTION_MARK_COLOR : markColor(index);
     context.strokeStyle = color;
     context.fillStyle = color;
     context.globalAlpha = 1;
-    context.lineWidth = thin;
+    context.lineWidth = motion ? thin * 1.6 : thin;
+    context.setLineDash(motion ? [thin * 5, thin * 4] : []);
 
     const first = mark.points[0];
     const last = mark.points[mark.points.length - 1];
@@ -138,21 +157,34 @@ export function drawImageMarks(
         context.closePath();
         context.fill();
       }
-    } else if (mark.shape === "rect") {
-      context.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
-      context.stroke();
-    } else if (mark.shape === "ellipse") {
-      context.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
-      context.stroke();
     } else {
-      mark.points.forEach((point, pointIndex) => {
-        const x = point.x * width;
-        const y = point.y * height;
-        if (pointIndex === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
+      if (mark.shape === "rect") {
+        context.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      } else if (mark.shape === "ellipse") {
+        context.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+      } else {
+        mark.points.forEach((point, pointIndex) => {
+          const x = point.x * width;
+          const y = point.y * height;
+          if (pointIndex === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        });
+      }
+      /*
+        움직임 구역만 안쪽을 옅게 채웁니다 — 마스크에서 **흰색이 될 자리**가 그대로 보여야
+        굽기 전에 「여기가 맞나」 를 눈으로 셀 수 있습니다. 자유선은 `fill` 이 길을 알아서
+        닫아 칠하는데, 마스크 굽기(`paintMotionMask`)도 같은 규칙이라 둘이 어긋나지 않습니다.
+      */
+      if (motion) {
+        context.globalAlpha = 0.18;
+        context.fill();
+        context.globalAlpha = 1;
+      }
       context.stroke();
     }
+
+    // 번호표는 늘 실선입니다 — 위에서 건 점선이 배지 테두리까지 따라가면 안 됩니다.
+    context.setLineDash([]);
 
     // 번호표 — 예전 DOM 배지(10px 굵은 글자, 좌우 4px, 시작점 바로 위)와 같은 자리·크기.
     context.font = `bold ${badgeFont}px sans-serif`;

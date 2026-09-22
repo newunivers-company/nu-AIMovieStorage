@@ -143,7 +143,7 @@ export interface PromptWorkflowState<TReference = unknown, TImage = unknown> {
   panoramaSpace?: { width: number; depth: number; height?: number };
   /**
    * 실외 등장방형의 **정육면체 크기**(한 변을 세 치수에). 방 크기(`panoramaSpace`)와 따로 둡니다 —
-   * 까닭은 `spaceForChips` 주석. 실내는 방 크기를 함께 쓰지만 실외 등장방형은 따로 관리합니다.
+   * 까닭은 `spaceForChips` 주석.
    */
   exteriorSpace?: { width: number; depth: number; height?: number };
   references: TReference[];
@@ -165,7 +165,6 @@ export interface PromptWorkflowState<TReference = unknown, TImage = unknown> {
   /**
    * **다른 작품에서 끌어온 카드**라면 어디서 왔는지 한 줄.
    *
-   * 시리즈물은 작품이 달라도 인물이 이어집니다.
    * 가져온 뒤에는 저쪽과 아무 관계가 없지만(복사입니다), 「이 인물은 1편 것」 을
    * 나중에 알 수 있어야 합니다.
    */
@@ -174,7 +173,7 @@ export interface PromptWorkflowState<TReference = unknown, TImage = unknown> {
   /**
    * 같은 분석의 **영어 한 벌**.
    *
-   * 점검에서 드러났습니다 — 한국어 분석문이 **영문 프롬프트에도 그대로**
+   * 사용자 2026-09-18 점검에서 드러났습니다 — 한국어 분석문이 **영문 프롬프트에도 그대로**
    * 실리고 있었습니다. 생성기는 그 부분을 통째로 무시하거나 글자로 그려 넣습니다.
    * 분석을 받을 때 둘을 한 번에 받으므로 요청이 더 늘지는 않습니다.
    */
@@ -199,8 +198,8 @@ export interface PromptWorkflowState<TReference = unknown, TImage = unknown> {
    * 미드저니로 뽑고 시트는 나노 바나나로 가는 것이 정상적인 사용법입니다.
    *
    * 도는 중 표시(loading)는 **저장하지 않습니다.** 분석·프롬프트는 그 칸이 데이터에
-   * 실려서, 요청이 오류·앱 종료로 끝나면 다시 열었을 때 «만드는 중…» 이 영영 돌았습니다.
-   * 여기서는 처음부터 훅 안의 상태로만 둡니다.
+   * 실려서, 요청이 오류·앱 종료로 끝나면 다시 열었을 때 «만드는 중…» 이 영영 돌았습니다
+   * . 여기서는 처음부터 훅 안의 상태로만 둡니다.
    */
   /**
    * 첫 레퍼런스 프롬프트 — **한글·영문 두 칸**.
@@ -233,8 +232,8 @@ export interface PromptWorkflowState<TReference = unknown, TImage = unknown> {
    * 받아 둔 분석들.
    *
    * 분석은 재분석·붙여넣기가 앞의 것을 그 자리에서 덮어써 사라졌습니다.
-   * 프롬프트와 같은 방식으로 받을 때마다 남겨 되돌릴 수 있게 합니다 —
-   * 오류로 지워진 뒤에도 앞의 분석을 되찾을 수 있어야 합니다.
+   * 프롬프트와 같은 방식으로 받을 때마다 남겨 되돌릴 수 있게 합니다.
+   * ()
    */
   analysisHistory?: SavedAnalysisEntry[];
 }

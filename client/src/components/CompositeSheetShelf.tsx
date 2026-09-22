@@ -39,11 +39,11 @@ export default function CompositeSheetShelf({
   onRemove?: (id: string) => void;
   /**
    * 가위. **정작 칸을 잘라내야 할 대상이 이 합성 시트**인데 여기만 가위가
-   * 없었습니다 — 가위는 그림이 보이는 자리마다 다 있어야 합니다(규칙 1).
+   * 없었습니다. 「모든 이미지에서 가위 툴이 있어야해」 (지시 215·217)
    */
   onCrop?: (id: string) => void;
 }) {
-  /** 크게 보는 시트. 6000 시트를 128px 선반 칸으로는 칸 하나도 알아볼 수 없습니다. */
+  /** 크게 보는 시트. 6000 시트를 128px 로는 확인할 수 없습니다 */
   const [viewing, setViewing] = useState<CompositeSheetItem | null>(null);
 
   if (!sheets.length) return null;

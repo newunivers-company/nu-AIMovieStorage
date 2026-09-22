@@ -3,8 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 /**
  * **기본 브라우저로 주소를 엽니다.**
  *
- * 웹뷰의 `window.open` 은 Tauri 안에서 아무 일도 하지 않습니다 — 눌러도 창이 뜨지
- * 않고 오류도 없습니다. 앱 안에서 열어서도 안 됩니다 — 로그인 쿠키가 따로 놀아
+ * 웹뷰의 `window.open` 은 Tauri 안에서 아무 일도 하지 않습니다. 앱 안에서 열어서도 안 됩니다 — 로그인 쿠키가 따로 놀아
  * **매번 다시 로그인**하게 됩니다.
  *
  * Rust 쪽은 `cmd /C start` 가 아니라 `rundll32 url.dll,FileProtocolHandler` 를 씁니다.

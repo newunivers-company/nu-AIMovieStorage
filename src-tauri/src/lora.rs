@@ -1,11 +1,10 @@
 //! **로라 살림** — 찾고, 받고, 폴더에 정리합니다.
 //!
-//! 로컬로 뽑을 때는 로라를 골라 얹는 일이 잦습니다. 그래서 엔진별·갈래별로 찾아 받고,
-//! 고를 목록은 **받아 둔 것만** 보여 줍니다 — 없는 것을 골라 두면 뽑을 때 가서야 터집니다.
+//! 
 //!
 //! # 왜 폴더를 우리가 쥐는가
 //!
-//! 여태는 어딘가에 받아 둔 `.safetensors` 의 **경로만** 기억했습니다. 그러면
+//! 여태는 사용자가 어딘가에 받아 둔 `.safetensors` 의 **경로만** 기억했습니다. 그러면
 //! 「무엇을 갖고 있는지」 를 앱이 모르고, 파일을 옮기면 조용히 끊기고, 고를 목록을 만들
 //! 수도 없습니다. 이제 **엔진별 폴더**에 받아 둡니다.
 //!
@@ -176,7 +175,7 @@ fn beat_done(app: &AppHandle, engine: &str, file: &str, error: Option<&str>) {
 /// `AppHandle` 은 앱을 띄우지 않으면 만들 수 없어서 **시험이 불가능**했습니다. 받는 흐름은
 /// 앱과 무관하니 여기 두고, `cargo test` 가 진짜 Civitai 를 상대로 돌려 봅니다(`live_tests`).
 ///
-/// 받는 일 자체는 **엔진 가중치와 같은 한 벌**(`download.rs`)이 합니다.
+/// 2026-09-18: 받는 일 자체는 **엔진 가중치와 같은 한 벌**(`download.rs`)이 합니다.
 /// 예전에는 여기가 따로 적혀 있어서 **이어받기가 없었습니다.** 로라는 파일 하나가 수 GB 라
 /// 90% 에서 끊기면 처음부터 다시 받아야 했습니다. 이제 이어받고, 다 받으면 크기를 확인한 뒤에야
 /// 제 이름이 됩니다(받는 중에는 `<이름>.내려받는중` — 목록에 안 뜹니다).
@@ -191,8 +190,8 @@ async fn download_into(
     let dest = dir.join(&name);
     /*
       ── 주소에 맞는 키를 붙입니다 ────────────────────────────────────────
-      Civitai 는 상당수 로라를 로그인한 계정에만 내주고, 프로그램에 허용된 로그인은 API 키뿐입니다.
-      사람이 그때마다 로그인할 수는 없으니 키를 대신 붙입니다. 설정에 넣어 둔 키
+       Civitai 는 상당수 로라를 로그인한
+      계정에만 내주고, 프로그램에 허용된 로그인은 API 키뿐입니다. 설정에 넣어 둔 키
       (`civitai.key`·`huggingface.key`, `llm.rs` 의 키 저장소)를 주소의 주인에 맞춰 고릅니다 —
       Civitai 키를 허깅페이스에 보내면 안 되니 호스트로 가립니다.
     */
@@ -275,7 +274,7 @@ pub async fn lora_download(
     }
 }
 
-/// 브라우저로 직접 받아 둔 파일을 폴더로 들입니다 — 앱이 못 찾는 출처도 있어서.
+/// 사용자가 브라우저로 직접 받아 둔 파일을 폴더로 들입니다.
 #[tauri::command]
 pub fn lora_import(app: AppHandle, engine: String, source: String) -> Res<String> {
     let from = PathBuf::from(&source);
@@ -391,7 +390,8 @@ fn plausible_weight(window: &str) -> Option<f64> {
 
 /// 만든 사람이 권장한 세기를 소개 글에서 읽습니다.
 ///
-/// 권장 세기는 대개 1 미만이라, 무조건 1 로 놓으면 화풍 로라가 너무 세게 먹습니다. Civitai 소개는 «recommended model strength is 0.7» 처럼 적어 두므로
+/// 무조건 1 로 놓으면 화풍 로라는
+/// 대개 세게 먹습니다. Civitai 소개는 «recommended model strength is 0.7» 처럼 적어 두므로
 /// 「strength/weight/세기」 낱말 뒤 32자 창에서 세기다운 숫자(`plausible_weight`)를 찾습니다.
 /// 자리가 여럿이면 **글에서 먼저 나온 자리**를 씁니다 — 낱말 순서로 고르면 「LoRA weight 0.8 …
 /// denoising strength 0.35」 에서 0.35 를 집습니다. denoising·cfg·guidance 뒤의 strength 는
@@ -485,8 +485,8 @@ fn hf_hits_from_repo(repo: &Value, query_terms: &[String]) -> Vec<LoraHit> {
 
 /// 허깅페이스에서 로라를 찾습니다.
 ///
-/// Civitai 만 봐서는 반쪽입니다 — MiniMax-H3 로라의 상당수(터보·가속·카메라 무빙)가
-/// 허깅페이스에만 있습니다. 검색어는 AND 로 붙고, `filter=lora` 는 태그를 안 단
+/// MiniMax-H3 로라의 상당수(터보·가속·카메라
+/// 무빙)가 Civitai 가 아니라 여기 있습니다. 검색어는 AND 로 붙고, `filter=lora` 는 태그를 안 단
 /// 저장소(alibaba-pai/MiniMax-H3-Acc-LoRAs)를 놓치므로 «태그로 한 번, 이름에 lora 로 한 번» 찔러
 /// 합칩니다. 목록에는 파일이 없어 저장소마다 한 번 더 가서(`?blobs=true`) .safetensors 를 읽습니다.
 async fn search_huggingface(
@@ -538,8 +538,7 @@ async fn search_huggingface(
 /// `keywords` 는 갈래가 없는 엔진(MiniMax-H3·Z-Image·Krea)을 위해 밑모델·이름에 든 낱말로
 /// 거르는 그물입니다. 둘 다 비면 전부 봅니다.
 ///
-/// «이 엔진 것만» 을 켜도 다른 엔진 로라가 섞여 들어오던 구멍이 둘 있었습니다.
-/// ① 화면의 엔진→갈래 표에 세 엔진만 있어
+/// 2026-09-22 — 두 구멍이 있었습니다. ① 화면의 엔진→갈래 표에 세 엔진만 있어
 /// MiniMax-H3 는 필터 없이 나갔고(Pony 로라가 쏟아짐), ② 갈래를 걸어도 여기서 **판(version)
 /// 마다 밑모델을 다시 거르지 않아** 같은 로라의 다른 밑모델 판이 섞여 들어왔습니다.
 /// Civitai 는 `baseModels` 를 여러 번 받고, 모르는 이름이면 0개를 돌려줍니다(실측).
@@ -573,7 +572,7 @@ pub async fn lora_search(
         .map_err(|e| err("네트워크를 준비하지 못했습니다", e))?;
     /*
       ── Civitai 는 «갈래 필터 + 검색어» 를 같이 주면 0개를 돌려줍니다 ──────────
-      실측: `baseModels=MiniMax H3` 만 주면 10개, `query=turbo` 만 주면 10개,
+      2026-09-22 실측: `baseModels=MiniMax H3` 만 주면 10개, `query=turbo` 만 주면 10개,
       둘을 같이 주면 0개(Wan 도 같음). 예전 코드가 늘 둘을 같이 보냈으니 검색어를 넣고
       «이 엔진 것만» 을 켜면 언제나 «찾은 것이 없습니다» 였습니다 — 그물이 아니라 API 의 성질.
 
@@ -801,7 +800,7 @@ mod live_tests {
     ///
     /// 네트워크와 Civitai 사정에 매이므로 `#[ignore]` 입니다. 받은 파일은 %TEMP% 아래
     /// `frameforge-test/loras/` 에 둡니다 — 앱 데이터 폴더는 건드리지 않습니다.
-    /// 허깅페이스 검색이 실제로 «이 엔진 것» 을 돌려주는지 봅니다.
+    /// 허깅페이스 검색이 실제로 «이 엔진 것» 을 돌려주는지 — 2026-09-22 
     /// MiniMax H3 는 Civitai 갈래(「MiniMax H3」)와 허깅페이스 저장소가 둘 다 있어 두 출처를 한 번에 봅니다.
     #[tokio::test]
     #[ignore]
@@ -895,7 +894,7 @@ mod live_tests {
 mod advised_weight_tests {
     use super::advised_weight;
 
-    /// Civitai 에서 실제로 쓰이는 문구 — 「Minimax H3 Cinematic」 로라 둘의 소개 글이 앞의 둘입니다.
+    /// 2026-09-22 Civitai 실측 문구 — 「Minimax H3 Cinematic」 로라 둘의 소개 글이 앞의 둘입니다.
     #[test]
     fn reads_recommended_strength_from_html() {
         assert_eq!(

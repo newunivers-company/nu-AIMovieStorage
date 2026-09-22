@@ -101,6 +101,7 @@
 | `cut-refs` | `CutCard.tsx` | «캐릭터 / 배경 / 레퍼런스» 탭 묶음을 싸는 `div` (탭 라벨 L1712-1722) |
 | `cut-style-toggles` | `CutStyleToggles.tsx` | 연출 칩 판 뿌리 — 그룹은 스타일 · 촬영 · 조명 · 색감 · «질감 · 실사» (`lib/cutStyle.ts`); CutCard 에서 부르는 자리 L1846 |
 | `cut-dialogue` | `CutCard.tsx` | «대사 · 연기 지시» 제목이 든 블록 (L1862) |
+| `cut-background-motion` | `CutCard.tsx` | «배경 움직임» 제목이 든 블록 — VFX 칸 바로 위. 구름·지나가는 차처럼 «배경이 스스로 하는 움직임» 을 적는 칸 |
 | `cut-prompt-section` | `CutPromptSection.tsx` | «컷 프롬프트» 제목 줄 `div.flex.flex-wrap` (L68) |
 | `cut-prompt-write` | `CutPromptSection.tsx` | «프롬프트 작성» 단추 (L100) |
 | `cut-video-section` | `CutVideoSection.tsx` | «영상 프롬프트» 제목 줄 `div.flex.flex-wrap` (L72-74) |
@@ -204,6 +205,8 @@
 | `env-room-add-indoor` | `RoomList.tsx` | «실내» 단추 (L114); «실외» (L123) «호리존» (L138) 은 같은 줄 |
 | `env-room-list` | `RoomList.tsx` | 방 목록 `div` — 방 이름 줄들을 싸는 것 (L170 언저리) |
 | `env-room-size` | `EnvironmentPanel.tsx` | 가로·깊이·층고(또는 반지름) 숫자 칸 줄 (L498-540) |
+| `env-room-drift` | `EnvironmentPanel.tsx` | «배경 흐름 — 그림을 흘려 배경을 움직입니다» 체크와 그 아래 방향·속도를 싸는 `div` — 치수 설명 바로 아래. 호리존 방에는 없습니다(그림 대신 색 하나라 흐를 것이 없음) |
+| `env-room-video` | `EnvironmentPanel.tsx` | «배경 영상 — 면에 영상을 걸어 실제로 움직입니다» 체크와 그 아래 면 고르기·영상 고르기·«이 면 그림으로 영상 만들기» 를 싸는 `div` — «배경 흐름» 바로 아래. 호리존 방과 프로젝트 밖에서 연 창에는 없습니다 |
 | `env-horizon-color` | `EnvironmentPanel.tsx` | «호리존 색» 줄 (L561) — 호리존 방에서만 |
 | `env-outdoor-shape` | `EnvironmentPanel.tsx` | «무엇으로 두를까» — 돔/방형 (L625) — 실외 방에서만 |
 | `env-occlude-faces` | `EnvironmentPanel.tsx` | «뒤를 가릴 면 — 누른 면만 벽이 됩니다» (L659) — 실내 방에서만 |
@@ -287,7 +290,7 @@
 | `cropper-box-row` | `CropperBoxList.tsx` | 저장될 자리 한 줄 — **상자를 하나라도 그려야** 생깁니다. 빈 상태에는 안 붙으므로 걸음의 `until` 이 «그렸는가» 를 이것으로 셉니다 |
 | `cropper-upscale` | `CropperSavePanel.tsx` | «업스케일» 판 뿌리 div — «업스케일해서 저장» 체크 · «엔진» 선택 · 2K/4K/6K/8K 네 단추 (L61) |
 | `cropper-upscale-now` | `CropperSavePanel.tsx` | «지금 그림 업스케일 — 새 파일로» 단추(ArrowUpFromLine) (L192) |
-| `cropper-mark-shapes` | `ImageMarkupEditor.tsx` | 표시하기 탭 도구줄 div.flex.flex-wrap — 앵커 지점 · 사각형 · 원 · 자유선 네 단추와 안내 문구 (L252) |
+| `cropper-mark-shapes` | `ImageMarkupEditor.tsx` | 표시하기 탭 도구줄 div.flex.flex-wrap — 앵커 지점 · 사각형 · 원 · 자유선 네 단추, 모양과 따로 켜는 «움직임 구역» 스위치, 안내 문구 (L252) |
 | `cropper-motion` | `MotionLines.tsx` | 동선 탭 도구줄 div.flex.flex-wrap — 갈래 select · «구경만 하기»/«자유선»/«직선» · 되돌리기 · «굵기» · «동선 그림 저장» (L272) |
 | `cropper-pano-howto` | `PanoramaWorkbench.tsx` | «6면 배경 만드는 법» HowToPanel 을 싸는 div.space-y-2 — HowToPanel 자체는 display:contents 라 속성을 못 받습니다 (L334) |
 | `cropper-pano-fix` | `PanoramaWorkbench.tsx` | «이미 등장방형 파노라마 (세로 180도 — 손대지 않음)» 체크 label — 바로 아래 «세로 화각» · «세로 모형» · «지평선 위치» · «이음매 잇기» · «하늘·바닥 채우기» 가 이어집니다 (L341) |
@@ -330,4 +333,4 @@
 | `cut-special-background` | `CutCard.tsx` | 컷 머리줄 «특수 배경» 단추 — 도면·동선·사람 크기 기준을 뽑는 장소 카드를 엽니다 |
 | `layout-mannequins` | `LayoutPanel.tsx` | «+ 남성형» «+ 여성형» 두 단추를 싸는 2열 grid |
 | `image-actions` | `ImageActions.tsx` | 그림 모서리 아이콘 묶음(복사 · 빼기 · 폴더 열기 · 마그니픽 · 가위 · 정체성 기준)을 싸는 `div.pointer-events-auto.contents` |
-| `cropper-mark-made` | `ImageMarkupEditor.tsx` | 표시를 하나라도 찍어야 생기는 줄(이름 칸 · «표시한 그림 저장» · «복사» · «마지막 표시 취소») — 걸음의 `until` 이 이것이 생기기를 기다립니다 |
+| `cropper-mark-made` | `ImageMarkupEditor.tsx` | 표시를 하나라도 찍어야 생기는 줄(이름 칸 · «표시한 그림 저장» · «복사» · «마지막 표시 취소», 움직임 구역을 그렸으면 «움직임 마스크 저장» 도) — 걸음의 `until` 이 이것이 생기기를 기다립니다 |

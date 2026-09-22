@@ -3,6 +3,7 @@ import { rememberMagnificSentFiles } from "@/lib/magnificBridge";
 import { toast } from "sonner";
 import { isDesktopApp } from "@/lib/llm";
 import { PANORAMA_DIR, SIX_FACES_DIR } from "@/lib/faceSets";
+import { MOTION_MASK_ACTION } from "@/lib/motionMask";
 
 /**
  * 그림·영상 파일을 폴더와 주고받는 창구.
@@ -138,7 +139,38 @@ export function queueMirrorWrite(section: string, value: unknown, savedAt = Date
   mirrorWrites = mirrorWrites
     // **다 읽기 전에 쓰면 아직 못 읽은 칸을 지웁니다.** 읽기가 끝난 뒤에 줄을 섭니다.
     .then(() => appSettingsReady)
-    .then(() => invoke("write_app_settings", { contents: JSON.stringify(mirrorFile) }))
+    .then(async () => {
+      /*
+        **쓰기 직전에 파일을 다시 읽고 내 칸만 얹습니다.**
+
+        앱을 두 벌 띄워 두면 각자 «읽던 때의 사본» 을 들고 있습니다. 그 사본을 통째로 쓰면
+        상대가 그 사이에 고친 **다른 칸**이 옛 값으로 되돌아갑니다 — A 가 BGM 을 고치고
+        B 가 저장 폴더만 바꿨을 뿐인데 BGM 이 되돌아가는 식입니다.
+
+        그래서 통째로 쓰지 않고, 지금 파일에 내 칸만 얹습니다. 내 칸이라도 파일 쪽이 더
+        나중이면 그쪽을 둡니다 — 같은 칸을 동시에 고치는 일은 드물고, 그때는 나중 것이
+        이기는 편이 덜 놀랍습니다.
+      */
+      let onDisk: MirrorFile = { entries: {} };
+      try {
+        const text = await invoke<string | null>("read_app_settings");
+        if (text) onDisk = JSON.parse(text) as MirrorFile;
+      } catch {
+        // 못 읽으면 내가 든 것으로 갑니다 — 첫 쓰기이거나 파일이 깨진 때입니다.
+        onDisk = { entries: { ...mirrorFile.entries } };
+      }
+      if (!onDisk.entries) onDisk.entries = {};
+      const theirs = onDisk.entries[section];
+      if (!theirs || theirs.savedAt <= savedAt) {
+        onDisk.entries[section] = { savedAt, value };
+      }
+      // 내가 아는 다른 칸 가운데 파일에 없는 것만 채웁니다(첫 올리기).
+      for (const [key, mine] of Object.entries(mirrorFile.entries)) {
+        if (key !== section && !onDisk.entries[key]) onDisk.entries[key] = mine;
+      }
+      mirrorFile = onDisk;
+      await invoke("write_app_settings", { contents: JSON.stringify(onDisk) });
+    })
     .then(() => undefined)
     // 못 써도 앱은 그대로 돕니다. 거울이 낡을 뿐입니다.
     .catch(() => undefined);
@@ -378,13 +410,13 @@ export type ProjectAssetType =
   // 다른 컷에서 다시 쓰는 일이 잦습니다.
   | "composition-video"
   | "composition-glb"
-  // 모션 캡처에 올린 영상과 분석 결과 — `<프로젝트>/mocap/<영상 이름>/…`
+  // 모션 캡처에 올린 영상과 분석 결과 — `<프로젝트>/mocap/<영상 이름>/…` .
   | "mocap-video"
   | "mocap-result"
   // BGM 은 영상 프로젝트와 따로 삽니다 — `<저장 폴더>/BGM/곡·업로드/…` (`lib/bgmLibrary.ts`).
   | "bgm-track"
   | "bgm-upload"
-  // 시나리오·기획안 **원본 파일** — `<프로젝트>/DOCU/…`
+  // 시나리오·기획안 **원본 파일** — `<프로젝트>/DOCU/…` .
   // 주인(인물·장소)이 없는 갈래라 `ownerName` 을 빈 값으로 넘깁니다.
   | "document";
 
@@ -400,8 +432,8 @@ export interface SaveAssetOptions {
   stem?: string;
   /**
    * 주인 폴더 안의 하위 폴더. 6면(`SIX_FACES_DIR`)과 파노라마(`PANORAMA_DIR`)만 — Rust 가 허용 목록으로 막습니다.
-   * 파노라마에서 자른 여섯 면은 `<장소>/6면/` 에 모아 주인 폴더가 낱장으로 어지러워지지 않게 하고,
-   * 돔에 두르는 파노라마 원본은 `<장소>/파노라마/` 에 따로 둡니다 — 자른 면과 원본이 섞이면 안 됩니다.
+   * 파노라마에서 자른 여섯 면을 `<장소>/6면/` 에 모아 낱장 여덟 장이 되지 않게 하고,
+   * 돔에 두르는 파노라마 원본은 `<장소>/파노라마/` 에 따로 둡니다.
    */
   subdir?: typeof SIX_FACES_DIR | typeof PANORAMA_DIR;
   /**
@@ -455,7 +487,7 @@ export async function saveProjectMediaAsset(
  *
  * 브라우저에서 고른 파일은 바이트가 앱을 지나가지만(`saveProjectMediaAsset`), 데스크톱
  * 파일 고르개는 **경로만** 줍니다. 그때는 Rust 가 바로 복사합니다 — 영상은 수백 MB 라
- * 배열로 만들어 넘기면 메모리를 두 배로 먹습니다.
+ * 배열로 만들어 넘기면 메모리를 두 배로 먹습니다().
  */
 export async function importProjectMediaAsset(
   sourcePath: string,
@@ -474,6 +506,19 @@ export async function importProjectMediaAsset(
     },
   });
   return path ? { path, name: fileStem(path) } : null;
+}
+
+/**
+ * 이 파일이 **영상인가** — 확장자 하나로 정합니다.
+ *
+ * 폴더 읽기(`list_reference_files`)는 그림과 영상을 **함께** 돌려줍니다(Rust 의 `DELETABLE`).
+ * 나누는 규칙을 부르는 쪽마다 적으면 한 곳만 `.mov` 를 빠뜨려, 그 화면에서만 영상이 깨진 그림으로
+ * 뜹니다 — 이 저장소가 반복해 겪은 「여덟 곳은 맞고 한 곳만 틀리다」 라서 여기 한 벌만 둡니다.
+ *
+ * `asset://` 주소(`assetSrc`)에도 그대로 씁니다 — 경로는 통째로 인코딩되지만 꼬리의 `.mp4` 는 남습니다.
+ */
+export function isVideoFile(path?: string | null): boolean {
+  return /\.(mp4|mov|webm|m4v|mkv|avi)(\?|#|$)/i.test(path || "");
 }
 
 /** `D:\...\냥이_001.png` → `냥이_001` */
@@ -529,10 +574,17 @@ export function stemBase(stem: string): string {
  * «업스케일» 은 업스케일 엔진으로 키운 새 파일(`냥이_클로즈업_업스케일_001`) — 6면 세트의 낱장은
  * 이름을 지켜야 해서 이걸 안 쓰고 덮어씁니다(`upscale.upscaleFileInPlace`).
  */
-export type EditAction = "자름" | "지움" | "표시" | "동선" | "업스케일";
+export type EditAction =
+  | "자름"
+  | "지움"
+  | "표시"
+  | "동선"
+  | "업스케일"
+  // «여기는 움직인다» 흑백 마스크(`motionMask.ts`). 글자를 여기 또 적지 않는 까닭은 그 파일에.
+  | typeof MOTION_MASK_ACTION;
 
 /**
- * 편집 결과 파일 이름. 이름만 보고 이 그림에 무슨 일을 했는지 알 수 있어야 합니다.
+ * 편집 결과 파일 이름. 
  *
  * 지움: 원본 `냥이_클로즈업_001` → `냥이_클로즈업_지움`
  * (변형 창: 접두 `냥이_겨울` + 원본 꼬리 `클로즈업` → `냥이_겨울_클로즈업_지움`)
@@ -566,7 +618,7 @@ export function editedStem(input: {
     return [prefix, detail, "자름"].filter(Boolean).join("_");
   }
   // 표시한 그림(`…_표시_001`)을 다시 열어 또 표시하면 꼬리에 «표시» 가 이미 있어 `…_표시_표시` 가
-  // 됩니다. 같은 동작이 꼬리 끝에 있으면 한 번만 남깁니다.
+  // 됩니다(검토 2026-09-08). 같은 동작이 꼬리 끝에 있으면 한 번만 남깁니다.
   const tail = sourceTail(input.sourcePath, [prefix, input.ownerName]).replace(new RegExp(`(^|_)${input.action}$`), "");
   return [prefix, tail, input.action, detail].filter(Boolean).join("_");
 }
@@ -645,7 +697,7 @@ export async function deleteProjectMediaFile(
 export function ownerTopFolder(assetType: ProjectAssetType): string {
   if (assetType.startsWith("character")) return "character";
   if (assetType.startsWith("background")) return "background";
-  // 공용 에셋은 캐릭터 폴더 안 «공용에셋» 에 둡니다 — 인물 폴더 옆자리라 인물을 지워도 같이 사라지지 않습니다.
+  // 공용 에셋은 캐릭터 폴더 안 「공용에셋」 입니다. (지시 256)
   if (assetType.startsWith("asset")) return "character/공용에셋";
   if (assetType.startsWith("scene")) return "storyboard";
   if (assetType.startsWith("composition")) return "composition";
@@ -761,7 +813,8 @@ export async function renameStemFiles(options: {
  *
  * 화면에서 지우면 폴더의 원본도 지웁니다 (CLAUDE.md 규칙 3). 그러지 않으면
  * 다음에 폴더를 읽을 때 되살아나고, 탐색기에는 쓰지 않는 폴더가 쌓입니다.
- * 지운 인물이 되살아나는 사고가 두 번 있었습니다.
+ *
+ * 사용자가 두 번 말한 것입니다 — 「캐릭터 삭제 했는데 데이터는 그냥 남아 있네?」
  */
 export async function deleteOwnerFolder(options: {
   projectName: string;
@@ -813,7 +866,7 @@ export async function migrateProjectLayout(
  * 폴더에 실제로 있는 그림을 읽어 옵니다.
  *
  * **폴더가 원본입니다.** 앱이 들고 있는 목록만 보면, 탐색기에서 직접 넣은
- * 파일과 시트에서 잘라낸 칸을 놓칩니다. 오가는 길은 **양방향**이어야 합니다 —
+ * 파일과 시트에서 잘라낸 칸을 놓칩니다. 사용자가 요청한 «양방향» 이 이것입니다 —
  * 화면에서 넣은 것은 폴더로 가고, 폴더에 있는 것은 화면으로 옵니다.
  */
 export async function listOwnerFiles(options: {
@@ -849,7 +902,7 @@ export async function listOwnerFiles(options: {
  * 컷 하나가 들고 있는 그림·영상을 폴더에서 지웁니다.
  *
  * 화면에서 지우면 폴더의 원본도 지웁니다 (CLAUDE.md 규칙 3). 예전에는 씬·컷을
- * 지워도 파일이 남아 폴더에 주인 없는 그림·영상이 계속 쌓였습니다.
+ * 지워도 파일이 남아 폴더에 주인 없는 그림·영상이 계속 쌓였습니다. (지시 307)
  */
 export async function deleteCutFiles(
   projectName: string,

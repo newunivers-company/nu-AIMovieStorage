@@ -21,7 +21,7 @@ export interface PromptQuad {
    *
    * 음악 모델은 네거티브를 안 받고 «스타일 + 가사» 를 받습니다. 그런데 이 창은 네 칸이
    * 늘 «프롬프트 둘 + 네거티브 둘» 이라, 모델이 가사를 보내와도 갈라내는 자리가 없어
-   * 통째로 버려졌습니다 — 곡을 부탁해도 가사 칸은 늘 비어 있었습니다.
+   * 통째로 버려졌습니다().
    */
   lyricsKo?: string;
   lyricsEn?: string;
@@ -199,9 +199,9 @@ export function RequestTextDialog({ open, title, text, onClose, onApplyPrompt, o
             />
             <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-3" style={{ borderTop: "1px solid oklch(1 0 0 / 8%)" }}>
               {/*
-                «md 저장» 을 뺐습니다.
+                「md 저장」 을 뺐습니다. (지시 127·144)
 
-                쓰이지 않는 단추인 데다, 동작하지도
+                사용자가 두 번 「필요 없어」 라고 했습니다. 게다가 동작하지도
                 않았습니다 — Blob 링크를 만들어 click() 하는 방식은 타우리
                 웹뷰에서 조용히 아무 일도 안 합니다. 요청문은 복사해서
                 LLM 창에 붙여넣는 것이고, 문서로 남길 것은 설정의 프롬프트

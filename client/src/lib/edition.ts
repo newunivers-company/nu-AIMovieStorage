@@ -3,8 +3,7 @@ import editionRules from "../../../edition.json";
 /**
  * 앱의 **판** — 비공개(private) / 공개(public).
  *
- * 상업 용도로 쓸 수 없는 모델(업스케일·모션 캡처)은 공개판에서 빼고 묶어야 합니다.
- * 개발용 빌드에는 그대로 둡니다.
+ *
  *
  * 그래서 판은 **빌드할 때** 정해집니다(`scripts/tauri.mjs --edition public` 이 `VITE_EDITION`
  * 을 심습니다). 실행 중에 바꾸는 값이 아닙니다 — 공개판은 제외 엔진의 워커 스크립트 자체가
@@ -16,7 +15,7 @@ import editionRules from "../../../edition.json";
  */
 export type Edition = "private" | "public";
 
-/** 빌드가 심어 준 판. 안 심었으면(개발 빌드) 비공개판 = 전부 들어 있음. */
+/** 빌드가 심어 준 판. 안 심었으면(개발·사용자의 빌드) 비공개판 = 전부 들어 있음. */
 export const EDITION: Edition = import.meta.env.VITE_EDITION === "public" ? "public" : "private";
 
 /** 그 판에서 빠지는 엔진 id. 비공개판은 아무것도 빠지지 않습니다. */

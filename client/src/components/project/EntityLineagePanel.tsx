@@ -26,14 +26,14 @@ import type { ReferenceImage } from "@/lib/projectTypes";
  * 보유 애셋 (에셋마다 작은 계보: 원본 → 변형)
  * 제작한 시트 + [시트 제작]
  *
- * 이 순서로 들어갑니다. 제작한 시트는 보유 에셋 **아래**, 만드는 단추는 그 시트 상자
- * **안**입니다 — 시트 상자는 시트가 0장이어도 그립니다.
+ * 이 순서로 들어갑니다. 
+ * 「캐릭터 시트 제작 버튼이 캐릭터 시트랑 묶여 있어야」 — 시트 상자는 시트가 0장이어도
+ * 그리고, 만드는 단추가 그 상자 안에 있습니다.
  *
  * **편집은 여기서 안 합니다** — 카드를 누르면 창이 열립니다. 예전에는 패널 안에서 바로
  * 펼쳤는데, 인물이 셋만 넘어가도 무엇이 있는지 보려면 한없이 스크롤해야 했습니다.
  *
- * 머리 왼쪽의 화살표로 **한 줄로 접을 수** 있습니다 — 인물이 늘면 스크롤이 한없이
- * 길어져, 다 본 인물은 카드 한 줄로 접어 두고 넘어갑니다.
+ * 머리 왼쪽의 화살표로 **한 줄로 접을 수** 있습니다().
  * 기본은 펼침. 접힘은 이 컴퓨터에만 기억합니다(`collapsedCards.ts`).
  *
  * 캐릭터와 배경이 같이 씁니다. 갈래에 따라 색과 말만 달라집니다.
@@ -86,15 +86,15 @@ export default function EntityLineagePanel<
   /**
    * 인물·장소에만. 에셋은 자기가 에셋이라 없습니다.
    *
-   * 예전의 `onOpenAssets`(관리 창 열기)·`onCreateAsset` 을 대신합니다 — 에셋도 인물처럼
-   * 부모·자식 카드 목록으로 보이면 따로 창을 띄워 관리할 까닭이 없어집니다.
+   * 예전의 `onOpenAssets`(관리 창 열기)·`onCreateAsset` 을 대신합니다. 사용자 2026-09-08:
+   * 「에셋을 굳이 모달로 띄워서 관리할 필요 없이 캐릭터처럼 부모 자식 관계의 카드 리스트로」.
    * 상자 안 그리기와 계보 조작은 `OwnedAssetLineage` 가 맡습니다.
    */
   ownedAssets?: OwnedAssetsProps;
   onComposeSheet?: () => void;
   /** 합성 시트 이름 바꾸기. 「이 판의 이름」 입력이 이걸 부릅니다 */
   onSheetRename?: (imageId: string, sheetLabel: string) => void;
-  /** 합성 시트 지우기(파일도 — 규칙 3). 잘못 만든 시트를 지울 길이 없으면 계보에 영영 남습니다 */
+  /** 합성 시트 지우기(파일도 — 규칙 3). */
   onSheetRemove?: (imageId: string) => void;
   /** 합성 시트를 시트 창으로 다시 열어 고치기. 판(`sheet`)이 붙은 시트만 됩니다 */
   onSheetEdit?: (imageId: string) => void;
@@ -109,7 +109,7 @@ export default function EntityLineagePanel<
 
   const nodes = lineageNodes({ name, rootImages, variations, rootIndex });
 
-  /** 크게 보는 시트. 계보의 섬네일만으로는 시트의 칸 하나하나를 볼 수 없습니다 */
+  /** 크게 보는 시트. */
   const [viewing, setViewing] = useState<GeneratedImageAsset | null>(null);
 
   /**
@@ -230,13 +230,13 @@ export default function EntityLineagePanel<
 
           {/* ── 보유 애셋 ─────────────────────────────────────────────────────
               에셋 패널에는 없습니다 — 에셋이 또 에셋을 가지지는 않습니다.
-              «애셋 관리» 단추는 없앴습니다. 에셋이 여기 계보로 다 보이니
+              «애셋 관리» 단추는 없앴습니다(2026-09-08). 에셋이 여기 계보로 다 보이니
               따로 열 창이 없습니다. */}
           {ownedAssets && <OwnedAssetLineage {...ownedAssets} />}
 
           {/* ── 제작한 시트 + [시트 제작] ─────────────────────────────────────
               보유 애셋 **아래**, 시트가 0장이어도 상자를 그립니다. 만드는 단추가 상자 안에 있어야
-              «시트를 만들면 여기 쌓인다» 가 보입니다. 공용 에셋(kind="asset")은
+              「시트를 만들면 여기 쌓인다」 가 보입니다. 공용 에셋(kind="asset")은
               시트를 만들지 않으니 단추가 없고, 옛 데이터에 시트가 있을 때만 상자가 뜹니다. */}
           {(onComposeSheet || sheets.length > 0) && (
             <div
@@ -289,7 +289,7 @@ export default function EntityLineagePanel<
                               <X className="h-3 w-3" />
                             </button>
                           )}
-                          {/* 왼쪽 위: 복사·마그니픽 — 만든 시트는 곧바로 밖으로 올려 손보는 것이 보통 흐름입니다 */}
+                          {/* 왼쪽 위: 복사·마그니픽. */}
                           {sheet.filePath && (
                             <>
                               <button

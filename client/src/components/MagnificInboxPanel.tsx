@@ -48,7 +48,7 @@ export default function MagnificInboxPanel({
   patch: (updater: (current: ProjectDraft) => Partial<ProjectDraft>) => void;
   projectName: string;
   /**
-   * 탭별로 나눠 보기 — 후보함 하나에 인물·장소·씬 구성이 섞여 쌓이면 찾을 수가 없습니다.
+   * 탭별로 나눠 보기().
    * 추정한 주인의 갈래로 가릅니다. 영상은 컷에만 가고, 에셋은 캐릭터·배경 페이지 양쪽에 있으니
    * 두 탭에서 보이며, 주인을 모르는 것은 어느 탭에서든 보이되 «누구 것?» 목록은 그 탭 갈래만 줍니다.
    * 안 주면(작업실·확인 단계) 전부 보입니다.
@@ -497,8 +497,8 @@ function attach(
     };
   }
   /*
-    장면 자리 — 씬 영상 하나. 컷이 아니라 장면에 붙습니다. 확인 단계에서 영상으로 뽑은 것은
-    어느 컷의 것도 아니라, 컷에 붙이면 갈 자리가 없습니다.
+    장면 자리 — 씬 영상 하나. 컷이 아니라 장면에 붙습니다.
+    
   */
   if (target.kind === "scene") {
     return {

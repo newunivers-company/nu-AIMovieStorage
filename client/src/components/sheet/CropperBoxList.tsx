@@ -5,10 +5,9 @@ import { safeFileName, type ProjectAssetType } from "@/lib/mediaLibrary";
 /**
  * **오른쪽 목록 판** — 그린 상자마다의 이름·덮을 색, 그리고 «저장될 파일» 미리보기.
  *
- * `SheetPanelCropper.tsx` 에서 떼어 냈습니다. 자르기·지우기를 저장 전에 미리 보는 것,
- * 그리고 파일 이름만 보고도 무슨 일을 한 칸인지 아는 것 — 그 둘이 이 판의 전부입니다.
- * **저장을 누르기 전에는 파일이 생기지 않으므로**, 여기 보이는 이름과 그림이 결과를
- * 미리 보는 유일한 길입니다.
+ * 2026-09-18 에 `SheetPanelCropper.tsx` 에서 떼어 냈습니다. 「이미지 이름에서 어떤 일을 한 것인지
+ * 알 수 있어야」 — 그 둘이 이 판의 전부입니다. **저장을 누르기 전에는 파일이 생기지
+ * 않으므로**, 여기 보이는 이름과 그림이 결과를 미리 보는 유일한 길입니다.
  */
 export default function CropperBoxList({
   boxes,
@@ -77,8 +76,7 @@ export default function CropperBoxList({
             /*
               이름이 둘입니다. `cropper-box-list` 는 빈 상태에도 붙어 «여기가 목록이다» 를 가리키고,
               `cropper-box-row` 는 **상자가 실제로 생겼을 때만** 붙습니다 — 걸음의 `until` 이
-              그것을 기다립니다 — 상자를 안 그렸는데 저장 걸음으로 넘어가면 단추가 꺼진
-              채라 튜토리얼이 막힙니다. 하나로는 둘을 구분할 수 없어 갈라 둡니다.
+              그것을 기다립니다. 하나로는 둘을 구분할 수 없어 갈라 둡니다.
             */
             data-tour="cropper-box-list cropper-box-row"
             className="flex items-center gap-2 rounded-lg px-2.5 py-2"
@@ -177,8 +175,8 @@ export default function CropperBoxList({
 
       {/*
       저장될 파일 — 무엇이 어떤 이름으로 생길지 저장 전에 보여 줍니다.
-      이름만 봐도 자른 칸인지 지운 칸인지 알 수 있어야, 폴더에서 다시 찾을 때
-      열어 보지 않고 고릅니다.
+      
+      「이미지 이름에서 어떤 일을 한 것인지 알 수 있어야」
     */}
       {boxes.length > 0 && (
         <div
@@ -309,8 +307,8 @@ export default function CropperBoxList({
       )}
 
       {/*
-      업스케일 칸. 자르면 그림이 작아지니 «키우기» 는 여기 있는 것이 자연스럽습니다.
-      엔진·목표 한 벌을 «업스케일해서 저장» 과 «지금 그림 업스케일» 이
+      업스케일 칸. 자르면 그림이 작아지니 «키우기» 는 여기 있는 것이 자연스럽습니다
+      . 엔진·목표 한 벌을 «업스케일해서 저장» 과 «지금 그림 업스케일» 이
       같이 씁니다. 설치된 엔진이 없으면 고를 것이 없으니 길만 알려 줍니다.
     */}
     </>

@@ -49,7 +49,7 @@ function splitPastedJson(text: string): PromptSet | null {
 }
 
 type Props = {
-  /** 마그니픽 단추를 둘지(기본 켬). 음악처럼 마그니픽에서 안 만드는 것은 끕니다. */
+  /** 마그니픽 단추를 둘지(기본 켬). 음악처럼 마그니픽에서 안 만드는 것은 끕니다 — 사용자 2026-09-17. */
   magnific?: boolean;
   /** 칸 이름 — 음악은 «곡 스타일»·«가사» 처럼 다르게 부릅니다. */
   koLabel?: string;
@@ -61,7 +61,7 @@ type Props = {
    *
    * 두 번째 인자는 **어느 칸에서 눌렀는지**입니다. 보내는 쪽이 프롬프트 앞에 안내문을
    * 덧붙일 때, 그 안내문도 같은 말로 써야 합니다 — 한글 칸에서 눌렀는데 영어 안내문이
-   * 앞에 붙으면 한글 칸을 눌렀는데 영문이 섞여 나갑니다.
+   * 앞에 붙으면 「한글로 눌렀는데 영문이 들어갔다」 가 됩니다.
    */
   onCompose?: (text: string, lang: "ko" | "en") => Promise<void>;
   /**
@@ -115,9 +115,9 @@ function PromptPanel({ label, copyLabel, value, lang, mono, muted, magnific, onC
   };
 
   // 마그니픽 데스크톱으로. 클립보드에 넣고 창을 앞으로 가져와 붙여넣습니다.
-  // 캔버스를 눌러 두었으면 텍스트 노드로 들어갑니다(실제로 확인한 동작).
+  // 캔버스를 눌러 두었으면 텍스트 노드로 들어갑니다.
   // 마그니픽이 꺼져 있으면 켜기 확인에 최대 20초가 걸립니다 — 그동안 아무 표시가 없으면 다시 누르게
-  // 되므로 «구성» 과 같이 바쁨을 보이고 잠급니다(규칙 1). 두 번 눌러도 Rust 쪽
+  // 되므로 «구성» 과 같이 바쁨을 보이고 잠급니다(규칙 1, 2026-09-22 검토). 두 번 눌러도 Rust 쪽
   // 자물쇠(SEND_LOCK)가 한 번에 하나로 묶지만, 사람이 기다리는 줄은 알아야 합니다.
   const [sending, setSending] = useState(false);
   const sendToMagnific = () => {
@@ -173,8 +173,8 @@ function PromptPanel({ label, copyLabel, value, lang, mono, muted, magnific, onC
             </button>
           )}
           {/*
-            마그니픽은 **그림을 뽑는 곳**입니다. 음악처럼 그쪽에서 만들지 않는 것은 이 단추를 끕니다 —
-            보낼 곳이 없는 단추가 서 있으면 눌러 보고 나서야 쓸모가 없다는 것을 알게 됩니다.
+            마그니픽은 **그림을 뽑는 곳**입니다. 음악처럼 그쪽에서 만들지 않는 것은 이 단추를 끕니다
+            ().
           */}
           {magnific !== false && (
             <button
@@ -204,8 +204,8 @@ function PromptPanel({ label, copyLabel, value, lang, mono, muted, magnific, onC
           }}
           spellCheck={false}
           placeholder={`${label}을 붙여넣거나 직접 쓰세요`}
-          // 글 길이만큼 늘어나 안쪽 스크롤이 생기지 않습니다. 프롬프트는 한눈에 다 보여야 합니다 —
-          // 칸 안에 스크롤이 또 생기면 어디까지 읽었는지 놓칩니다.
+          // 글 길이만큼 늘어나 안쪽 스크롤이 생기지 않습니다. 프롬프트는 한눈에 다 보여야 합니다.
+          //
           className={`w-full min-w-0 resize-none overflow-hidden bg-transparent px-3 py-3 text-xs leading-relaxed outline-none ${mono ? "font-mono" : ""} ${muted ? "min-h-[4rem]" : "min-h-[7rem]"}`}
           style={{ color: "oklch(0.80 0.005 265)" }}
         />
@@ -222,11 +222,11 @@ function PromptPanel({ label, copyLabel, value, lang, mono, muted, magnific, onC
 }
 
 /*
- * 네 칸에 안쪽 스크롤을 두지 않습니다.
+ * 네 칸에 안쪽 스크롤을 두지 않습니다. (지시 246·248)
  *
- * 프롬프트와 분석은 **한눈에** 읽혀야 합니다. 예전에는 max-h 로 잘라 안에서 스크롤이
- * 돌았습니다. 긴 프롬프트는 늘 잘려 보였고, 어디까지 읽었는지 놓쳤습니다.
- * 이제는 내용만큼 늘어납니다.
+ * 「프롬프트랑 분석들 한 눈에 읽을 수 있게 스크롤 생기지 않고 영역이 자동으로
+ * 늘어나게 해줘」 — 예전에는 max-h 로 잘라 안에서 스크롤이 돌았습니다. 긴
+ * 프롬프트는 늘 잘려 보였고, 어디까지 읽었는지 놓쳤습니다. 내용만큼 늘어납니다.
  */
 export default function PromptResultPanels({
   magnific,
@@ -273,7 +273,7 @@ export default function PromptResultPanels({
   /*
     네거티브 칸은 **그 생성기가 받을 때만** 둡니다.
 
-    음악 쪽은 어디에도 네거티브가 없습니다. Suno 는 *Style·Lyrics* 와 «제외할 스타일»,
+    아닙니다. 음악 쪽은 어디에도 네거티브가 없습니다. Suno 는 *Style·Lyrics* 와 «제외할 스타일»,
     MiniMax-Music3 는 `prompt`·`lyrics`·`seconds`, ACE-Step v1 은 태그·가사·steps·guidance 뿐입니다.
     그래서 고칠 손잡이(`onNegative…Change`)를 안 준 자리에서는 칸 자체를 세우지 않습니다 —
     빈 칸이 남아 있으면 «여기에도 뭘 적어야 하나» 가 됩니다.

@@ -24,8 +24,7 @@ import {
  *
  * # 배치도는 프로젝트 것, 그림은 인물 것
  *
- * 배치도는 한 번 짜 두고 인물마다 다시 쓰는 틀입니다. 그런데 인물 안에 갇혀 있어서
- * (`owner.sheetLayouts`) 다른 인물에서 고를 수 없었고, 그래서 빈 배치를 새로 만드는 일이 매번 생겼습니다.
+ * 배치도가 인물마다 갇혀 있어(`owner.sheetLayouts`) 다른 인물에서 못 골랐습니다.
  * 이제 배치도(칸의 자리·크기·이름·규격)는 `draft.sheetLayouts` 에, 어느 칸에 이 인물의
  * 어느 그림이 들어가는지는 `owner.sheetFills` 에 둡니다. 창에는 둘을 합쳐 넘기고,
  * 창이 돌려주면 다시 나눕니다.
@@ -41,7 +40,7 @@ export interface SheetOwner {
   generatedImages: GeneratedImageAsset[];
   references?: ReferenceImage[];
   variations: { name?: string; generatedImages?: GeneratedImageAsset[] }[];
-  /** 보유 에셋. 인물의 소지품도 시트 칸에 놓을 수 있어야 합니다 */
+  /** 보유 에셋. 시트에 놓을 수 있습니다 */
   assets?: VisualAsset[];
   /** 다른 원본(«어린 시절»). 보유 에셋과 같은 이유로 시트에 놓을 수 있어야 합니다 */
   alternates?: SheetSourceAlternate[];
@@ -89,7 +88,7 @@ export default function EntitySheetComposer({
   owner: SheetOwner;
   onClose: () => void;
   projectName: string;
-  /** 프로젝트의 공용 에셋. 주인이 따로 없으니 어느 시트에나 놓을 수 있습니다 */
+  /** 프로젝트의 공용 에셋. 어느 시트에나 놓을 수 있습니다(지시 178) */
   sharedAssets: VisualAsset[] | undefined;
   /** 프로필 상자 표에 찍을 값들. 갈래마다 다릅니다 */
   basics: { label: string; value: string }[];
@@ -144,8 +143,8 @@ export default function EntitySheetComposer({
   /*
     열 때 한 번:
 
-    0. **옛 «긴 변 6000 기준» 배치도를 px 로 올립니다.** 좌표계가 규격의 실제 px 로 바뀌었습니다 —
-       그림은 뽑힌 크기 그대로 칸에 들어가야 하니까요. `coords` 가 없는 배치도는
+    0. **옛 «긴 변 6000 기준» 배치도를 px 로 올립니다.** 2026-09-08 에 좌표계가 규격의 실제 px
+       로 바뀌었습니다. `coords` 가 없는 배치도는
        `layoutToPx` 로 한 번 바꿔 저장합니다 — 바뀐 것이 없으면 같은 배열을 돌려줘 저장을 건너뜁니다.
     1. **옛 소유자 배치도를 프로젝트로 올립니다.** id 는 유지합니다(R2 — id 가 바뀌면 고른
        배치도가 저장을 놓칩니다). 이름 앞에 인물 이름을 붙여 누구 것이었는지 남기고, 그림은
@@ -153,7 +152,7 @@ export default function EntitySheetComposer({
        이전이라 updater 함수형으로만 씁니다. 올리면서 px 로도 바꿉니다(옛 것은 전부 6000 기준).
     2. **고치는 중인 시트가 있으면** 그 판을 되살립니다. 시트가 가리키는 배치도가 아직 있고
        칸이 같으면 그것을 고르고, 아니면 스냅샷으로 새 배치도를 만들어 고릅니다.
-       (되살리지 않으면 고치러 들어갈 때마다 시트가 한 장씩 새로 생깁니다.)
+       
        스냅샷도 옛 것일 수 있어 `layoutToPx` 로 읽습니다.
   */
   const prepared = useRef(false);
@@ -162,7 +161,7 @@ export default function EntitySheetComposer({
     prepared.current = true;
 
     // 옛 것이 하나라도 있을 때만 부릅니다. 부르는 쪽의 patchProject 는 갱신 함수가 같은 배열을 돌려줘도
-    // 초안을 새로 만들어 자동 저장이 한 번 돕니다 — 창을 열 때마다 아무 변경 없이 저장되면 안 됩니다.
+    // 초안을 새로 만들어 자동 저장이 한 번 돕니다 — 창을 열 때마다 아무 변경 없이 저장되면 안 됩니다(검토 2026-09-08).
     if (layouts.some((layout) => layout.coords !== "px")) {
       patchProject((current) => {
         const converted = current.map(layoutToPx);
@@ -270,9 +269,10 @@ export default function EntitySheetComposer({
       profile={profile}
       basics={basics}
       /*
-        원본 + 변형 + 보유 에셋 + 공용 에셋. 시트는 «의상이 바뀌었을 때 필요한 칸만 갈아 끼우는»
-        자리라 변형이 들어가고, 공용 에셋은 주인이 없어 어느 시트에나, 보유 에셋은 그 인물의
-        소지품이라 그 인물 시트에 들어갑니다.
+        원본 + 변형 + 보유 에셋 + 공용 에셋. 시트의 목적이 「의상이 바뀌었을 때 필요한 것만
+        갈아 끼우기」 라 변형이 들어가고, 「공용 에셋 추가하면 캐릭터 시트 제작할 때 공용
+        에셋은 어떤 캐릭터 시트에도 불러와서 넣을 수 있도록 하자」(지시 178) 라 공용 에셋이,
+        「캐릭터 시트 제작할 때 에셋들도 넣을 수 있어야」(2026-09-08) 라 보유 에셋이 들어갑니다.
       */
       images={collectSheetSources(owner, sharedAssets)}
       layouts={pxLayouts}
@@ -325,7 +325,7 @@ export default function EntitySheetComposer({
           generatedImages: current.generatedImages.map((item) => (item.id === image.id ? image : item)),
         }));
         // 옛 파일은 지워졌고 이름(번호)이 바뀌었습니다. 표시(imageMarks)·컷 구도잡기의 배경 선택은
-        // 파일 경로를 열쇠로 드니 초안 전체에서 갈아 끼웁니다(배경 시트에서 실제로 끊겼습니다).
+        // 파일 경로를 열쇠로 드니 초안 전체에서 갈아 끼웁니다(검토 2026-09-08, 배경 시트에서 실제로 끊김).
         if (previousPath && image.filePath && previousPath !== image.filePath) {
           renamePaths(new Map([[previousPath, image.filePath]]));
         }

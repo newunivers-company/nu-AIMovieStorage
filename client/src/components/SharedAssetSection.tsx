@@ -20,9 +20,8 @@ import { useEntityLineage } from "@/components/project/useEntityLineage";
  * 지우기·변형 만들기·그림 떨구기 같은 계보 조작은 `useEntityLineage` 가
  * 맡습니다. 캐릭터·배경과 한 벌이라, 여기서 따로 고치면 안 됩니다(규칙 1).
  *
- * «공용 에셋 관리» 창은 없앴습니다. 목록이 이미 계보 패널로 다 보이고, 카드를 누르면
- * 편집 창이 열리니 따로 열 창이 없었습니다 — 캐릭터처럼 부모·자식 카드 목록으로 두면
- * 관리용 창이 한 겹 덜 낍니다.
+ * «공용 에셋 관리» 창은 없앴습니다(2026-09-08). 목록이 이미 계보 패널로 다 보이고,
+ * 카드를 누르면 편집 창이 열리니 따로 열 창이 없었습니다. 
  */
 export default function SharedAssetSection({
   assets,
@@ -38,7 +37,7 @@ export default function SharedAssetSection({
   /**
    * 이 에셋의 편집 창을 **열어 둔 채로** 뜹니다.
    *
-   * 소품에 연결된 에셋을 만들어 그 자리에서 짝지어야 하므로, 구도잡기에서 소품의 에셋을 만들면
+   * 구도잡기에서 소품의 에셋을 만들면
    * 곧바로 그 카드가 열려 있어야 합니다 — 목록만 뜨면 방금 만든 것을 다시 찾아 눌러야 합니다.
    */
   openId?: string | null;
@@ -81,7 +80,7 @@ export default function SharedAssetSection({
               여러 캐릭터·배경이 함께 쓰는 소품입니다. 시트를 만들 때 어디서든 불러 쓸 수 있습니다.
             </p>
           </div>
-          {/* 추가 단추는 목록 끝 하나뿐 — 캐릭터 탭과 같은 규칙(규칙 2). */}
+          {/* 추가 단추는 목록 끝 하나뿐 — 캐릭터 탭과 같은 규칙. */}
         </div>
 
         {assets.length === 0 ? (

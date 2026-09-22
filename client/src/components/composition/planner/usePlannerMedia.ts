@@ -4,6 +4,7 @@ import { measureAspect } from "@/lib/imageSize";
 import {
   assetSrc,
   fileStem,
+  isVideoFile,
   listOwnerFiles,
   safeFileName,
   saveProjectMediaAsset,
@@ -16,10 +17,12 @@ import { autoEquirectOf } from "@/components/project/useAutoUnfold";
 import {
   COMPOSITION_CUBE_FACES,
   isPanoramaAspect,
+  roomVideoFaceOf,
   type BackgroundKind,
   type CompositionCubeFace,
   type CompositionState,
   type GlbTrack,
+  type RoomVideoFace,
 } from "@/lib/composition";
 import {
   addCustomBackgroundIn,
@@ -117,6 +120,22 @@ export interface PlannerBackground {
 }
 
 /**
+ * 장소 폴더에서 읽은 **영상** 한 줄 — 방의 «배경 영상» 으로 걸 수 있는 것들.
+ *
+ * 그림 목록과 따로 두는 까닭: 폴더 읽기는 그림과 영상을 함께 돌려주는데(`list_reference_files`),
+ * 여태 전부 그림으로 보고 목록에 올렸습니다 — 장소 폴더에 mp4 가 하나라도 있으면 깨진 그림 칸이
+ * 하나 생겼습니다. 갈래를 나누면서 그 칸이 «걸 수 있는 영상» 이 됩니다.
+ */
+export interface PlannerVideo {
+  /** 파일 경로. 방의 `video.source` 에 그대로 적힙니다. */
+  id: string;
+  /** «장소 · 파일이름». 어느 장소에서 뽑은 것인지 목록에서 바로 보입니다. */
+  name: string;
+  /** `asset://` 주소 — 씬이 `<video>` 에 물립니다. */
+  src: string;
+}
+
+/**
  * 구도잡기의 배경 목록과 파일 넣기(배경·파노라마·HDRI·GLB).
  *
  * 화면(환경 탭·타임라인 탭·드롭 영역)이 셋으로 나뉘어도 «파일 하나를 어디에
@@ -148,7 +167,7 @@ export function usePlannerMedia({
   const activeRoom = activeRoomOf(state);
   /*
     ── 폴더에서 직접 읽습니다 ────────────────────────────────────────────
-    6면 세트는 여러 벌일 수 있고, 배경 목록도 앞 단계에서 만든 배경이 저절로 올라와야 합니다.
+    , 「배경 이미지 리스트도 자동으로 앞에서 만든 배경들 불러와야 하고」.
 
     프로젝트가 들고 있는 `generatedImages` 는 **그 배경 카드를 한 번이라도 연 뒤에** 채워집니다.
     배경 단계에 안 들르고 구도잡기부터 열면 목록이 거의 비고, 6면 세트도 마침 채워져 있던
@@ -163,12 +182,21 @@ export function usePlannerMedia({
   const [folderBackgrounds, setFolderBackgrounds] = useState<
     PlannerBackground[]
   >([]);
+  /**
+   * 같은 읽기에서 갈라낸 **영상**들 — 방의 «배경 영상» 목록입니다.
+   *
+   * 폴더를 다시 읽는 것은 창을 열 때뿐이라, 여기서 만든 영상은 그 자리에서 이 목록에 더합니다
+   * (`rememberRoomVideo`). 안 그러면 방금 만든 것을 걸려고 창을 닫았다 다시 열어야 합니다.
+   */
+  const [folderVideos, setFolderVideos] = useState<PlannerVideo[]>([]);
   const backgroundNamesKey = backgrounds.map((item) => item.name).join("|");
   useEffect(() => {
     if (!open || !projectName?.trim()) return;
     let alive = true;
     void (async () => {
       const found: PlannerBackground[] = [];
+      /** 같은 읽기에서 갈라낸 영상 — 방의 «배경 영상» 으로 겁니다(`PlannerVideo` 머리말). */
+      const videos: PlannerVideo[] = [];
       for (const background of backgrounds) {
         const ownerName = background.name?.trim();
         if (!ownerName) continue;
@@ -184,6 +212,11 @@ export function usePlannerMedia({
           const thumb = assetSrc(file.filePath);
           if (!thumb) continue;
           const stem = fileStem(file.filePath);
+          // 영상은 그림 목록에 안 올립니다 — 올리면 깨진 그림 칸이 됩니다(`PlannerVideo` 머리말).
+          if (isVideoFile(file.filePath)) {
+            videos.push({ id: file.filePath, name: `${ownerName} · ${stem}`, src: thumb });
+            continue;
+          }
           const parsed = parseFaceStem(stem);
           found.push({
             id: file.filePath,
@@ -214,7 +247,16 @@ export function usePlannerMedia({
         const size = item.faceSet ? sizes.get(item.faceSet) : undefined;
         return size ? { ...item, faceSetSize: size } : item;
       });
-      if (alive) setFolderBackgrounds(sized);
+      if (!alive) return;
+      setFolderBackgrounds(sized);
+      /*
+        폴더에 없던 것(방금 만들어 `rememberRoomVideo` 로 더해 둔 것)은 남깁니다 — 읽기가 늦게
+        끝나면서 목록을 통째로 갈아 끼우면 방금 만든 영상이 사라집니다.
+      */
+      setFolderVideos((current) => [
+        ...videos,
+        ...current.filter((item) => !videos.some((found) => found.id === item.id)),
+      ]);
     })();
     return () => {
       alive = false;
@@ -226,7 +268,7 @@ export function usePlannerMedia({
   // ── 배경 ──────────────────────────────────────────────────────────────
   /*
     ── 크기 표시가 없는 세트는 **주인 카드의 등장방형 칩·크기**로 ────────────────────────
-    50 m 로 잡고 뽑은 배경인데 막상 방은 2.8 m 로 서는 일이 있었습니다. 전개도 작업대에서 **손으로 잘라 저장한** 세트와
+     전개도 작업대에서 **손으로 잘라 저장한** 세트와
     업스케일로 덮어쓴 면에는 크기 표시(`faceSetSize` · 파일 속 조각)가 없어, 세트를 걸어도 방이 앞서 걸린 세트의 크기(2.8 m)에
     머물렀습니다. 세트 이름의 접두는 «장소» 또는 «장소_변형» 이라 어느 카드에서 뽑았는지 알 수 있습니다 — 그 카드가 지금
     켜 둔 칩(«등장방형 · 실외» 한 변, 실내 가로·깊이·층고)으로 자동 커팅과 같은 크기를 짓습니다(`autoEquirectOf`).
@@ -288,8 +330,7 @@ ${card.promptKo ?? ""}`)?.stamp;
   );
 
   /*
-    6면 세트 — 같은 번호의 여섯 면을 한 묶음으로. 여섯으로 나눈 배경은 낱장으로 흩어 놓으면
-    어느 것이 한 벌인지 알 수 없어, 폴더째 묶어 따로 가릅니다.
+    6면 세트 — 같은 번호의 여섯 면을 한 묶음으로. 
 
     `availableBackgrounds` 자체에서는 빼지 않습니다 — 면에 걸린 id(=파일 경로)를
     `backgroundFaceImages` 가 그 배열에서 찾아 씬에 그리므로, 빼면 세트를 걸어도 빈 면이
@@ -309,7 +350,7 @@ ${card.promptKo ?? ""}`)?.stamp;
   );
   /*
     이름이 «…외벽» 으로 끝나는 세트는 **바깥 껍질**로 겁니다. 배경 카드의 «방 바깥쪽 · 외벽 전개도» 가 자동으로
-    잘라 «<장소>_외벽» 세트를 만듭니다 — 방은 안쪽 면과 바깥쪽 면이 따로입니다. 안쪽·바깥쪽 단추를 먼저
+    잘라 «<장소>_외벽» 세트를 만듭니다(). 안쪽·바깥쪽 단추를 먼저
     바꾸지 않고 걸면 외벽이 방 안에 붙어, 방 안에서 벽돌 외벽이 보였습니다. 이름이 곧 어느 껍질인지를 말합니다.
   */
   const shellOfSet = (set: FaceSet<PlannerBackground>): RoomFaceShell =>
@@ -318,7 +359,7 @@ ${card.promptKo ?? ""}`)?.stamp;
    * 세트 하나를 여섯 면에 한 번에. 빠진 면은 비웁니다 — 옛 그림이 남아 다른 세트와 섞이지 않게.
    *
    * **방이 없으면 하나 세우고** 겁니다. 세트를 고른 것 자체가 «이 배경으로 방을 세우겠다» 는 뜻인데, 방이 없던 시절에는
-   * 걸 자리가 없어 알림만 뜨고 아무 일도 안 일어났습니다(방을 기본으로 안 세우게 바꾼 직후).
+   * 걸 자리가 없어 알림만 뜨고 아무 일도 안 일어났습니다(2026-09-16, 방을 기본으로 안 세우게 바꾼 직후).
    */
   const assignFaceSet = (set: FaceSet<PlannerBackground>) =>
     setState((current) => {
@@ -340,7 +381,7 @@ ${card.promptKo ?? ""}`)?.stamp;
         shellOfSet(set),
       );
       /*
-        **방 이름을 세트 이름에 맞춥니다.**
+        **방 이름을 세트 이름에 맞춥니다.** 
         세트 접두는 그 장소 이름(«레지스탕스의 방»)이라, 방이 «방 1» 로 남아 있으면 타임라인·목록에서 어느 방이
         어느 배경인지 이름만 보고는 알 수 없습니다. 바깥벽 세트는 «…외벽» 을 떼고 씁니다 — 안팎이 같은 방입니다.
       */
@@ -368,6 +409,8 @@ ${card.promptKo ?? ""}`)?.stamp;
         ...COMPOSITION_CUBE_FACES.map((face) => room.faces[face] || ""),
         ...COMPOSITION_CUBE_FACES.map((face) => room.outerFaces?.[face] || ""),
         room.panorama || "",
+        // 배경 영상도 같은 열쇠에. 빠뜨리면 영상을 걸어도 씬이 다시 안 붙어 화면이 그대로입니다.
+        room.video ? `${room.video.face}:${room.video.source}` : "",
       ].join("|"),
     )
     .join("//");
@@ -391,9 +434,49 @@ ${card.promptKo ?? ""}`)?.stamp;
       outer: room.outerFaces ? resolve(room.outerFaces) : null,
       // 파노라마 돔 — 걸려 있으면 이 방은 상자 대신 돔으로 섭니다(`CompositionRoom.panorama`).
       panorama: room.panorama ? availableBackgrounds.find((item) => item.id === room.panorama)?.thumb || null : null,
+      /*
+        배경 영상 — 그림과 같은 길로 «id → 주소» 를 여기서 끝냅니다(씬은 목록을 모릅니다).
+        고른 영상이 목록에서 사라졌으면(파일을 지웠다든지) 없음으로 두고, 그 면은 원래 그림으로 돌아갑니다.
+      */
+      video: room.video?.source
+        ? (() => {
+            const url = folderVideos.find((item) => item.id === room.video!.source)?.src;
+            // 면은 지금 방 모양에 맞춘 것으로(`roomVideoFaceOf`) — 돔으로 바꾼 방에 옛 «정면» 이 남아 있을 수 있습니다.
+            return url ? { face: roomVideoFaceOf(room), url } : null;
+          })()
+        : null,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomFaceKey, availableBackgrounds]);
+  }, [roomFaceKey, availableBackgrounds, folderVideos]);
+
+  /**
+   * 방에 방금 만든 **영상**을 목록에 더합니다. 폴더는 창을 열 때만 읽으므로, 이게 없으면
+   * 방금 만든 것을 걸려고 창을 닫았다 다시 열어야 합니다.
+   */
+  const rememberRoomVideo = (filePath: string, name: string) => {
+    const src = assetSrc(filePath);
+    if (!src) return;
+    setFolderVideos((current) =>
+      current.some((item) => item.id === filePath)
+        ? current
+        : [{ id: filePath, name, src }, ...current],
+    );
+  };
+
+  /**
+   * 그 면에 걸린 **그림 파일 경로** — «이 면 그림으로 영상 만들기» 가 첫 프레임으로 씁니다.
+   *
+   * 주소(`thumb`)가 아니라 경로인 까닭: 로컬 생성기는 파일을 읽습니다(`asset://` 은 못 엽니다).
+   * 돔은 파노라마 한 장이 그 자리입니다.
+   */
+  const faceImagePathOf = (roomId: string, face: RoomVideoFace): string | undefined => {
+    const room = rooms.find((item) => item.id === roomId);
+    if (!room) return undefined;
+    const id = face === "panorama" ? room.panorama : room.faces[face];
+    if (!id) return undefined;
+    const found = availableBackgrounds.find((item) => item.id === id);
+    return found?.filePath || (id.includes("\\") || id.includes("/") ? id : undefined);
+  };
 
   /** 활성 방의 안쪽 여섯 장 — 미리보기·전개도처럼 «지금 방» 만 보면 되는 자리에서 씁니다. */
   const backgroundFaceImages = useMemo(
@@ -406,7 +489,7 @@ ${card.promptKo ?? ""}`)?.stamp;
 
   const addCustomBackground = async (file: File, kind: BackgroundKind) => {
     /*
-      같은 파일을 두 번 넣으면 목록에도 폴더에도 그대로 쌓였습니다.
+      같은 파일을 두 번 넣으면 목록에도 폴더에도 그대로 쌓였습니다. (지시 54)
 
       이름과 갈래가 같으면 이미 들어와 있는 것으로 보고, 새로 넣는 대신
       그것을 골라 줍니다. 같은 이름의 다른 그림을 일부러 넣는 일은 배경에서는
@@ -459,7 +542,7 @@ ${card.promptKo ?? ""}`)?.stamp;
         assetType: "background-generated",
         ownerName: sceneTitle || "구도 배경",
         /*
-          **파노라마는 파노라마 폴더에.** 밖에서 불러온 것도 같은 자리에 들어가야 합니다.
+          **파노라마는 파노라마 폴더에.** 
           앱이 뽑은 파노라마는 이미 이 하위 폴더에 들어가는데(`PANORAMA_DIR`), 밖에서 들여온 것만
           구도 배경에 섞여 다음에 열 때 실외 목록에서 자리로 못 알아봤습니다(`isInPanoramaDir`).
         */
@@ -538,7 +621,7 @@ ${card.promptKo ?? ""}`)?.stamp;
     const stem = background.filePath ? fileStem(background.filePath).replace(/_\d{3,}$/, "") : "";
     const size = stem ? cardSetSizes.get(safeFileName(stem)) : undefined;
     setState((state0) => {
-      // 호리존에는 돔도 없습니다 — `assignFaceSet` 과 같은 까닭입니다.
+      // 호리존에는 돔도 없습니다 — `assignFaceSet` 과 같은 까닭.
       if (roomsOf(state0).length && activeRoomOf(state0).horizon) {
         toast.info("호리존 방에는 파노라마를 걸 수 없습니다 — 실외 방을 고르세요.");
         return state0;
@@ -560,6 +643,10 @@ ${card.promptKo ?? ""}`)?.stamp;
     isFaceSetAssigned,
     backgroundFaceImages,
     roomFaceImages,
+    // 방의 «배경 영상» 한 벌 — 고를 목록 · 만든 것 기억하기 · 첫 프레임으로 쓸 면 그림.
+    roomVideos: folderVideos,
+    rememberRoomVideo,
+    faceImagePathOf,
     addCustomBackground,
     updateGlb,
     handleDroppedFile,

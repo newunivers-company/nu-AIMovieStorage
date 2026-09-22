@@ -2,9 +2,8 @@
 //!
 //! # 왜 이렇게 만들었나
 //!
-//! ComfyUI 는 남이 언제든 바꾸는 환경이라, 그쪽이 판을 올리면 우리 엔진이 같이 깨집니다.
-//! 그래서 우리가 쓰는 엔진은 **앱 데이터 폴더 안에 각자 고정 환경**으로 깔고 판을 우리가
-//! 정합니다.
+//! ComfyUI 는 남이 언제든 바꾸는 환경이라, 우리가 쓰는 엔진은 **앱 데이터
+//! 폴더 안에 각자 고정 환경**으로 깔고 판을 우리가 정합니다.
 //!
 //! ```text
 //! <app_data>/upscale/
@@ -55,7 +54,7 @@ use crate::{err, next_numbered_path, safe_name, Res};
 
 /// 엔진 **갈래** — 업스케일과 «로컬 생성» 이 같은 설치·워커 살림을 씁니다.
 ///
-/// 로컬 생성 모델도 ComfyUI 를 거치지 않고 앱에서 바로 돌립니다. 설치(uv·venv·가중치 해시 확인·이어받기), 상주 워커,
+/// 설치(uv·venv·가중치 해시 확인·이어받기), 상주 워커,
 /// 취소, 로그, 안전한 제거는 업스케일에서 이미 다 만들어 두었습니다. 그 살림을 그대로
 /// 쓰고 **폴더 이름과 엔진 목록만** 갈래로 가릅니다 — 두 벌로 두면 한쪽만 고치는 날이 옵니다.
 pub struct Family {
@@ -84,17 +83,16 @@ pub static LOCAL: Family = Family {
     /*
       id 는 곧 **파이썬 모듈 이름**입니다(`engines/<id>.py`). 하이픈을 쓰면 import 가 안 됩니다.
 
-      영상은 미니맥스가 기둥입니다. **MiniMax-H3**(영상+오디오)와 **MiniMax-Music3** 가 오픈
-      웨이트로 나왔고 diffusers 로 바로 돕니다 — ComfyUI 를 거칠 까닭이 없어 우리가 직접
-      돌리고, 멀티 로라도 여기서 겁니다.
+      / 「미니맥스 컴피UI에서 로컬로 돌아가는데..?」 — 맞습니다.
+      **MiniMax-H3**(영상+오디오, 2026-08-03)와 **MiniMax-Music3**(2026-08-13)가 오픈
+      웨이트로 나왔고 diffusers 로 바로 돕니다. 컴피UI 없이 우리가 직접 돌립니다.
 
       Wan·ACE-Step 은 **가벼운 대안**으로 남깁니다. 미니맥스 H3 는 bf16 기준 트랜스포머
       61.7 GB + 조건화기 62.1 GB 라 호스트 RAM 이 75 GB 쯤 있어야 int8 로 돌아갑니다.
       그 문턱에 못 미치는 기계에서도 뭔가는 돌아가야 합니다.
     */
     /*
-      모션 캡처(`nlf`·`sam3dbody`·`gvhmr`)도 이 갈래입니다 — 업스케일처럼 모델을 골라 분석시킵니다.
-      결과가 영상·그림이 아니라 JSON 한 파일일 뿐, 설치·상주 워커·`generate` 한 길은 같습니다.
+      모션 캡처(`nlf`·`sam3dbody`·`gvhmr`)도 이 갈래입니다 —  결과가 영상·그림이 아니라 JSON 한 파일일 뿐, 설치·상주 워커·`generate` 한 길은 같습니다.
     */
     ids: &[
         "minimaxh3",
@@ -102,7 +100,7 @@ pub static LOCAL: Family = Family {
         "wanvideo",
         "acestep",
         "qwenimage",
-        // FLUX.1 Krea · SD 3.5 를 빼고 Z-Image Turbo · Anima 로 갈았습니다.
+        // 사용자 2026-09-17: FLUX.1 Krea · SD 3.5 를 빼고 Z-Image Turbo · Anima 로 갈았습니다.
         "zimage",
         "krea2",
         "anima",
@@ -202,7 +200,7 @@ struct EngineManifest {
     #[serde(default)]
     heavy: bool,
     /// 가중치를 **설치 때 통째로 미리 받는** 엔진(워커 op `prefetch`). 이 깃발이 «단추를 보일지» 와
-    /// «설치 끝에 받을지» 를 한꺼번에 정합니다 — 두 길이 한 깃발을 봐야 엇갈리지 않습니다. 파이썬 쪽은
+    /// «설치 끝에 받을지» 를 한꺼번에 정합니다 — 파이썬 쪽은
     /// 엔진 모듈에 `prefetch(root, report)` 가 있어야 하고, 없으면 워커가 바로 done 을 돌려줍니다.
     #[serde(default)]
     prefetch: bool,
@@ -252,19 +250,19 @@ struct InstalledRecord {
     /// 마지막으로 잰 엔진 폴더 크기.
     ///
     /// 상태 조회 때마다 `dir_size` 로 재귀 walk 를 하면 torch 가 든 `.venv` 하나가 파일
-    /// 2만 개대라 설정 화면이 몇 초씩 멈췄습니다. 표시용 숫자이므로
+    /// 2만 개대라 설정 화면이 몇 초씩 멈췄습니다(2026-09-09 지적). 표시용 숫자이므로
     /// 조회는 늘 이 값을 그대로 읽고, **다시 재는 일은 조회 스레드가 아니라 뒤에서** 합니다
     /// (`remeasure_disk_in_background`) — 생성 뒤·하루 지난 뒤·미리 받기 뒤.
     ///
-    /// 설치 끝에 한 번만 재 두었더니 미니맥스 카드가 「4.5 GB」 인데 폴더는 183 GB 였습니다.
-    /// 그때는 venv 뿐이었고 가중치는 첫 생성 때 들어왔기 때문입니다.
+    /// 사용자 2026-09-22: 설치 끝에 한 번만 재 두었더니 미니맥스 카드가 「4.5 GB」 인데 폴더는
+    /// 183 GB 였습니다. 그때는 venv 뿐이었고 가중치는 첫 생성 때 들어왔기 때문입니다.
     #[serde(default)]
     disk_bytes: u64,
     /// `disk_bytes` 를 잰 시각(UNIX 초). 0 이면 «잰 적 없음» — 옛 기록은 다음 조회 때 뒤에서 다시 잽니다.
     #[serde(default)]
     disk_measured_at: u64,
     /// 가중치를 통째로 받아 두었는가(`prefetch` 가 끝까지 간 뒤 true). 이 값이 아니면 카드에
-    /// «가중치 미리 받기» 단추가 뜹니다 — 이 길이 생기기 전에 깐 엔진에 나중에 받는 길입니다.
+    /// «가중치 미리 받기» 단추가 뜹니다 — 사용자의 기계처럼 이미 깔린 엔진에 나중에 받는 길입니다.
     #[serde(default)]
     weights_ready: bool,
 }
@@ -279,7 +277,7 @@ pub struct EngineStatus {
     installing: bool,
     /// 지금 가중치를 미리 받는 중인가(`UpscaleState::prefetching`). `installing` 과 따로 두는 까닭은
     /// 프런트의 «멈추기» 단추 문구 — 예전에는 `installed` 로 골랐는데, 새로 까는 엔진은 `uv venv` 직후부터
-    /// «설치됨» 이라 패키지를 받는 동안에도 「받기 멈추기」 로 보였습니다.
+    /// «설치됨» 이라 패키지를 받는 동안에도 「받기 멈추기」 로 보였습니다(2026-09-22 점검).
     prefetching: bool,
     version: String,
     models_ready: bool,
@@ -437,7 +435,7 @@ fn write_record(engine_root: &Path, record: &InstalledRecord) -> Res<()> {
     fs::create_dir_all(engine_root).map_err(|e| err("엔진 폴더를 만들지 못했습니다", e))?;
     let text = serde_json::to_string_pretty(record).map_err(|e| err("설치 기록을 만들지 못했습니다", e))?;
     /*
-      임시 파일에 쓰고 이름을 바꿉니다. `fs::write` 는 비우고 나서 채우는데, 이제 이 기록을
+      임시 파일에 쓰고 이름을 바꿉니다(2026-09-22 점검). `fs::write` 는 비우고 나서 채우는데, 이제 이 기록을
       뒤 스레드(`remeasure_disk_in_background`)도 쓰므로 비운 순간에 상태 조회가 읽으면 빈 파일 → 기본값으로
       읽혀 «설치 안 됨» 으로 보이고, 그 조회가 되받아 쓰면 진짜 기록(판·모델·weights_ready)이 기본값으로 덮입니다.
       이름 바꾸기는 한 번에 갈아 끼우므로 읽는 쪽은 늘 옛 기록이거나 새 기록입니다. 기록을 쓰는 곳은 여기 하나입니다.
@@ -684,7 +682,7 @@ fn hidden_command(program: &Path) -> Command {
 
 /// 우리가 띄운 «워커가 아닌» 자식들(uv·Upscayl). 정리는 **이 핸들로만** — 이름 기준 kill 금지.
 ///
-/// 왜 따로 들고 있나: 이 자식들은 `workers` 에 없어서 앱을 닫을 때 정리
+/// 왜 따로 들고 있나(2026-09-09 지적): 이 자식들은 `workers` 에 없어서 앱을 닫을 때 정리
 /// 대상이 아니었습니다. 설치 중에 앱을 닫으면 uv 가 고아로 남아 3 GB 를 계속 받았고,
 /// Upscayl 이 매달리면 GPU 를 문 채 남았습니다.
 static SIDE_CHILDREN: OnceLock<Mutex<Vec<(u64, Arc<Mutex<Child>>)>>> = OnceLock::new();
@@ -717,7 +715,7 @@ fn kill_side_children() {
 
 /// 외부 명령을 돌리고 stdout+stderr 를 로그에 남깁니다. 실패하면 마지막 줄들을 오류로 올립니다.
 ///
-/// `output()` 으로 끝까지 블로킹하던 것을 `spawn()` + 폴링으로 바꾼 이유:
+/// `output()` 으로 끝까지 블로킹하던 것을 `spawn()` + 폴링으로 바꾼 이유(2026-09-09 지적):
 /// 「패키지를 설치하는 중 (torch 는 3 GB 가 넘습니다)」 동안 «취소» 가 전혀 먹지 않았고,
 /// Upscayl 이 매달리면 프런트가 넘긴 시간 제한이 무시된 채 엔진 큐를 영원히 쥐었습니다.
 /// 이제 취소 깃발과 시간 제한을 여기서 보고, 끊을 때는 **우리가 받아 둔 자식 핸들로만** 끊습니다.
@@ -732,7 +730,7 @@ fn kill_side_children() {
 /// <LOCALAPPDATA>/uv/cache/git-v0/db/<해시> 받아 둔 저장소
 /// <LOCALAPPDATA>/uv/cache/git-v0/checkouts/<해시>/<커밋> 그 커밋을 편 자리
 ///
-/// 실제로 이 둘이 **함께** 깨진 기계가 있었습니다. db 는 몇 달 전에 받다 만 것이라 HEAD 가 가리키는 ref 가 없었고
+/// 2026-09-16 사용자 기계에서 이 둘이 **함께** 깨져 있었습니다. db 는 3월에 받다 만 것이라 HEAD 가 가리키는 ref 가 없었고
 /// (직접 클론해 보면 `remote HEAD refers to nonexistent ref, unable to checkout`), 그래서 체크아웃은 매번 `.git` 만
 /// 남기고 실패했습니다. 다음 설치는 그 `.git` 을 보고 「이미 있고 비어 있지 않다」 며 멈췄습니다.
 ///
@@ -749,7 +747,7 @@ fn stale_git_dirs(message: &str) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = vec![];
     /*
       git 은 경로를 작은따옴표로 싸서 알려 주지만, **홀수 번째가 따옴표 안**이라고 셀 수는 없습니다 —
-      같은 문장의 `didn't` 아포스트로피가 짝을 한 칸 밀어 버립니다(그 탓에 이 복구가 한 번도 안 돌았습니다).
+      같은 문장의 `didn't` 아포스트로피가 짝을 한 칸 밀어 버립니다(2026-09-16: 그 탓에 이 복구가 한 번도 안 돌았습니다).
       그래서 조각을 전부 보고 «캐시 안에 실재하는 폴더» 만 고릅니다.
     */
     for part in message.split('\'') {
@@ -768,7 +766,7 @@ fn stale_git_dirs(message: &str) -> Vec<PathBuf> {
 
 /// **uv 로 패키지를 까는 일은 한 번에 하나씩.**
 ///
-/// 엔진 셋(ACE-Step·MiniMax-H3·Music3)의 설치를 함께 누르면 셋 다 같은 오류로 멈췄습니다.
+/// 사용자 2026-09-16: 엔진 셋(ACE-Step·MiniMax-H3·Music3)의 설치를 함께 눌렀더니 셋 다 같은 오류로 멈췄습니다.
 /// uv 캐시(`<LOCALAPPDATA>/uv/cache`)는 **엔진들이 함께 쓰는 자리**입니다. H3 와 Music3 는 같은 `diffusers` 커밋을
 /// 받는데, 두 프로세스가 같은 체크아웃 폴더에 동시에 클론하면 한쪽이 만든 폴더를 다른 쪽이 「이미 있고 비어 있지 않다」 며
 /// 거부합니다. 앞서 넣은 «받다 만 캐시 지우고 다시» 도 이 경우에는 지우자마자 옆 프로세스가 다시 만들어 소용이 없습니다.
@@ -932,7 +930,7 @@ fn run_tool(
 /// 왜 `BufReader::lines()` 를 쓰지 않는가: `lines()` 는 UTF-8 이 아닌 바이트를 만나면 `Err` 를
 /// 돌려주고, 우리는 거기서 `break` 했습니다. upscayl-bin 의 출력에 그런 바이트가 있습니다.
 ///
-/// 어디에 있는지를 다시 재현해 바로잡았습니다. 예전 주석은 «시작하며 찍는 저작권
+/// 어디에 있는지를 2026-09-09 에 다시 재현해 바로잡았습니다. 예전 주석은 «시작하며 찍는 저작권
 /// 줄의 ©» 라고 했지만 **그런 줄은 없습니다** — 인자 없이 돌린 사용법 출력 1341바이트에 128 이상
 /// 바이트가 0개입니다. 문제의 바이트는 **끝쪽 진행률 줄 안**에 있습니다: `\xa9\xa3\xa9\xa3100.00\r`.
 ///
@@ -1054,7 +1052,7 @@ fn code_dest(engine_root: &Path, entry: &CodeEntry) -> Option<PathBuf> {
 }
 
 /*
-  코드가 다 풀렸는지 «폴더가 비어 있지 않은가» 로 보면 안 됩니다.
+  코드가 다 풀렸는지 «폴더가 비어 있지 않은가» 로 보면 안 됩니다(2026-09-09 지적).
 
   `extract_zip` 은 항목을 하나씩 대상 폴더에 바로 풀기 때문에, 디스크가 차거나 압축본이
   잘렸거나 앱이 꺼져 중간에 멈추면 «비어 있지 않은 반쪽 트리» 가 남습니다. 그 뒤로는
@@ -1139,7 +1137,7 @@ async fn install_engine(
         progress(&app, engine, "deps", None, "패키지를 설치하는 중 (torch 는 3 GB 가 넘습니다)");
         let requirements = resources_root(&app, family)?.join("engines").join(engine).join("requirements.txt");
         if requirements.is_file() {
-            // --index-strategy unsafe-best-match 가 필요한 이유(실측):
+            // --index-strategy unsafe-best-match 가 필요한 이유(2026-09-09 실측):
             // PyTorch 의 cu128 인덱스는 packaging 같은 흔한 꾸러미도 옛 판으로 함께 미러합니다.
             // uv 는 기본으로 «먼저 찾은 인덱스만» 보기 때문에 packaging 을 거기서 찾고
             // «그 판이 없다» 며 멈춥니다. 우리 requirements.txt 는 판을 전부 못 박아 두어서
@@ -1179,7 +1177,7 @@ async fn install_engine(
 
         // 2-b) 빠른 어텐션 — **있으면 좋고, 없어도 됩니다.**
         //
-        // 이 앱은 남의 PC 에도 깔립니다. 처음에는 커뮤니티 휠 주소를
+        // 맞았습니다. 처음에는 커뮤니티 휠 주소를
         // requirements.txt 에 못 박아 두었는데, 그러면 엔비디아가 아니거나 sm_80 보다 낮은 GPU,
         // 윈도우가 아닌 PC 에서 **엔진 설치가 통째로 실패합니다.** 그래서 필수 꾸러미를 다 깐 뒤
         // 그 PC 의 토치를 직접 물어보고(`fast_attention.py`) 맞는 휠이 있을 때만 깝니다.
@@ -1296,7 +1294,7 @@ async fn install_engine(
       torch.hub 처럼 «있기만 하면 되는» 표식 파일.
 
       **자리는 `models_dir` 기준입니다**(`models[].path` 와 같은 기준). 엔진 뿌리 기준인 것은
-      `code[].dest` 뿐입니다. 이 둘을 섞어 보고 vosr 의 값에 `preset/ckpts/` 를
+      `code[].dest` 뿐입니다. 2026-09-09 에 이 둘을 섞어 보고 vosr 의 값에 `preset/ckpts/` 를
       한 겹 더 붙인 적이 있습니다 — 그러면 `engines/vosr/preset/ckpts/preset/ckpts/…` 라는
       쓰레기 경로가 생기고 정작 torch 가 보는 자리에는 파일이 없습니다.
     */
@@ -1347,7 +1345,7 @@ async fn install_engine(
     /*
       6) 가중치 미리 받기 — manifest 에 `prefetch: true` 인 엔진(미니맥스 H3·완)만.
 
-      첫 생성 때 받는 방식은 그때 쓰는 덩어리만 받아서,
+       첫 생성 때 받는 방식은 그때 쓰는 덩어리만 받아서,
       레퍼런스 영상용 `transformer_ref`(62 GB)·완 I2V 판(60 GB)이 «생성 중» 안에서 말없이
       내려오게 돼 있었습니다. 검증(ping)이 지나 워커가 살아 있는 지금 받아 두면 새로 깐
       엔진은 처음부터 다 갖추고 시작합니다. 폴더 크기는 이 뒤에 재야 가중치가 들어갑니다.
@@ -1403,11 +1401,11 @@ static MEASURING: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// 엔진 폴더 크기를 **뒤에서** 다시 재어 기록에 적습니다. 지금 조회는 옛 값을 그대로 돌려줍니다.
 ///
 /// 왜 조회 스레드에서 안 재는가: `.venv` 하나가 파일 2만 개대라 설정 화면이 몇 초씩 멈췄습니다
-/// 그렇다고 설치 끝에 한 번만 재면 가중치가 들어온 뒤의 크기를 영영 모릅니다
-/// (카드는 「4.5 GB」 인데 폴더는 183 GB). 그래서 값은 즉시, 재기는 뒤에서 — 다 재면
+/// (2026-09-09 지적). 그렇다고 설치 끝에 한 번만 재면 가중치가 들어온 뒤의 크기를 영영 모릅니다
+/// . 그래서 값은 즉시, 재기는 뒤에서 — 다 재면
 /// «disk» 이벤트로 알려 프런트가 상태를 한 번 더 읽습니다.
 ///
-/// 제거와의 경주: 걷는 스레드는 폴더를 열어 둔 채고, 다 걷고 나서 manifest.json 을 다시
+/// 제거와의 경주(2026-09-22 점검): 걷는 스레드는 폴더를 열어 둔 채고, 다 걷고 나서 manifest.json 을 다시
 /// 씁니다. 그 사이 «제거» 가 지나가면 `remove_dir_all` 이 반쯤 실패하거나, 지운 자리에 기록만 되살아나
 /// 빈 폴더가 «설치됨» 으로 보입니다. 그래서 **제거는 이 엔진이 `MEASURING` 에 있는 동안 거절**하고, 여기서는
 /// 다시 읽기·쓰기를 `MEASURING` 자물쇠 안에서 합니다 — 지운 뒤에 쓰는 일이 없습니다.
@@ -1457,7 +1455,7 @@ fn remeasure_disk_in_background(app: &AppHandle, engine: &str, min_age_secs: u64
         };
         /*
           «disk» 는 **적었을 때만** 보냅니다. 프런트는 이 신호에 상태를 다시 읽는데, 못 적었는데도 보내면
-          다시 읽은 기록이 여전히 낡아 또 걷고 → 또 못 적고 → 또 보내고… 2만 파일 걷기가 끝없이 돕니다.
+          다시 읽은 기록이 여전히 낡아 또 걷고 → 또 못 적고 → 또 보내고… 2만 파일 걷기가 끝없이 돕니다(2026-09-22 점검).
           못 적었으면 로그만 남기고 다음 조회가 올 때까지 둡니다.
         */
         if written {
@@ -1489,7 +1487,7 @@ fn ensure_worker(app: &AppHandle, state: &UpscaleState, engine: &str) -> Res<Wor
     /*
       **무거운 엔진은 혼자 씁니다.**
 
-      실측: MiniMax-H3 를 올리는데 앞서 쓰던 워커들이 그대로 상주하며 65 GB 를
+      2026-09-18 실측: MiniMax-H3 를 올리는데 앞서 쓰던 워커들이 그대로 상주하며 65 GB 를
       쥐고 있었습니다. 상주 워커는 «다음에 빨리 시작하려고» 두는 것인데, 96 GB 카드에서도
       영상 엔진 하나가 통째로 들어가는 판이라 **빨리 시작하려다 아예 못 시작합니다.**
       그래서 무거운 엔진을 띄우기 전에 같은 갈래의 다른 상주 워커를 먼저 내립니다.
@@ -1505,7 +1503,7 @@ fn ensure_worker(app: &AppHandle, state: &UpscaleState, engine: &str) -> Res<Wor
             .collect();
         for other in others {
             /*
-              **일하는 형제는 두어야 합니다.** 미리 받기는 몇 시간짜리라 그 사이 다른 무거운
+              **일하는 형제는 두어야 합니다**(2026-09-22 점검). 미리 받기는 몇 시간짜리라 그 사이 다른 무거운
               엔진으로 생성을 시작하는 것이 보통인데, 예전에는 잠금을 안 보고 내려서 받던 워커를 죽였습니다
               (받다 만 파일은 남지만 «받는 중» 이 「워커가 멈췄습니다」 로 끝납니다). 큐 자물쇠가 잡혀 있거나
               (생성·미리 받기) `cancels` 에 있으면(설치·받기 시작 직전) 건너뜁니다 — VRAM 은 그쪽이 끝나면
@@ -1703,7 +1701,7 @@ fn is_device_fault(message: &str) -> bool {
 mod device_fault_tests {
     use super::is_device_fault;
 
-    /// 미니맥스 로그에 실제로 찍힌 줄. 이 뒤의 모든 요청이 같은 오류를 돌려줬습니다.
+    /// 2026-09-22 미니맥스 로그에 실제로 찍힌 줄. 이 뒤의 모든 요청이 같은 오류를 돌려줬습니다.
     #[test]
     fn spots_the_real_minimax_failure() {
         assert!(is_device_fault(
@@ -1796,7 +1794,7 @@ impl Drop for PrefetchMark<'_> {
 /// 큐 자물쇠·«받는 중» 표시·진행 첫 줄·«정말 받았나» 확인까지 여기 한 벌입니다. 두 곳에 나눠 적으면
 /// 한쪽만 고치는 날이 옵니다.
 ///
-/// **받는 내내 엔진 큐 자물쇠를 쥡니다.** 받기는 몇 시간짜리인데 예전에는 자물쇠 없이
+/// **받는 내내 엔진 큐 자물쇠를 쥡니다**(2026-09-22 점검). 받기는 몇 시간짜리인데 예전에는 자물쇠 없이
 /// 돌아서, «워커 내리기»·허깅페이스 토큰 저장·모션 캡처 끊기(`stop_workers_command` 는 `try_lock` 이 되면
 /// 노는 워커로 보고 내립니다)와 무거운 엔진의 형제 정리(`ensure_worker`)가 받는 중인 워커를 죽였습니다.
 /// 자물쇠를 쥐면 그쪽이 «도는 중» 으로 보고 물러납니다. 교착은 없습니다 — 생성·설치·제거는 `cancels` 에
@@ -1849,7 +1847,7 @@ fn prefetch_weights(app: &AppHandle, engine: &str, cancel: &Arc<AtomicBool>) -> 
     /*
       워커는 엔진 모듈에 `prefetch()` 가 없으면 할 일 없이 `done` 을 보냅니다(첫 생성 때 받는 엔진의 길).
       manifest 가 «미리 받기를 안다» 고 해 놓고 모듈에 그 함수가 없으면, 예전에는 `done` 만 보고
-      «다 받았다» 로 적어 버려 첫 생성이 다시 수십 GB 를 말없이 받았습니다. 그래서 `done` 의
+      «다 받았다» 로 적어 버려 첫 생성이 다시 수십 GB 를 말없이 받았습니다(2026-09-22 점검). 그래서 `done` 의
       `prefetched` 를 보고, 받기로 돼 있는데 안 받았으면 오류로 냅니다 — 사람이 보는 토스트까지 갑니다.
     */
     let prefetched = reply.get("prefetched").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -1897,7 +1895,7 @@ fn run_upscayl(
     }
 
     /*
-      부르기 **전에** 입력과 모델을 확인합니다 (실측).
+      부르기 **전에** 입력과 모델을 확인합니다 (2026-09-09 실측).
 
       upscayl-bin 은 둘 다 스스로 말해 주지 않습니다.
         - 없는 모델 이름: 0xC0000409 로 죽으면서 원인을 한 줄도 안 찍습니다 (GPU 능력 줄만).
@@ -1938,7 +1936,7 @@ fn run_upscayl(
     ];
     let log = logs_dir(app, &UPSCALE)?.join("upscayl.log");
     /*
-      시간 제한을 겁니다.
+      시간 제한을 겁니다(2026-09-09 지적).
 
       예전에는 «exe 는 스스로 끝난다» 며 `timeout_secs` 를 버렸습니다. upscayl-ncnn 은
       GPU·드라이버 문제로 매달리는 일이 드물지 않은데, 그러면 (1) 영원히 «업스케일 중»,
@@ -2008,7 +2006,7 @@ fn resolve_target(size: (u32, u32), target: &TargetSpec) -> (u32, u32) {
 ///
 /// `#[tauri::command(async)]` 인 이유: Tauri v2 는 `async` 가 아닌 명령을 **메인 스레드**에서
 /// 돕니다. 여기서는 엔진마다 폴더를 들여다보고, 크기를 아직 안 재 둔 엔진은 한 번 재기까지
-/// 하므로 그대로 두면 설정 화면을 열 때 창이 통째로 멈췄습니다.
+/// 하므로 그대로 두면 설정 화면을 열 때 창이 통째로 멈췄습니다(2026-09-09 지적).
 #[tauri::command(async)]
 pub fn upscale_engines_status(app: AppHandle) -> Res<Vec<EngineStatus>> {
     engines_status(app, &UPSCALE)
@@ -2036,7 +2034,7 @@ pub(crate) fn engines_status(app: AppHandle, family: &'static Family) -> Res<Vec
         /*
           **지난 설치가 실패했으면 «설치 안 됨»** 입니다.
 
-          `uv venv` 까지는 되고 패키지에서 실패한 엔진이
+           `uv venv` 까지는 되고 패키지에서 실패한 엔진이
           «파이썬이 있으니 설치됨» 으로 판정돼(빈 .venv 168 KB) 제거 단추만 떴습니다. 그러면 다시 설치할 길이
           화면에 없어, 몇 GB 를 지웠다 처음부터 받는 수밖에 없었습니다.
 
@@ -2046,14 +2044,14 @@ pub(crate) fn engines_status(app: AppHandle, family: &'static Family) -> Res<Vec
         let busy = installing.iter().any(|item| item == id);
         // 설치 기록이 옛것이라 크기가 없으면 여기서 한 번만 재서 적어 둡니다. 설치·받기 중(busy)에는 걷지 않습니다 —
         // 새로 까는 엔진은 venv 가 생긴 순간부터 «설치됨» 인데 기록은 아직 없어, 프런트가 단계마다 상태를 다시 읽을 때
-        // 2만 파일을 매번 걸을 뻔했습니다. 설치가 끝에 제 크기를 적습니다.
+        // 2만 파일을 매번 걸을 뻔했습니다(2026-09-22). 설치가 끝에 제 크기를 적습니다.
         if installed && !busy && record.disk_bytes == 0 {
             record.disk_bytes = dir_size(&root);
             record.disk_measured_at = now_secs();
             let _ = write_record(&root, &record);
         } else if installed && !busy {
-            // 하루 지난 값은 **뒤에서** 다시 잽니다 — 이 조회는 옛 값을 바로 돌려줍니다(설정 화면이
-            // 멈추던 일을 다시 만들지 않으려고). 설치·받기 중이면 그쪽이 끝에 재므로 여기서는 손대지 않습니다.
+            // 하루 지난 값은 **뒤에서** 다시 잽니다 — 이 조회는 옛 값을 바로 돌려줍니다(2026-09-09 의 멈춤을
+            // 다시 만들지 않으려고). 설치·받기 중이면 그쪽이 끝에 재므로 여기서는 손대지 않습니다.
             remeasure_disk_in_background(&app, id, DISK_STALE_SECS);
         }
         out.push(EngineStatus {
@@ -2075,8 +2073,7 @@ pub(crate) fn engines_status(app: AppHandle, family: &'static Family) -> Res<Vec
     }
     /*
       ComfyUI 는 외부 엔진 — 설치라는 개념이 없습니다. 프런트가 설정을 보고 «쓸 수 있음» 을 정합니다.
-      **업스케일 갈래에만** 답니다. 로컬 생성은 ComfyUI 를 거치지 않고 앱이 직접 돌리기로 했으므로
-      외부 선택지가 아예 없습니다.
+      **업스케일 갈래에만** 답니다. 로컬 생성은 라서 외부 선택지가 아예 없습니다.
     */
     if !std::ptr::eq(family, &UPSCALE) {
         return Ok(out);
@@ -2186,7 +2183,7 @@ pub(crate) fn cancel_install_command(app: AppHandle, id: String) -> Res<()> {
 
 /// 이미 깔린 엔진의 가중치를 **지금** 미리 받습니다(«가중치 미리 받기» 단추).
 ///
-/// 이 개편 전에 깐 엔진은 설치 때 받는 길을 이미 지나쳤습니다 — 그래서 단추가
+/// 사용자의 기계처럼 이 개편 전에 깐 엔진은 설치 때 받는 길을 이미 지나쳤습니다 — 그래서 단추가
 /// 따로 있어야 합니다. 취소 깃발을 설치와 같은 `cancels` 에 두어 «멈추기» 단추가 그대로 듣고,
 /// 그동안 `generate_blocking` 은 «받는 중» 으로 물러납니다(설치 중일 때와 같은 문). 실패는
 /// 설치 기록의 `last_error` 에 **적지 않습니다** — 거기 적으면 엔진이 «설치 안 됨» 으로 보입니다.
@@ -2265,13 +2262,13 @@ pub(crate) fn uninstall_engine_command(app: AppHandle, id: String) -> Res<()> {
         return Err("설치하거나 가중치를 받는 중에는 제거할 수 없습니다. 먼저 멈추세요.".into());
     }
     // 뒤에서 폴더 크기를 재는 중이면 물러납니다 — 걷는 스레드가 폴더를 열어 둔 채라 `remove_dir_all` 이
-    // 반쯤 지우다 실패하고, 다 걷고 나서 기록을 다시 써 빈 폴더가 «설치됨» 으로 되살아납니다
-    // (`remeasure_disk_in_background` 참조). 몇 초면 끝나니 다시 누르면 됩니다.
+    // 반쯤 지우다 실패하고, 다 걷고 나서 기록을 다시 써 빈 폴더가 «설치됨» 으로 되살아납니다(2026-09-22 점검,
+    // `remeasure_disk_in_background` 참조). 몇 초면 끝나니 다시 누르면 됩니다.
     if MEASURING.lock_safe().iter().any(|item| item == engine) {
         return Err("폴더 크기를 재는 중입니다. 몇 초 뒤 다시 제거하세요.".into());
     }
     /*
-      **지우기 전에 엔진 큐 자물쇠를 잡습니다.**
+      **지우기 전에 엔진 큐 자물쇠를 잡습니다**(2026-09-09 지적).
 
       예전에는 잠금을 안 보고 워커부터 죽였습니다. 업스케일이 도는 중에 «제거» 를 누르면
       작업을 끊고 `.venv` 를 통째로 지웠고, 잠긴 파일 때문에 `remove_dir_all` 이 도중에
@@ -2324,8 +2321,8 @@ pub(crate) fn worker_info_command(app: AppHandle, engine: String) -> Res<Option<
 /// **도는 중인 엔진은 건드리지 않습니다.** 예전에는 잠금을 안 보고 죽여서, 프런트가
 /// 마지막 작업 뒤에 던진 stop 이 이미 시작된 다음 작업의 워커를 끊었습니다
 /// (재현: «작업 후 워커 유지» 를 끄고 6면 세트 업스케일 → 「워커가 멈췄습니다」).
-/// 가중치를 미리 받는 워커도 같은 자물쇠를 받는 내내 쥐므로 여기서 걸러집니다 — 그 전에는
-/// 허깅페이스 토큰 저장·모션 캡처 끊기가 이 명령을 불러 몇 시간짜리 받기를 끊었습니다.
+/// 가중치를 미리 받는 워커도 같은 자물쇠를 받는 내내 쥐므로 여기서 걸러집니다(2026-09-22 점검 —
+/// 그 전에는 허깅페이스 토큰 저장·모션 캡처 끊기가 이 명령을 불러 몇 시간짜리 받기를 끊었습니다).
 #[tauri::command(async)]
 pub fn upscale_stop_workers(app: AppHandle) -> Res<()> {
     stop_workers_command(app, &UPSCALE)
@@ -2565,10 +2562,10 @@ fn run_blocking(
         return Err("업스케일 결과 파일이 만들어지지 않았습니다.".into());
     }
     /*
-      **원본을 먼저 지우지 않습니다.**
+      **원본을 먼저 지우지 않습니다**(2026-09-09 지적).
 
       예전에는 `remove_file(final_path)` 를 먼저 했습니다. 그런데 덮어쓰기 업스케일
-      (6면 세트·낱장)에서 `final_path` 는 곧 사람이 뽑아 둔 원본 그림입니다. 지운 뒤 rename 이
+      (6면 세트·낱장)에서 `final_path` 는 곧 사용자의 원본 그림입니다. 지운 뒤 rename 이
       실패하면(윈도우 디펜더·탐색기 미리보기·드롭박스가 파일을 잠깐 잡는 일이 드물지
       않습니다) 이어지는 임시 파일 정리까지 겹쳐 **그림이 통째로 사라졌습니다**.
       윈도우의 `fs::rename` 은 MOVEFILE_REPLACE_EXISTING 이라 선삭제가 애초에 필요 없습니다.
@@ -2621,7 +2618,7 @@ mod tests {
 
     /// vosr 의 `empty_files` 가 다시 두 겹이 되지 않게 못을 박습니다.
     ///
-    /// 값을 `preset/ckpts/torch_cache/trusted_list` 로 «고친» 적이 있는데,
+    /// 2026-09-09 에 값을 `preset/ckpts/torch_cache/trusted_list` 로 «고친» 적이 있는데,
     /// `empty_files` 는 `code[].dest` 와 달리 **models_dir 기준**이라 그러면
     /// `engines/vosr/preset/ckpts/preset/ckpts/…` 라는 쓰레기 경로가 생기고 정작 torch 가
     /// 보는 자리에는 파일이 없습니다. 설치를 실제로 돌리지 않아도 여기서 걸립니다.
@@ -2742,7 +2739,7 @@ pub(crate) fn generate_blocking(
         /*
           **GPU 문맥이 깨졌으면 워커를 내립니다.**
 
-          미니맥스 영상 하나가 실패한 뒤로 뒤따르는 영상이 전부 실패한 적이 있습니다. CUDA 는 한 번
+           CUDA 는 한 번
           치명적으로 어긋나면 그 프로세스의 문맥이 통째로 죽어, 살아 있는 워커에 무엇을 시켜도 같은
           오류만 돌려줍니다. 사람 눈에는 «한 번 실패한 뒤로는 전부 실패» 로 보입니다. 파이썬을 새로
           띄우는 것이 유일한 회복이라, 다음 요청이 새 문맥에서 시작하도록 여기서 내려 둡니다.
@@ -2788,7 +2785,7 @@ mod disk_measure_tests {
         InstalledRecord { disk_measured_at: secs, ..InstalledRecord::default() }
     }
 
-    /// 옛 기록(잰 적 없음 = 0)은 어느 잣대로도 낡은 것입니다 — 183 GB 를 「4.5 GB」 로 적던 카드가 이 길로 고쳐집니다.
+    /// 옛 기록(잰 적 없음 = 0)은 어느 잣대로도 낡은 것입니다 — 카드가 이 길로 고쳐집니다.
     #[test]
     fn never_measured_is_stale() {
         let now = 1_800_000_000;
@@ -2830,7 +2827,7 @@ mod disk_measure_tests {
 mod git_cache_tests {
     use super::stale_git_dirs;
 
-    /// 실제로 나온 오류문 그대로. 두 가지를 못 박습니다.
+    /// 사용자 기계에서 실제로 나온 오류문 그대로. 두 가지를 못 박습니다.
     ///
     /// ① **`didn't` 의 아포스트로피** 때문에 따옴표 짝이 밀려 경로를 못 고르던 것(같은 실패를 세 번 보고서야 찾았습니다).
     /// ② **db 와 체크아웃을 둘 다** 골라야 하는 것 — 깨진 db 를 두고 체크아웃만 지우면 다시 펴다 또 실패합니다.

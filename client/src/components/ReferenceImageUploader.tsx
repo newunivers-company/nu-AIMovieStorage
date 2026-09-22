@@ -28,14 +28,14 @@ type ReferenceImageUploaderProps = {
   onCrop?: (image: ReferenceImageItem) => void;
   /**
    * 타일 위에 파일을 떨구면 **그 자리를 갈아 끼웁니다.** 빼고 다시 넣으면
-   * 순서가 뒤로 가서 태그 번호가 바뀝니다.
+   * 순서가 뒤로 가서 태그 번호가 바뀝니다. (지시 215·217)
    */
   onReplace?: (id: string, file: File) => void;
-  /** 썸네일을 누르면 크게 봅니다. */
+  /** 썸네일을 누르면 크게 봅니다. (지시 255·273) */
   onView?: (image: ReferenceImageItem) => void;
   /** 주면 정체성 기준이 아닌 타일에 «정체성 기준으로» 별이 붙습니다. */
   onMakeIdentity?: (image: ReferenceImageItem) => void;
-  // 타일의 «업스케일 ▾» 은 없앴습니다 — 키우기는 가위로 여는 편집 창 안으로 갔습니다.
+  // 타일의 «업스케일 ▾» 은 없앴습니다(2026-09-09) — 키우기는 가위로 여는 편집 창 안으로 갔습니다.
   // 자세한 이유는 `ImageActions` 머리 주석.
 };
 
@@ -89,7 +89,7 @@ export default function ReferenceImageUploader({
       />
       {images.map((image) => (
         /*
-          타일을 눌러 고르고 **Ctrl+C 로 복사**합니다.
+          타일을 눌러 고르고 **Ctrl+C 로 복사**합니다. (지시 121)
 
           복사 아이콘은 진작 있었지만 키로 복사할 방법이 없었습니다.
           포커스를 받을 수 있어야 키를 받는데, div 는 그냥 두면 포커스가
@@ -156,7 +156,7 @@ export default function ReferenceImageUploader({
           </span>
           {/*
             어느 그림이 정체성 기준인지 타일에서 바로 보이게. 이름표는 파일 이름을 먼저 쓰니 «정체성 기준»
-            라벨이 묻혔고, 기준을 바꾸려다 «뺄 수 없습니다» 만 보게 됐습니다. 바꾸는 길은
+            라벨이 묻혔고, 사용자가 기준을 바꾸려다 «뺄 수 없습니다» 만 봤습니다(2026-09-08). 바꾸는 길은
             다른 타일의 ★(정체성 기준으로) 입니다.
           */}
           {image.isParentReference && (

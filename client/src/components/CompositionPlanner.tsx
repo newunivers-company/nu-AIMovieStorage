@@ -146,14 +146,11 @@ export interface CompositionPlannerProps {
    *
    * `guide` 는 인물까지 든 배치 그림(카메라 각도·누가 어디에), `plate` 는 **같은 카메라에서
    * 배경만** 그린 그림입니다. 생성기에는 파노라마 원본이 아니라 이 plate 를 줘야 왜곡 없이
-   * 그 컷의 배경이 됩니다 — 파노라마 원본을 그대로 주면 그 왜곡이 결과에 그대로 실립니다.
+   * 그 컷의 배경이 됩니다().
    */
   onCapture?: (shots: { guide: string; plate: string }) => void;
   /**
    * 레퍼런스 영상을 저장했을 때 — 컷이 경로와 길이를 받아 둡니다.
-   *
-   * 구도잡기에서 뽑은 영상은 곧바로 그 컷의 레퍼런스 영상이 됩니다 — 따로 등록하는 걸음을
-   * 두면 뽑아 놓고 잊습니다.
    */
   onVideoSaved?: (path: string, seconds: number) => void;
   /** 인물 이름·키를 여기서 고쳤을 때 프로젝트에 올려보냅니다 */
@@ -182,8 +179,6 @@ export interface CompositionPlannerProps {
   /**
    * **장소 라이브러리** — 걷어낸 «배경» 단계를 창으로 되살립니다.
    *
-   * 단계에서 «배경» 탭을 걷어냈지만 그 기능은 그대로 있어야 합니다 — 에셋 계보도, 방(배경) 계보도 여기서 짭니다.
-   *
    * 장소는 구도잡기에서 만들지만, **계보(관계도)와 보유 에셋**은 카드 하나가 아니라 목록 전체를 봐야 하는 일입니다.
    * 그래서 씬 단계에 있던 그 화면(`StepBackgrounds`)을 그대로 창에 띄웁니다 — 새로 짜면 두 자리가 갈라집니다(규칙 1).
    */
@@ -197,7 +192,7 @@ export interface CompositionPlannerProps {
    */
   /**
    * **배경 에셋**(공용 에셋) 목록과 그것을 고치는 길. 구도잡기 안에서 소품의 에셋 시트를 만들고 잇습니다
-   * (세운 소품에서 바로 에셋 시트를 만들어 그 소품과 짝지웁니다). 안 주면 그 단추가 안 보입니다.
+   * (). 안 주면 그 단추가 안 보입니다.
    */
   sharedAssets?: VisualAsset[];
   onChangeSharedAssets?: (updater: (current: VisualAsset[]) => VisualAsset[]) => void;
@@ -233,9 +228,9 @@ export default function CompositionPlanner({
 }: CompositionPlannerProps) {
   /*
     ── 열려 있는 동안은 «지금 화면» 이 구도잡기 ──────────────────────────
-    구도잡기 튜토리얼은 **구도잡기가 열려 있을 때만** 있어야 합니다. 갈래를 위 띠 목록에
-    늘 세워 두었더니, 창이 닫힌 채로 «방과 환경» 을 누르면 가리킬 자리가 하나도 없어
-    «이 단계의 자리가 지금 화면에 없습니다» 만 떴습니다.
+    
+    구도잡기 갈래를 위 띠 목록에 늘 세워 두었더니, 창이 닫힌 채로 «방과 환경» 을 누르면
+    가리킬 자리가 하나도 없어 「이 단계의 자리가 지금 화면에 없습니다」 만 떴습니다.
 
     창은 주소가 없어 `pageForLocation` 이 못 알아봅니다. 그래서 열려 있는 동안만 스스로
     알립니다. 닫을 때 `null` 이 아니라 **덮기 전의 것으로** 되돌리는 까닭 — 프로젝트 껍데기는
@@ -252,13 +247,14 @@ export default function CompositionPlanner({
     ── 되돌리기 ──────────────────────────────────────────────────────────
     구도 작업은 시행착오가 많아 되돌리기가 없으면 손이 묶입니다.
 
-    **공용 훅으로 바꿨습니다**(`lib/useUndoStack.ts`). 시트 배치·칸 자르기·구도잡기가
-    한 벌을 쓰라고 그 훅을 만들어 놓고, 정작 구도잡기만 손수 만든 스택을 그대로
-    쓰고 있었습니다(규칙 1).
+    2026-09-18: **공용 훅으로 바꿨습니다**(`lib/useUndoStack.ts`). 그 훅의 머리말이
+    이미 「시트 배치·칸 자르기·구도잡기가 저마다 스택을 따로 들고 있었다… 한 벌로
+    모아 한 번 고치면 전부에 먹게 합니다」 라고 적어 두었는데, 정작 구도잡기만
+    손수 만든 스택을 그대로 쓰고 있었습니다(규칙 1).
 
     그래서 여기에는 **고쳐 둔 것이 안 와 있었습니다.** 옛 스택은 두 판을 `!==` 로만
     견주어서, 손잡이를 한 번 끌면 프레임마다 판이 쌓이고 쉰 칸 제한에 걸려 **그 드래그
-    하나가 되돌리기 기록 전체를 밀어냈습니다**. 공용 훅은
+    하나가 되돌리기 기록 전체를 밀어냈습니다**(지시 263 과 같은 사고). 공용 훅은
     JSON 으로 견주고 `replace`·`mark` 로 «되돌리기 단위» 를 나눕니다.
   */
   const history = useUndoStack<CompositionState>(() => normalizeComposition(composition), {
@@ -298,7 +294,7 @@ export default function CompositionPlanner({
 
   /*
     ── Tab = 관절 고르기 ─────────────────────────────────────────────────
-    블렌더와 같은 손버릇으로 — 인물을 잡은 채 Tab 을 누르면 관절 고르기가 열립니다.
+    
 
     **인물을 잡았을 때만** 엽니다. 소품·GLB 에는 관절이 없어서, 아무 때나 열면 빈 목록이
     뜹니다. 입력칸 안에서는 Tab 이 다음 칸으로 가야 하므로 건너뜁니다 — 수치를 치다가
@@ -321,7 +317,7 @@ export default function CompositionPlanner({
   /*
     고른 것이 바뀌면 관절 창을 닫고 **잡아 둔 관절도 놓습니다.**
 
-    소품을 잡았다가 인물을 다시 잡으면 전에 잡아 둔 손이 그대로 잡혀 있었습니다. 파이 메뉴는
+     파이 메뉴는
     «지금 잡은 관절» 이 있으면 그 고리부터 여는데, 옛 관절이 남아 있으면 엉뚱한 데서
     시작합니다. 인물을 다시 고르는 것은 대개 «다른 데를 만지려고» 입니다.
   */
@@ -374,7 +370,7 @@ export default function CompositionPlanner({
   /**
    * 세트를 걸 **껍질**. 세트 이름이 «…외벽» 이면 자동으로 바깥으로 가므로 여기는 늘 안쪽입니다.
    *
-   * 낱장으로 한 면씩 고르는 칸은 걷었습니다 — 여섯 면을 따로 거는 일이 실제로는 거의 없었습니다.
+   * 낱장으로 한 면씩 고르는 칸은 걷었습니다().
    * 전체보기도 이제 **세트 목록**입니다 — 고르면 여섯 면이 한 번에 걸립니다.
    */
   const faceShell: RoomFaceShell = "inner";
@@ -388,9 +384,6 @@ export default function CompositionPlanner({
   const [motionCaptureAt, setMotionCaptureAt] = useState<number | null>(null);
   /**
    * 타임라인 인물 줄에서 **오른쪽 단추**를 눌렀을 때 뜨는 메뉴.
-   *
-   * 이미 깔린 모션은 그 줄에서 바로 다른 모션으로 바꾸거나 다시 분석할 수 있어야 합니다 —
-   * 지우고 새로 넣게 하면 자리와 길이를 매번 다시 맞춰야 합니다.
    *
    * 메뉴를 **타임라인이 아니라 여기서** 띄우는 까닭: 고를 모션 목록과 모캡 창을 이 화면이
    * 들고 있습니다. 타임라인이 그것을 알면 두 화면이 서로를 끌어안습니다.
@@ -446,8 +439,7 @@ export default function CompositionPlanner({
   /*
     `selected` 는 «character:abc» 처럼 갈래가 붙은 이름표입니다. 트랙·앵커는 갈래 없이
     **순수 id** 로 찾으므로 여기서 한 번 벗겨 둡니다 — 벗기지 않고 넘겼다가 동선 찍기와
-    앵커 걸기가 조용히 아무 일도 안 했습니다 — 단추는 눌리는데 아무 변화가 없어
-    고장인 줄도 몰랐습니다.
+    앵커 걸기가 조용히 아무 일도 안 했습니다(, 「대상 동선 찍기 버튼 여전히 동작하지 않음」).
   */
   const selectedTargetId = selected.includes(":")
     ? selected.slice(selected.indexOf(":") + 1)
@@ -474,6 +466,7 @@ export default function CompositionPlanner({
     playhead,
     playheadRef,
     previewingRef,
+    playingRef,
     seek,
   } = playback;
 
@@ -654,7 +647,7 @@ export default function CompositionPlanner({
     setPreviewing,
     onVideoSaved,
     /*
-      뽑은 영상은 **구도가 들고 있습니다** — 구도별로 따로 쌓입니다. 컷에 적히는 것은 통째로 뽑은 한 편이고,
+      뽑은 영상은 **구도가 들고 있습니다**(). 컷에 적히는 것은 통째로 뽑은 한 편이고,
       여기 목록에는 조각까지 남아 나중에 «그때 그 12초짜리» 를 다시 고를 수 있습니다.
     */
     onRendered: ({ path, seconds, part }) =>
@@ -776,6 +769,8 @@ export default function CompositionPlanner({
                     playhead={playhead}
                     previewing={previewing}
                     previewingRef={previewingRef}
+                    // 배경 영상을 돌릴지 멈출지 — «미리보기» 와 달리 시계가 정말 도는 동안만 참입니다.
+                    playingRef={playingRef}
                     onPreviewInterrupt={() => {
                       setPlaying(false);
                       setPreviewing(false);
@@ -786,8 +781,8 @@ export default function CompositionPlanner({
                       )
                     }
                     /*
-                      묶음에 속한 소품을 끌면 **덩어리가 통째로** 따라옵니다 — 묶어 둔 뜻이
-                      한 번에 옮기는 것이라서입니다.
+                      묶음에 속한 소품을 끌면 **덩어리가 통째로** 따라옵니다
+                      ().
                       회전·크기는 덩어리의 한가운데를 축으로 돌아야 모양이 안 흩어집니다.
                     */
                     onObjectTransform={(id, patch) =>
@@ -899,8 +894,7 @@ export default function CompositionPlanner({
               </PlannerViewBar>
 
               {/*
-                무빙 타임라인은 애프터이펙트처럼 **3D 화면 아래**입니다.
-                오른쪽 패널이 아니라 화면 밑에 두는 까닭은, 클립을 끄는
+                무빙 타임라인은 **3D 화면 아래**입니다 (). 오른쪽 패널이 아니라 화면 밑에 두는 까닭은, 클립을 끄는
                 동안 3D 가 그 시각으로 따라 움직이는 것을 봐야 하기 때문입니다.
               */}
               {bonePicker && (
@@ -914,7 +908,7 @@ export default function CompositionPlanner({
 
               {/*
                 안내 문구와 타임라인을 **한 덩어리로** 쌓습니다. 둘 다 `bottom-6` 에
-                떠 있어서 글자 위에 타임라인이 겹쳐 앉았습니다.
+                떠 있어서 서로 겹쳤습니다().
                 흐름으로 쌓으면 타임라인 높이가 바뀌어도 문구가 알아서 위로 밀립니다.
               */}
               <div className="absolute inset-x-6 bottom-6 z-10">
@@ -954,7 +948,7 @@ export default function CompositionPlanner({
                   */
                   anchorOf={(targetId, ratio) => {
                     /*
-                      **지금 시각의 자리**를 씁니다 — 안 그러면 앵커가 엉뚱한 데 붙습니다.
+                      **지금 시각의 자리**를 씁니다. 
                       동선 트랙이 있으면 상태에 적힌 자리는 «키를 찍던 그때» 이고 화면에
                       서 있는 자리는 재생 머리가 정한 자리라, 그대로 쓰면 어긋납니다.
                     */
@@ -1018,8 +1012,8 @@ export default function CompositionPlanner({
                   /*
                     저장하면서 **찍어서 함께 넘깁니다.**
 
+                    
                     저장은 «이 구도로 하겠다» 는 뜻이니 그 그림이 컷에 붙는 것이 당연합니다.
-                    예전에는 «구도 캡처» 를 눌러야만 그림이 들어와, 저장만 하고 나간 컷이 빈 채로 남았습니다.
                     «구도 캡처» 는 창을 닫지 않고 지금 화면만 다시 넘기고 싶을 때 남겨 둡니다.
                   */
                   captureShots();
@@ -1089,14 +1083,13 @@ export default function CompositionPlanner({
                   assignFaceSet={media.assignFaceSet}
                   assignPanorama={media.assignPanorama}
                   /*
-                    밖에서 만든 360° 그림을 **바로** 들여옵니다(단추로도, 끌어다 놓아도).
-                    여기 한 줄만 이으면 `usePlannerMedia` 가 목록 등록·비율 재기·
+                    밖에서 만든 360° 그림을 **바로** 들여옵니다(). 여기 한 줄만 이으면 `usePlannerMedia` 가 목록 등록·비율 재기·
                     프로젝트 폴더 저장까지 이미 다 합니다 — 6면·HDRI 가 지나는 그 길입니다.
                   */
                   onImportPanorama={(file) => media.addCustomBackground(file, "panorama")}
                   /*
                     **지우면 폴더의 원본도 지웁니다**(공통 규칙 3). 파일이 남으면 폴더를 다시 읽을 때
-                    목록에 되살아납니다 — 지웠는데 또 있는 꼴입니다.
+                    목록에 되살아나, 를 겪습니다.
                   */
                   onDeletePanorama={async (background) => {
                     const ok = await confirmDialog({
@@ -1115,18 +1108,17 @@ export default function CompositionPlanner({
                   onCreatePlace={onCreatePlace ? createPlaceForRoom : undefined}
                   onOpenPlace={activePlace && onPatchBackground ? () => setPlaceOpen(true) : undefined}
                   /*
-                    실외 방에 들어가는 것은 결국 파노라마 한 장이라 그것만 띄웁니다. 벽 그림 카드는 방에 거는
-                    장소가 아니고, 실외에는 돔(파노라마) 카드만 뜹니다.
+                     벽 그림 카드는 방에 거는 장소가 아니고, 실외에는 돔(파노라마)
+                    카드만 뜹니다.
                   */
                   places={backgrounds
                     .filter((item) => item.usage !== "wall")
-                    // 호리존은 단색 스튜디오라 걸 장소가 없습니다 — 목록 자체를 비웁니다.
+                    // 호리존 방에는 장소 카드가 없습니다 — 목록 자체를 비웁니다.
                     .filter(() => !activeRoomOf(state).horizon)
                     .filter((item) =>
                       activeRoomOf(state).outdoor
                         ? // 돔 표시·돔 칩·**파노라마 폴더에 있는 그림** 셋 중 하나면 실외 것입니다.
-                          // 폴더로도 가리는 까닭: 파노라마는 폴더를 따로 쓰므로,
-                          // 표시를 못 붙인 옛 그림도 자리로 알아봅니다.
+                          // 폴더로도 가리는 까닭: 표시를 못 붙인 옛 그림도 자리로 알아봅니다.
                           item.usage === "dome" ||
                           item.blueprint?.includes(DOME_CHIP_ID) ||
                           (item.generatedImages ?? []).some((image) =>
@@ -1136,8 +1128,7 @@ export default function CompositionPlanner({
                     )
                     .map((item) => ({ id: item.id, name: item.name }))}
                   /*
-                    **고르기는 고르기만** 합니다 — 골랐다고 파노라마 만들기 창이 저절로 뜨면 이을 뜻만 있던 사람이
-                    창을 닫아야 합니다. 창은 «열기»·«만들기» 를 눌렀을 때만 뜹니다. 빈 값을 고르면 이음을 끊습니다.
+                    **고르기는 고르기만** 합니다(). 창은 «열기»·«만들기» 를 눌렀을 때만 뜹니다. 빈 값을 고르면 이음을 끊습니다.
                   */
                   onPickPlace={
                     onPatchBackground
@@ -1177,14 +1168,30 @@ export default function CompositionPlanner({
                   onOpenGallery={() => setGalleryOpen(true)}
                   onOpenLibrary={placeLibrary ? () => setLibraryOpen(true) : undefined}
                   /*
-                    배경 소품도 **에셋과 이어집니다** — 세운 소품과 에셋 시트가 짝지어야 프롬프트에서 @로 가리킬 수
-                    있습니다. 배치 탭과 같은 목록·같은 만들기를 씁니다.
+                    배경 소품도 **에셋과 이어집니다**(). 배치 탭과 같은 목록·같은 만들기를 씁니다.
                   */
                   assetOptions={swapOptions}
                   onCreateAsset={onChangeSharedAssets ? createAssetForObject : undefined}
                   onCreateGroupAsset={onChangeSharedAssets ? createAssetForGroup : undefined}
                   selected={selected}
                   setSelected={setSelected}
+                  /*
+                    **배경 영상** — 면·돔에 영상을 걸고, 그 면 그림으로 새 루프를 만듭니다.
+                    프로젝트 폴더가 있어야 만들 수 있으므로 프로젝트 밖에서 연 창에서는 칸 자체가 안 뜹니다.
+                    저장 자리는 이 방에 이어 둔 **장소 폴더**이고(규칙 5), 프롬프트는 그 장소 카드의 것을 바탕에 깝니다.
+                  */
+                  roomVideo={
+                    projectName?.trim()
+                      ? {
+                          videos: media.roomVideos,
+                          projectName,
+                          ownerName: activePlace?.name ?? null,
+                          prompt: { ko: activePlace?.promptKo, en: activePlace?.promptEn },
+                          remember: media.rememberRoomVideo,
+                          faceImagePath: media.faceImagePathOf,
+                        }
+                      : undefined
+                  }
                   {...sectionToggles}
                 />
               )}

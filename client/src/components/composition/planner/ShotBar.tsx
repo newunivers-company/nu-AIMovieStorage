@@ -16,10 +16,6 @@ import { confirmDialog } from "@/components/ConfirmDialog";
 /**
  * 3D 화면 **왼쪽**에 붙는 «저장해 둔 카메라» 목록.
  *
- * 지금 카메라를 그대로 한 줄로 세워 두고, 그 줄을 누르면 그 시점으로 곧바로 돌아갑니다.
- * 이름을 고칠 수 있어야 쓸모가 생깁니다 — «클로즈업샷» 처럼 무엇을 잡아 둔 구도인지가
- * 이름에 적혀야 여러 대를 세워 두고도 고를 수 있습니다.
- *
  * # 카메라 무빙과 무엇이 다른가
  *
  * 무빙(`cameraMoves`)은 «시간에 따라 움직이는 한 대» 이고, 이쪽은 «세워 둔 여러 대» 입니다.
@@ -85,8 +81,7 @@ export function PlannerShotBar({
           /*
             저장한 구도가 하나도 없으면 무빙 아이콘을 눌러도 «카메라를 먼저 세우세요» 로 막힙니다 —
             그래서 클립이 안 생기고, 클립이 없으면 «이동량»·«길이»·«속도 그래프» 칸도 안 그려집니다.
-            이 단추가 그 줄의 **첫 문**입니다 — 속도 그래프를 보여 주려면 키가 먼저 있어야 하므로,
-            안내 창이 여기부터 눌러 나갑니다.
+            이 단추가 그 줄의 **첫 문**입니다(). 안내 창이 여기부터 눌러 나갑니다.
           */
           data-tour-open="bottom-clip-amount bottom-clip-length bottom-easing bottom-free-key"
           title="지금 카메라를 새 구도로 저장합니다"
@@ -174,8 +169,9 @@ export function PlannerShotBar({
                   onClick={() => {
                     setState((current) => saveCameraShotIn(current, shot.id));
                     /*
+                      
                       덮어쓰기는 화면이 하나도 안 바뀌는 편집이라(카메라가 이미 그
-                      자리에 있으니까) 알림이 없으면 눌렸는지 아닌지를 알 길이 없습니다.
+                      자리에 있으니까) 눌렀는지 아닌지를 알 길이 없었습니다.
                     */
                     toast.success(
                       `«${shot.name}» 을 지금 구도로 저장했습니다`,

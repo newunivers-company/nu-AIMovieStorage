@@ -8,9 +8,6 @@ import type { ProjectContextSummary } from "@/lib/projectContext";
 /**
  * **프롬프트 말로 바꾸기** — 평소 말투로 적은 글을 생성기가 알아듣는 말로.
  *
- * 쓰는 사람이 다 프롬프트 전문가는 아닙니다. 평소 말로 적은 글을 받아, 적은 뜻을 읽어
- * 생성기 문법으로 바꿔 주는 자리가 필요합니다.
- *
  * # 왜 «안내문» 이 아니라 단추인가
  *
  * 「감정 이름만 적지 마세요」·「명령형을 쓰지 마세요」 를 문서에 적어 두는 것은 규칙을
@@ -39,7 +36,13 @@ export default function NaturalPromptButton({
 }: {
   /** 사람이 적어 둔 글. 비어 있으면 단추가 안 보입니다. */
   text: string;
-  kind: "acting" | "vfx" | "scene";
+  /**
+   * 무엇을 적은 글인가. 요청 문구(`natural-to-prompt.md`)가 이 값으로 다듬는 결을 바꿉니다.
+   *
+   * `background` 는 «환경이 스스로 하는 움직임»(구름·지나가는 차·물결)이라 `vfx` 와 다릅니다 —
+   * 효과 쪽 결로 다듬으면 규모·난류·열 아지랑이 같은 폭발 낱말이 붙어 배경이 출렁입니다.
+   */
+  kind: "acting" | "vfx" | "background" | "scene";
   /** 영상으로 뽑을 것인가. 거짓이면 정지 그림입니다 — 적을 것이 다릅니다. */
   isVideo?: boolean;
   seconds?: number;
@@ -51,8 +54,7 @@ export default function NaturalPromptButton({
    * 바꾼 글을 칸에 넣는 자리.
    *
    * **영어판도 함께** 넘깁니다. 한국어 칸만 고치면 정작 생성기에 가는 영문에는 여전히
-   * 한국어가 실려서, 고생해서 다듬은 말이 통째로 무시됩니다. 부르는 쪽이 영어판을 들고
-   * 있다가 영문 프롬프트에 그대로 씁니다.
+   * 한국어가 실려서, 고생해서 다듬은 말이 무시됩니다(). 부르는 쪽이 영어판을 들고 있다가 영문 프롬프트에 그대로 씁니다.
    */
   onApply: (ko: string, en: string) => void;
 }) {
@@ -77,7 +79,9 @@ export default function NaturalPromptButton({
       const made = await requestJsonFromLlm<{ ko?: string; en?: string; notes?: string[] }>({
         task: "naturalPrompt",
         template: "natural-to-prompt",
-        label: `${kind === "acting" ? "연기" : kind === "vfx" ? "효과" : "상황"} · 프롬프트 말로`,
+        label: `${
+          kind === "acting" ? "연기" : kind === "vfx" ? "효과" : kind === "background" ? "배경 움직임" : "상황"
+        } · 프롬프트 말로`,
         data: {
           text: body,
           kind,

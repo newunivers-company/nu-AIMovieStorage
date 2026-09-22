@@ -44,7 +44,7 @@ describe("characterBasics", () => {
   it("역할·성별·나이·키·체형을 한글과 영문으로 — 「보통」 체형은 영문에 안 적는다", () => {
     expect(characterBasics(jinwoo)).toEqual({
       basics: ["역할 형사", "성별 남성", "나이 42세", "키 178cm", "마른 편"],
-      // 「42세」 의 «세» 는 영문에 못 실립니다 — 숫자만 읽어 `42 years old` 로.
+      // 「42세」 의 «세» 는 영문에 못 실립니다 — 숫자만 읽어 `42 years old` 로(2026-09-22 검토).
       basicsEn: ["42 years old", "man", "178 cm tall", "slim build"],
     });
     expect(characterBasics(hana).basicsEn).toEqual(["12 years old", "woman", "150 cm tall"]);

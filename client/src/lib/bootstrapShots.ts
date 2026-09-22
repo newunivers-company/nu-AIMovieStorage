@@ -8,9 +8,7 @@ import {
 /**
  * **AI 일괄 생성 3단계 — 컷마다 구도를 세웁니다.**
  *
- * 주제 한 줄만 던져도 씬·컷·캐릭터·구도·키컷까지 한 번에 채워지는 것이 이 길의 목표입니다.
- * 그림과 영상은 바깥 생성기에서 사람이 뽑지만, 그 앞까지 — 프롬프트를 포함해 — 는
- * 손으로 채우지 않습니다. 여기는 그중 **구도**를 맡습니다.
+ *
  *
  * # LLM 에게 카메라 좌표를 묻지 않습니다
  *
@@ -136,7 +134,7 @@ export function buildShotComposition(plan: ShotPlan): CompositionState {
         id: "room-1",
         name: plan.place?.outdoor ? "실외 1" : "실내 1",
         outdoor: plan.place?.outdoor || undefined,
-        // 실외는 돔이 기본입니다 — 파노라마 한 장이 모서리 없이 감깁니다. 실내는 늘 상자입니다.
+        // 실외는 돔이 기본입니다. 실내는 늘 상자입니다.
         outdoorShape: plan.place?.outdoor ? undefined : "box",
         width: size,
         depth: size,

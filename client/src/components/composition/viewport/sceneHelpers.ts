@@ -19,7 +19,7 @@ import {
  * 배경은 «무한히 먼 하늘» 이라 거리를 하나도 알려 주지 않습니다(카메라를
  * 따라다니고 깊이도 안 씁니다 — 아래 `markAsBackgroundMesh`). 그래서 화면에서
  * 거리를 읽을 수 있는 것은 이 격자뿐입니다. 24 는 좁았습니다 — 인물을 조금만
- * 물려도 격자가 끝나 버려 「저 인물이 몇 미터 뒤인지」 를 눈으로 셀 수 없었습니다.
+ * 물려도 격자가 끝나 버려 「저 인물이 몇 미터 뒤인지」 를 눈으로 셀 수 없었어요.
  *
  * «바닥에 세우기» 가 인물을 놓을 수 있는 범위이기도 합니다(`CompositionViewport`).
  * 지평선에 가까운 곳을 찍으면 d = h / tan θ 가 수 km 로 발산하는데, 격자 밖은
@@ -35,15 +35,16 @@ export const FLOOR_MAJOR_STEP = 5;
  *
  * «방» 모드에서는 격자가 곧 **방의 밑면**이라 방 크기 S 를 씁니다. 격자를 48m 로
  * 못 박아 두면 3m 짜리 방 안에 48m 격자가 깔려 벽 밖으로 한참 삐져나가고,
- * «방의 밑면이 곧 3D 공간의 바닥면» 이라는 이 모드의 약속이 눈에서
- * 바로 깨집니다. 나머지 두 모드는 배경이 무한히 먼 하늘이라
+ * 「밑면은 3D 공간의 바닥면에 배치되는 거야」라는 이 모드의
+ * 약속이 눈에서 바로 깨집니다. 나머지 두 모드는 배경이 무한히 먼 하늘이라
  * 거리를 알려 주는 것이 격자뿐이므로 예전 48m 그대로입니다.
  */
 /**
  * 방 **밖에 나가 있는 것**까지 담으려면 격자 한 변이 얼마여야 하는가(m).
  *
- * 방 크기가 고정되면서 문 밖에 세운 인물 아래에 바닥이 없어졌습니다 — 허공에 뜬 건지
- * 서 있는 건지 가늠할 수가 없습니다. 바닥에 붙었는지는 격자가 깔려 있어야 보입니다.
+ * 방 크기가
+ * 고정되면서 문 밖에 세운 인물 아래에 바닥이 없어졌습니다 — 허공에 뜬 건지 서 있는 건지
+ * 가늠할 수가 없습니다.
  *
  * **방은 그대로 두고 격자만** 넓힙니다. 방(배경 상자)은 실측이라 손대면 축척이 틀어지고,
  * 격자는 «거리를 읽는 자» 라 넓혀도 잃는 것이 없습니다. 방 안은 배경 그림이 위에 깔리므로
@@ -75,15 +76,15 @@ export function floorSizeOf(composition: CompositionState): number {
   /*
     «구도만» 은 예전 구도잡기 그대로입니다 — 방이 없으니 격자를 방 크기로 줄일 까닭도
     없고, 줄이면 인물을 조금만 물려도 격자가 끝나 「저 인물이 몇 미터 뒤인지」 를 눈으로
-    셀 수 없습니다 — 이 모드만은 예전 기본값을 그대로 둡니다.
+    셀 수 없습니다().
     «배경 넣기» 에서는 격자가 곧 방의 밑면이라 방 한 변을 따라갑니다.
   */
   /*
     방이 여럿이면 **전부** 담습니다(`roomsExtentOf`). 활성 방만 보면 옆방 아래에 바닥이
     없어져, 「거실에서 주방으로 걸어간다」 를 잡을 때 인물이 허공에 뜬 것처럼 보입니다.
 
-    **늘어나기만 하고 줄어들지는 않습니다.** 5 m 방을 세우면 격자가 5 m 로 쪼그라들어, 옆에 세운 실외
-    100 m 방이 격자 밖으로 나가 «하늘에 뜬» 것처럼 보였습니다. 격자는 방의 크기가 아니라 «다 담을 넓이» 입니다.
+    **줄어들지는 않습니다.** 
+    5 m 방을 세우면 격자가 5 m 로 쪼그라들어, 옆에 세운 실외 100 m 방이 격자 밖으로 나가 «하늘에 뜬» 것처럼 보였습니다.
   */
   return Math.max(FLOOR_SIZE, roomsExtentOf(composition).width, floorReachOf(composition));
 }
@@ -134,6 +135,265 @@ export function loadCachedTexture(url: string) {
   texture.colorSpace = THREE.SRGBColorSpace;
   backgroundTextures.set(url, texture);
   return texture;
+}
+
+// ── 배경 흐름 (UV 오프셋) ────────────────────────────────────────────────
+/*
+  면·돔 그림을 재생 시각에 맞춰 옆으로 흘립니다(`CompositionRoom.drift`). 구름이 지나가고,
+  터널 조명이 흐르고, 차창 밖 풍경이 뒤로 갑니다 — 그림을 새로 뽑지 않고도 레퍼런스 영상에
+  «배경이 움직인다» 를 남기는 길입니다.
+
+  ## 왜 방마다 텍스처를 따로 뜨는가
+
+  `loadCachedTexture` 는 **주소 하나에 텍스처 하나**를 씁니다 — 여러 방·여러 씬·파노라마 돔이
+  같은 객체를 나눠 갖습니다. `offset` 은 텍스처에 달린 값이라 거기서 옮기면 **같은 그림을 쓰는
+  다른 방까지** 같이 흐릅니다(`buildBackgroundCubeGeometry` 주석의 «repeat.x = −1 은 구 배경까지
+  뒤집는다» 와 같은 사고). 그래서 흐르는 방만 제 몫의 텍스처를 따로 듭니다.
+
+  `clone()` 이 아니라 **다시 읽는** 까닭도 같은 주석에 있습니다 — 로드 전에 복제하면 그림이
+  빈 채로 굳습니다. 같은 주소라 브라우저 쪽 캐시가 받아 주므로 두 번째 읽기는 거의 공짜입니다.
+
+  캐시는 모듈에 둡니다. 방 크기 슬라이더를 끄는 동안 상자가 **매 프레임 다시 세워지는데**
+  (`roomShapeKey` 에 치수가 들어 있습니다) 그때마다 여섯 장을 새로 읽으면 벽이 깜박입니다.
+*/
+
+/** 흐르는 방의 텍스처 — 열쇠는 «방 id + 주소» 입니다. */
+const roomDriftTextures = new Map<string, THREE.Texture>();
+
+const driftKeyOf = (roomId: string, url: string) => `${roomId}\n${url}`;
+
+export function loadRoomDriftTexture(roomId: string, url: string) {
+  const key = driftKeyOf(roomId, url);
+  const cached = roomDriftTextures.get(key);
+  if (cached) return cached;
+  const texture = new THREE.TextureLoader().load(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // 오프셋이 한 장을 넘어가면 이어 붙어야 합니다. 기본(ClampToEdge)이면 가장자리 한 줄이 늘어나 번집니다.
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  roomDriftTextures.set(key, texture);
+  return texture;
+}
+
+/**
+ * 지금 살아 있는 방들의 것만 남기고 나머지는 해제합니다.
+ *
+ * 방을 지우거나 흐름을 끄면 그 텍스처는 다시 쓰이지 않습니다. 위 캐시가 모듈에 있어
+ * 저절로 사라지지 않으므로, 상자를 세울 때마다 한 번 훑어 정리합니다.
+ */
+export function releaseRoomDriftTextures(live: Set<string>) {
+  roomDriftTextures.forEach((texture, key) => {
+    if (live.has(key.slice(0, key.indexOf("\n")))) return;
+    texture.dispose();
+    roomDriftTextures.delete(key);
+  });
+}
+
+/**
+ * 그 시각의 UV 오프셋을 겁니다. **재생 루프와 영상 렌더가 같이 부르는 한 벌입니다.**
+ *
+ * 시각 × 속도라 절대 시각으로 정해집니다 — 프레임마다 더해 가면 재생과 캡처의 프레임 수가
+ * 달라 «화면에서 본 것과 영상에 찍힌 것» 이 어긋납니다. 눈금을 손으로 끌어도 그 시각의 배경이
+ * 바로 보이는 것도 이 덕분입니다.
+ *
+ * `needsUpdate` 는 걸지 않습니다 — `offset` 은 재질의 uv 행렬로 가는 값이라 three 가 그릴 때
+ * 다시 계산합니다(`matrixAutoUpdate`). 켜면 그림을 통째로 다시 올려 재생이 끊깁니다.
+ */
+export function applyRoomDrift(
+  textures: THREE.Texture[],
+  drift: { x: number; y: number } | null | undefined,
+  time: number,
+) {
+  const x = (drift?.x ?? 0) * time;
+  const y = (drift?.y ?? 0) * time;
+  textures.forEach((texture) => {
+    if (texture.offset.x === x && texture.offset.y === y) return;
+    texture.offset.set(x, y);
+  });
+}
+
+// ── 배경 영상 (VideoTexture) ─────────────────────────────────────────────
+/*
+  면·돔에 **영상**을 겁니다(`CompositionRoom.video`). 흐름(UV)은 그림 전체가 한 방향으로
+  미끄러지는 것뿐이라 구름·터널 조명에는 맞지만 지나가는 차·파도·사람에는 모자랍니다 —
+  진짜 움직임은 그 면에 움직이는 그림을 다는 것입니다.
+
+  ## 왜 <video> 를 화면(DOM)에 안 붙이는가
+
+  텍스처의 원본으로만 쓰므로 화면에 있을 까닭이 없고, 붙이면 **크기가 0 인 요소가 레이아웃에
+  끼어들거나 다른 창의 z 순서를 흔듭니다.** 떼어 둔 요소도 디코딩·재생은 그대로 됩니다.
+  대신 놓아 줄 때 `src` 를 떼고 `load()` 를 불러야 디코더가 실제로 풀립니다(아래 해제 절).
+
+  ## 왜 방마다 따로 뜨는가
+
+  흐름 텍스처와 같은 까닭입니다 — 한 주소에 하나만 두면 같은 영상을 건 두 방이 **같은 <video>**
+  를 나눠 갖게 되어, 한쪽에서 시각을 옮기면 다른 방까지 따라 옮겨집니다. 방마다 제 몫을 듭니다.
+
+  ## 왜 캐시를 모듈이 아니라 **씬이** 들고 있는가
+
+  흐름 텍스처는 모듈에 두었습니다(그림이라 놓아 주지 않아도 메모리만 조금 씁니다). 영상은 다릅니다 —
+  놓아 주지 않으면 **디코더가 살아 있습니다.** 모듈에 두면 구도잡기 창이 닫힐 때 아무도 안 놓아 주고,
+  창을 여닫을 때마다 쌓입니다. 씬이 들면 씬이 사라질 때 함께 놓입니다.
+
+  두 창을 같이 열었을 때도 이쪽이 안전합니다 — 한 창을 닫으면서 다른 창이 쓰는 영상까지 끊어 버리는
+  일이 없습니다(같은 방 id 를 쓰는 복사된 컷에서 실제로 겹칩니다).
+
+  상자를 다시 세우는 동안 깜박이지 않는 것은 그대로입니다 — 씬 얼개(`ViewportScene`)는 방을 다시
+  세워도 살아 있어서, 크기 슬라이더를 끄는 내내 같은 `<video>` 를 그대로 씁니다.
+
+  ## 소리는 끕니다
+
+  `muted` 가 아니면 브라우저가 자동 재생을 막아 «재생을 눌렀는데 배경만 멈춰 있는» 상태가 됩니다.
+  구도잡기의 소리는 타임라인의 노래가 맡습니다.
+*/
+
+/** 방에 건 영상 하나 — 텍스처와 그 원본 요소는 늘 함께 다닙니다(시각 맞추기가 요소를, 그리기가 텍스처를 씁니다). */
+export interface RoomVideoTexture {
+  /** 캐시의 열쇠(«방 id + 주소»). 살아 있는 것을 셀 때 부르는 쪽이 그대로 씁니다 — 모양을 두 벌 적지 않게. */
+  key: string;
+  texture: THREE.VideoTexture;
+  video: HTMLVideoElement;
+}
+
+/** 한 씬이 띄운 영상들 — 열쇠는 «방 id + 주소» 입니다(흐름 텍스처와 같은 규칙). */
+export type RoomVideoCache = Map<string, RoomVideoTexture>;
+
+export function loadRoomVideoTexture(
+  cache: RoomVideoCache,
+  roomId: string,
+  url: string,
+): RoomVideoTexture {
+  const key = driftKeyOf(roomId, url);
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const video = document.createElement("video");
+  /*
+    `crossOrigin` 을 anonymous 로 둡니다. 안 두면 `asset://` 에서 온 그림이 캔버스를 **오염시켜**
+    레퍼런스 영상 내보내기가 통째로 막힙니다(`loadImageForCanvas` 머리말과 같은 사고).
+    배경 그림도 `THREE.TextureLoader` 가 같은 값으로 읽고 있어 규약이 어긋나지 않습니다.
+  */
+  video.crossOrigin = "anonymous";
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = url;
+  // 자동 재생은 안 겁니다 — 시각은 구도잡기 눈금이 정합니다(`applyRoomVideoTime`).
+  video.load();
+  const texture = new THREE.VideoTexture(video);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // 흐름과 같이 켤 수 있습니다(흐르는 영상). 오프셋이 한 장을 넘어가면 이어 붙어야 합니다.
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  const entry = { key, texture, video };
+  cache.set(key, entry);
+  return entry;
+}
+
+/**
+ * 지금 걸려 있는 것만 남기고 나머지는 **정리**합니다. `live` 는 살아 있는 `RoomVideoTexture.key` 들입니다.
+ * 빈 `live` 를 주면 이 씬의 영상을 전부 놓습니다 — 창을 닫을 때 그렇게 부릅니다.
+ *
+ * 방을 바꾸거나 «배경 영상» 을 끄거나 **다른 영상으로 바꾸면** 그 요소는 다시 안 쓰입니다. 그냥 두면
+ * 디코더가 쌓여 몇 번 만에 3D 화면이 버벅입니다. 흐름 텍스처와 달리 방 id 가 아니라 **열쇠 전체**로
+ * 세는 까닭이 여기 있습니다 — 같은 방에서 영상만 갈아 끼우면 방 id 는 그대로라, 방으로 세면 옛 영상이
+ * 영영 안 풀립니다.
+ *
+ * `dispose()` 만으로는 모자랍니다 — `<video>` 가 살아 있으면 디코더도 살아 있어서, `src` 를 떼고
+ * `load()` 로 끊어 줘야 실제로 놓입니다.
+ */
+export function releaseRoomVideoTextures(cache: RoomVideoCache, live: Set<string>) {
+  cache.forEach((entry, key) => {
+    if (live.has(key)) return;
+    entry.texture.dispose();
+    entry.video.pause();
+    entry.video.removeAttribute("src");
+    entry.video.load();
+    cache.delete(key);
+  });
+}
+
+/**
+ * 마지막으로 **우리가 시킨** 시각. 멈춘 채로 눈금을 안 건드리면 다시 안 옮깁니다.
+ *
+ * `currentTime` 과 견주지 않는 까닭: 옮긴 뒤 실제 값은 가장 가까운 **프레임**으로 붙어(0.04 초까지)
+ * 우리가 시킨 값과 늘 조금 다릅니다. 그걸로 판단하면 멈춰 있는 동안에도 매 프레임 다시 옮기게 되어
+ * 디코더가 계속 되감습니다.
+ */
+const roomVideoSeeks = new WeakMap<HTMLVideoElement, number>();
+
+/** 이 영상에서 그 시각이 어디인가 — 루프라 길이로 나눈 나머지입니다. 길이를 아직 모르면 없음. */
+function loopTimeOf(video: HTMLVideoElement, time: number): number | null {
+  const duration = video.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  return ((time % duration) + duration) % duration;
+}
+
+/**
+ * 배경 영상을 **구도잡기 시각에 맞춥니다.** 재생 루프와 영상 렌더가 같이 부르는 한 벌입니다.
+ *
+ * - 재생 중이면 영상도 돌립니다. 다만 매 프레임 `currentTime` 을 쓰지는 않습니다 — 쓸 때마다
+ * 되감기(seek)라 그림이 끊깁니다. 0.25 초 넘게 어긋났을 때만 한 번 맞춥니다.
+ * - 멈춰 있으면 영상도 멈추고 그 시각의 프레임으로 갑니다. 눈금을 끌면 배경도 따라갑니다.
+ */
+export function applyRoomVideoTime(
+  entries: RoomVideoTexture[],
+  time: number,
+  playing: boolean,
+) {
+  entries.forEach(({ video }) => {
+    const wanted = loopTimeOf(video, time);
+    if (wanted === null) return;
+    if (playing) {
+      if (video.paused) void video.play().catch(() => undefined);
+      if (Math.abs(video.currentTime - wanted) > 0.25) {
+        roomVideoSeeks.set(video, wanted);
+        video.currentTime = wanted;
+      }
+      return;
+    }
+    if (!video.paused) video.pause();
+    if (roomVideoSeeks.get(video) === wanted) return;
+    roomVideoSeeks.set(video, wanted);
+    video.currentTime = wanted;
+  });
+}
+
+/**
+ * 그 시각의 프레임이 **정말 올라올 때까지** 기다립니다 — 레퍼런스 영상을 구울 때만 씁니다.
+ *
+ * 되감기는 비동기입니다. 시각을 옮기자마자 그려 버리면 **한 프레임 전 그림**이 찍혀, 배경만
+ * 조금씩 밀린 영상이 나옵니다. 그래서 굽는 길에서는 `seeked` 를 기다린 뒤에 그립니다.
+ *
+ * 못 받아도 **멈추지는 않습니다**(0.5 초). 파일이 깨졌거나 디코더가 막혔을 때 영상 만들기가
+ * 통째로 멈추는 것보다, 배경 한 프레임이 낡은 편이 낫습니다.
+ */
+export function seekRoomVideoTime(entries: RoomVideoTexture[], time: number): Promise<void> {
+  return Promise.all(
+    entries.map(
+      ({ texture, video }) =>
+        new Promise<void>((resolve) => {
+          const wanted = loopTimeOf(video, time);
+          if (wanted === null) return resolve();
+          if (!video.paused) video.pause();
+          if (Math.abs(video.currentTime - wanted) < 1e-3) return resolve();
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener("seeked", finish);
+            window.clearTimeout(timer);
+            // 멈춘 영상은 장 콜백이 안 와서 three 가 새 프레임을 못 올립니다 — 여기서 한 번 올려 줍니다.
+            texture.needsUpdate = true;
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 500);
+          video.addEventListener("seeked", finish);
+          roomVideoSeeks.set(video, wanted);
+          video.currentTime = wanted;
+        }),
+    ),
+  ).then(() => undefined);
 }
 
 /**
@@ -200,7 +460,7 @@ export const LABEL_SCREEN_HEIGHT = 0.05;
  * 인물 셋의 이름표가 앞사람 얼굴을 가립니다. 그래서 격자의 반쪽(24m)부터
  * 흐려지기 시작해 격자 1.5배(72m — «바닥에 세우기» 가 허용하는 끝)에서 사라지게
  * 둡니다. 최소·최대 배율로 막는 길도 있지만, 그건 «멀면 작아진다» 를 되살리는
- * 것이라 멀리서 이름표를 읽을 수 없던 처음 문제로 되돌아갑니다.
+ * 것이라 사용자가 지적한 문제(「멀리서 보면 너무 작아지고」)로 되돌아갑니다.
  */
 export const LABEL_FADE_NEAR = FLOOR_SIZE / 2;
 export const LABEL_FADE_FAR = FLOOR_SIZE * 1.5;
@@ -255,8 +515,8 @@ export function createLabel(text: string, color: string) {
  * ## 왜
  *
  * 소품 그룹에는 `group.scale.set(item.scale…)` 이 걸립니다. 이름표가 그 그룹의
- * 자식이면 글상자까지 같이 늘어나서, 상자를 5 배로 키우면 이름표도 5 배가 됩니다 —
- * 큰 소품 하나가 화면을 글자로 덮습니다.
+ * 자식이면 글상자까지 같이 늘어나서, 상자를 5 배로 키우면 이름표도 5 배가 됩니다
+ * (2026-09-09 ).
  *
  * 부모 스케일을 그대로 되나눠 주면 화면에서의 글자 크기가 물체 크기와 **무관**
  * 해집니다. 높이도 같은 이유로 두 몫으로 나눠 계산합니다.
@@ -308,8 +568,7 @@ const labelToCamera = new THREE.Vector3();
  *
  * 되돌릴 것이 둘입니다 — (1) 부모에 걸린 스케일(소품을 5배로 키우면 글상자도
  * 5배), (2) 원근(가까우면 커지고 멀면 작아짐). 두 곳에서 나눠 계산하면 한쪽만
- * 고쳤을 때 조용히 어긋나므로 여기 하나로 모읍니다 — 이름표는 무엇을 하든
- * 화면에서 늘 같은 크기여야 합니다.
+ * 고쳤을 때 조용히 어긋나므로 여기 하나로 모읍니다.
  *
  * ## 수식
  *
@@ -373,8 +632,7 @@ export function syncLabel(anchor: LabelAnchor, view?: THREE.PerspectiveCamera) {
 
     크기만 화면에 맞추고 간격을 월드 0.32m 로 두면 자리가 거리에 끌려다닙니다:
     2m 에서는 글상자 높이의 4.4배(화면의 22%)만큼 붕 떠서 인물 옆이 아니라 화면
-    위쪽에 따로 놀고, 멀어지면 반대로 머리에 붙습니다. «늘 같은 크기» 는 화면에서
-    같아 보인다는 뜻이라, 크기뿐 아니라 자리도 같이 맞춥니다.
+    위쪽에 따로 놀고, 멀어지면 반대로 머리에 붙습니다. 「항상 일정한 크기」의 뜻은 화면에서 같아 보이는 것이라 자리도 같이 맞춥니다.
 
     나누는 값이 «월드 스케일» 인 이유: `sprite.position` 은 부모 로컬이라
     조상 스케일(전경 확대)까지 곱해져 월드로 나가기 때문입니다.
@@ -590,8 +848,8 @@ export const BACKGROUND_RENDER_ORDER = -1000;
  * 카메라를 따라다니므로 near·far 안에 늘 들어옵니다.
  *
  * **«방» 모드에서도 깊이는 그대로 끕니다.** 방은 유한한 상자지만, 깊이를 켜면
- * 방보다 큰 인물·GLB 가 벽에 파묻혀 몸이 잘립니다. 인물이 천장을 뚫고 나가는
- * 상황을 다루는 방법은 방을 넓히거나 천장 면을 숨기는 쪽이지
+ * 방보다 큰 인물·GLB 가 벽에 파묻혀 몸이 잘립니다. 「인물이 큐브의 천장을 뚫고
+ * 나가게 되니까」 를 다루는 방법은 방을 넓히거나 천장 면을 숨기는 쪽이지
  * 인물을 자르는 쪽이 아닙니다 — 그래서 배경은 언제나 «맨 뒤» 로 둡니다.
  * (depthTest 는 켠 채로 둡니다 — 배경보다 먼저 그려지는 것이 없어 늘 통과하고,
  * 끄면 오히려 다음에 올 후처리에서 규칙이 하나 더 늘어납니다.)
@@ -608,14 +866,13 @@ export function markAsBackgroundMesh(
 /**
  * 방 한 칸의 **껍질 하나**를 세웁니다 — 안쪽(벽지)이든 바깥쪽(외벽)이든 같은 상자입니다.
  *
- * 안쪽과 바깥쪽에 다른 그림이 걸릴 수 있어서 껍질을 둘로 나눠 세웁니다.
+ *
  *
  * 면이 빈 자리는 **안쪽만** 어두운 색으로 채웁니다. 「아직 안 넣었다」 가 보여야 하니까요.
  * 바깥 껍질에서 같은 짓을 하면 안 붙인 면이 검은 판이 되어 방 밖에서 안이 아예 안 보입니다 —
  * 바깥은 «붙인 면만» 그리고 나머지는 투명하게 둡니다.
  *
- * **호리존**(`solidColor`)은 그림을 아예 안 봅니다 — 방의 색을 직접 고르는 방이라 여섯 면 전부가 그 색
- * 하나입니다. `dim`(하늘 조명이 없을 때의 배경 어둡히기)도 안 곱합니다 — 사람이 «흰색» 을 골랐는데
+ * **호리존**(`solidColor`)은 그림을 아예 안 봅니다 — 여섯 면 전부가 그 색 하나입니다(). `dim`(하늘 조명이 없을 때의 배경 어둡히기)도 안 곱합니다 — 사람이 «흰색» 을 골랐는데
  * 회색으로 서면 고른 색을 못 믿게 됩니다. 어둡게 쓰고 싶으면 어두운 색을 고르면 됩니다.
  */
 export function buildRoomShell(
@@ -660,13 +917,13 @@ export function buildRoomShell(
 /**
  * **파노라마 돔** — 등장방형 한 장을 구 안쪽에 감습니다.
  *
- * 실외는 상자가 아니라 구에 파노라마를 감습니다 — 카메라가 크게 움직이지 않는 컷에서 가장 자연스럽습니다.
+ *
  * 둘레는 반지름 `radius` 의 구라 상자처럼 모서리에서 꺾이지 않고, 구를 눈높이 `eye` 만큼 올려 두어
  * **지평선이 눈높이에 옵니다** — 파노라마를 찍은 높이가 곧 서 있는 사람의 눈높이입니다.
  *
  * # 왜 지면 투영(`GroundedSkybox`)이 기본이 아닌가
  *
- * 바닥이 방사형으로 번져 보이기 때문입니다. `GroundedSkybox` 는 지평선 아래를 **바닥 평면에 펴 바릅니다.**
+ * `GroundedSkybox` 는 지평선 아래를 **바닥 평면에 펴 바릅니다.**
  * 반지름 100 m 에 눈높이 1.6 m 면 비가 62:1 이라, 그림 맨 아랫줄 몇 픽셀이 바닥 100 m 를 덮습니다 —
  * 그게 화면의 방사형 번짐입니다. 게다가 우리가 뽑는 파노라마는 16:9 라 **발밑(천저)이 아예 안 찍혀 있습니다.**
  * 없는 픽셀을 늘리는 셈이라 어떤 값을 줘도 깨끗해지지 않습니다.
@@ -680,6 +937,7 @@ export function buildRoomShell(
 /**
  * 파노라마가 아직 없을 때 **돔의 모양만** 그려 주는 안내선.
  *
+ * 맞습니다.
  * 여태 «돔» 은 고르기만 했고, 그림이 걸리기 전까지 화면에는 상자가 서 있었습니다.
  * 고른 모양과 보이는 모양이 다르면 크기를 가늠할 수가 없습니다.
  *
@@ -786,9 +1044,9 @@ export function buildPanoramaDome(options: {
 /**
  * 배경 상자가 **뒤에 있는 것을 가릴지** 바꿉니다.
  *
- * 방 모드에서는 상자가 진짜 벽이라, 켜면 벽 뒤에 선 인물이 제대로 가려집니다 —
- * 문 밖에 세운 인물이 정말 밖에 있는지 눈으로 확인하려면 이 가리기가 필요합니다.
- * 끄면 벽을 뚫고 전부 보이므로 자리 잡는 동안에는 꺼 두는 편이 낫습니다.
+ * 방 모드에서는 상자가
+ * 진짜 벽이라, 켜면 벽 뒤에 선 인물이 제대로 가려집니다 — 문 밖에 세운 인물이 정말 밖에
+ * 있는지 눈으로 확인할 수 있습니다.
  *
  * 켤 때는 `renderOrder` 도 0 으로 되돌립니다. 음수인 채로 깊이만 켜면 배경이 **먼저**
  * 그려지면서 깊이를 남겨, 뒤에 그리는 인물이 실제 거리와 상관없이 가려집니다.
@@ -804,9 +1062,8 @@ export function setBackgroundOcclusion(
     ── 가려도 상자는 **배경 칠하는 순서에 그대로** 둡니다 ─────────────────────
 
     예전에는 한 면이라도 가리면 상자 전체를 «맨 뒤»(renderOrder 0)로 꺼냈습니다. 방이
-    하나일 때는 괜찮았는데, **방 안에 방**을 넣자 터졌습니다 — 바깥 방의 오른쪽 면 하나를
-    가리게 켜는 순간 안쪽 방이 통째로 사라졌습니다.
-    바깥 상자가 통째로 안쪽 방 **뒤에** 칠해져, 가리지도 않는 나머지 다섯 면
+    하나일 때는 괜찮았는데, **방 안에 방**을 넣자 터졌습니다. 은신처의 오른쪽 면 하나를 가리게
+    켜는 순간 은신처 상자가 통째로 회합방 **뒤에** 칠해져, 가리지도 않는 나머지 다섯 면(골목)
     이 회합방 벽을 덮었습니다(WebGL 실측 24/24 장면).
 
     재질은 상자 하나에 면마다 붙어 있어 «그 면만» 순서를 옮길 수가 없습니다. 그런데 옮길
@@ -837,6 +1094,7 @@ export function setBackgroundOcclusion(
       /*
         **방 밖에서 볼 때도** 가리려면 양면을 그려야 합니다.
 
+        
         안쪽 껍질은 안에서 보도록 `BackSide` 로 그립니다 — 밖에서 보면 면이 아예 안 그려지고,
         안 그려지니 깊이도 안 남아 뒤엣것이 그대로 보입니다. 가리기를 켜면 `DoubleSide` 로
         바꿔 바깥 면도 그립니다. 끄면 원래대로 — 안쪽만 그리는 편이 싸고, 어차피 깊이를
@@ -845,7 +1103,7 @@ export function setBackgroundOcclusion(
         **바깥 껍질(`FrontSide`)은 양면으로 바꾸지 않습니다.** 바깥 껍질은 이미 밖에서
         보이는 쪽을 그리고 있어 양면이 될 까닭이 없고, 양면으로 만들면 건물 **안에서**
         외벽 그림이 보입니다. 실제로 방 A 안에서 옆방 B 쪽을 보면 B 의 외벽이 A 의 벽
-        위에 덮여 그려졌습니다(헤드리스 실측: 자기 벽 파랑 대신 B 외벽 색).
+        위에 덮여 그려졌습니다(2026-09-14 헤드리스 실측: 자기 벽 파랑 대신 B 외벽 색).
         그래서 «양면으로 넓히기» 는 안쪽 껍질에서만 뜻이 있습니다.
       */
       material.side =
@@ -869,7 +1127,7 @@ export function setBackgroundOcclusion(
  * 뒤집혀 저장됩니다). 그래서 보정을 옆 네 면에만 걸면
  * 옆면 = 뒤집힘 × 보정 = 바름, 천장·바닥 = 뒤집힘 × 거울 = 바름
  * 으로 여섯 장이 모두 맞습니다. 보정 전에는 옆면만 거울이라 모서리마다 전혀 다른
- * 경도의 그림이 맞닿아, 여섯 면이 이어지지 않고 모서리에서 끊겨 보였습니다.
+ * 경도의 그림이 맞닿았습니다 — 2026-09-09 
  *
  * **천장·바닥의 uv 를 같이 뒤집으면 안 됩니다.** 그러면 이미 거울인 그림이 한 번 더
  * 뒤집혀 어긋납니다. 저장 파일 쪽(`panorama.ts`)을 바로잡는 길도 있지만, 그러면
@@ -1038,9 +1296,8 @@ function roomContains(outer: BackgroundRoomRig, inner: BackgroundRoomRig): boole
  * # 겹친 방은 «감싸는 방 먼저»
  *
  * 처음에는 «가운데가 먼 방부터» 만 봤습니다. 옆으로 늘어선 방에는 맞지만, **방 안에 방을
- * 넣으면** 틀립니다. 안쪽 방에 들어가면 배경이 두 방 사이를 왔다 갔다 했습니다 —
- * 큰 방(12×10×5)과 그 안의 작은 방(7×7×4)은 가운데가 같은 자리라 거리가
- * 거의 같고, 카메라가 조금만 움직여도 순서가 뒤집혀 바깥 방 안쪽 면이 안쪽 방 벽을 덮었다
+ * 넣으면** 틀립니다. 은신처(12×10×5)와 회합방(7×7×4)은 가운데가 같은 자리라 거리가
+ * 거의 같고, 카메라가 조금만 움직여도 순서가 뒤집혀 은신처 안쪽 면이 회합방 벽을 덮었다
  * 말았습니다.
  *
  * 안에 든 방의 벽은 **어느 방향에서 봐도** 감싸는 방의 벽보다 가깝습니다. 그러니 겹친 방은
@@ -1107,13 +1364,13 @@ function faceBlocks(
 /**
  * **투시** — 방 밖에서 볼 때, 안에 선 인물을 가리는 벽만 반투명하게 걷습니다.
  *
- * 외벽은 «그림을 붙인 면은 가린다» 규칙대로 깊이를 써서, 방을 밖에서 보면 안에 선
- * 사람이 전부 가려졌습니다. 진짜 건물로는 맞지만 구도를 잡는 화면에서는
+ * 은신처 외벽은 «그림을 붙인 면은 가린다» 규칙대로 깊이를 써서, 밖에서
+ * 보면 안의 사람이 전부 가려졌습니다. 진짜 건물로는 맞지만 구도를 잡는 화면에서는
  * 사람을 볼 수 있어야 합니다(인형의 집처럼).
  *
- * # 앞서 넣은 «가리기» 와 부딪치지 않게
+ * # 9/14 의 «가리기» 와 부딪치지 않게
  *
- * 방 밖에서 볼 때도 벽이 가려야 한다고 해서 넣은 것이 바로 그 가리기입니다.
+ * 사용자 2026-09-14 에는 반대로 「방 밖에서 볼 때도 가려져야」 라고 해서 가리기를 넣었습니다.
  * 둘을 함께 살리려고 걷는 경우를 **좁혔습니다.**
  *
  * - 카메라가 그 방 **밖**이고
@@ -1121,17 +1378,17 @@ function faceBlocks(
  * - 그 벽이 둘 **사이를 실제로 막을 때**만
  *
  * 문 밖에 세운 인물을 방 안에서 보는 경우(카메라 안·인물 밖)는 그대로 가려집니다 —
- * 가리기를 넣은 까닭이 바로 그 경우를 눈으로 확인하는 것이었습니다.
+ * 9/14 에 사용자가 확인하려던 것이 그것입니다.
  *
  * # 사람이 체크한 면은 **절대** 안 걷습니다 — 바깥 껍질만
  *
- * 처음에는 안쪽 껍질도 걷었습니다. 그랬더니 «가릴 면» 으로 체크해 둔 벽이 밖에서 볼 때는
- * 걷혀서 인물이 다 보이고, 각도에 따라 가려졌다 안 가려졌다 했습니다. 사람이 정한 것을
+ * 처음에는 안쪽 껍질도 걷었습니다. 그랬더니 ,
+ * 「어느 각도에서는 벽이 가려지고 어느 각도에서는 안 가려지고 하네」. 사람이 정한 것을
  * 자동 규칙이 이기면, 각도마다 결과가 달라져 **무엇을 체크했는지가 뜻을 잃습니다.**
  *
  * 그래서 걷는 대상은 **바깥 껍질**(외벽 그림을 붙였다는 이유만으로 자동으로 깊이를 쓰는 면)
  * 뿐입니다. 안쪽 «가릴 면» 은 사람이 체크했거나 타임라인에 키로 적은 그대로 갑니다.
- * 기본값은 켜짐입니다(`outerCutaway`) — 투시 자체는 필요한 기능이고, 문제는 «체크한 벽까지»
+ * 기본값은 켜짐입니다(`outerCutaway`) — 투시 자체는 사용자가 원한 것이고, 문제는 «체크한 벽까지»
  * 걷은 것이었습니다.
  */
 export function applyWallCutaway(
@@ -1147,7 +1404,7 @@ export function applyWallCutaway(
       ? subjects.map((point) => toRoomLocal(room, point)).filter((point) => insideRoom(room, point))
       : [];
 
-  // 안쪽 껍질(사람이 체크한 «가릴 면»)은 건드리지 않습니다 — 위 주석의 «절대 안 걷습니다» 절.
+  // 안쪽 껍질(사람이 체크한 «가릴 면»)은 건드리지 않습니다 — 위 주석의 9/15 절.
   [room.outer].forEach((mesh) => {
     if (!mesh) return;
     const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];

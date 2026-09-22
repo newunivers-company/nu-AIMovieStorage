@@ -38,12 +38,12 @@ export function useReferenceVideo({
   /**
    * 영상을 저장하면 **컷에 경로와 길이를 적어 둡니다.**
    *
-   * 예전에는 만들어 폴더에 넣고 끝이라, 컷은 그 영상이 있는지도 몰랐습니다.
-   * 적어 두면 컷을 영상으로 뽑을 때 여기서 뽑은 것을 레퍼런스로 그대로 집어 올립니다.
+   * 예전에는 만들어 폴더에 넣고 끝이라, 컷은 그 영상이 있는지도
+   * 몰랐습니다. 적어 두면 「이 컷을 영상으로」 가 그대로 집어 올립니다.
    */
   onVideoSaved?: (path: string, seconds: number) => void;
   /**
-   * 뽑은 영상을 **구도의 목록**에 담습니다 — 뽑은 영상은 폴더가 아니라 구도별로 묶여야 다시 찾을 수 있습니다.
+   * 뽑은 영상을 **구도의 목록**에 담습니다().
    * 조각으로 나눠 뽑아도 조각마다 한 줄씩 담깁니다 — 컷에 적히는 것은 통째로 뽑은 한 편뿐이지만, 조각도 쓸 자리가 있습니다.
    */
   onRendered?: (render: { path: string; seconds: number; part?: string }) => void;
@@ -69,8 +69,7 @@ export function useReferenceVideo({
   /**
    * `splitSeconds` 를 주면 **그 길이로 정확히 잘라** 여러 파일로 뽑습니다(마지막 조각만 남은 길이).
    *
-   * 춤 영상처럼 노래 한 곡이 3분을 넘으면 통째로는 쓸 수 없습니다. AI 영상은 대개 14초 단위이고 길이를 늘리면 비용이
-   * 크게 뜁니다 — 그래서 5초·10초·15초·30초·1분·2분 같은 단위로 **정확히** 잘라 뽑을 수 있어야 합니다.
+   *
    *
    * 조각의 경계는 **프레임 번호**로 나눕니다(초를 더해 가면 부동소수 오차로 조각마다 한 프레임씩 밀리거나 겹칩니다). 조각 k 의
    * i 번째 프레임 = 전체의 k×조각프레임+i 번째 — 이어 붙이면 통째로 뽑은 것과 프레임 하나 틀리지 않습니다.
@@ -117,7 +116,7 @@ export function useReferenceVideo({
           fps,
           duration: frames / fps,
           signal: controller.signal,
-          drawFrame: (_time, index) => {
+          drawFrame: async (_time, index) => {
             // 렌더 도중에 3D 씬이 다시 만들어지면 지금 그리는 캔버스는 이미 버려진 것입니다.
             // 조용히 깨진 영상을 만드는 대신 바로 멈춥니다.
             if (videoRendererRef.current !== frameRenderer) {
@@ -125,7 +124,20 @@ export function useReferenceVideo({
                 "렌더 도중 3D 화면이 다시 만들어졌습니다. 다시 시도해 주세요.",
               );
             }
-            frameRenderer.drawAt((firstFrame + index) / fps);
+            const at = (firstFrame + index) / fps;
+            /*
+              배경에 건 영상은 **되감기가 끝나야** 그 프레임이 올라옵니다. 기다리지 않고 그리면
+              배경만 한 프레임씩 밀린 영상이 나오는데, 그 어긋남은 다 굽고 나서야 보입니다.
+              배경 영상을 안 건 컷에서는 그 자리에서 돌아옵니다.
+            */
+            await frameRenderer.prepareAt(at);
+            // 기다리는 사이에 씬이 다시 만들어졌을 수 있습니다 — 그리기 직전에 한 번 더 봅니다.
+            if (videoRendererRef.current !== frameRenderer) {
+              throw new Error(
+                "렌더 도중 3D 화면이 다시 만들어졌습니다. 다시 시도해 주세요.",
+              );
+            }
+            frameRenderer.drawAt(at);
             return frameRenderer.canvas;
           },
           // 진행 표시는 전체 기준 — 조각마다 0 으로 돌아가면 얼마나 남았는지 모릅니다.

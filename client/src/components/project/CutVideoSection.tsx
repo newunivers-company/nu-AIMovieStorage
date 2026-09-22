@@ -9,11 +9,10 @@ import type { Cut, GeneratedImageAsset } from "@/lib/projectTypes";
 /**
  * **컷을 영상으로 뽑는 칸.**
  *
- * 컷 하나가 그대로 영상이 되기도 합니다 — 그럴 때 씬은 컷 하나입니다.
  * 그림 프롬프트와 칸을 나눈 까닭은 `lib/cutVideoPrompt.ts` 에 적어 두었습니다 —
  * 한 칸에 섞으면 그림 쪽 자세가 흐려집니다.
  *
- * 뒤에 `CutCard.tsx` 에서 떼어 냈습니다.
+ * 2026-09-18 에 `CutCard.tsx` 에서 떼어 냈습니다.
  */
 export default function CutVideoSection({
   cut,
@@ -24,6 +23,7 @@ export default function CutVideoSection({
   apiReady,
   videoSeconds,
   heroImage,
+  motionMask,
   localVideoRefs,
   renders,
   projectName,
@@ -37,7 +37,6 @@ export default function CutVideoSection({
   applyVideoPrompt: () => void;
   /**
    * LLM 으로 받는 「프롬프트 작성」 — 규칙 뼈대 위에 상황·환경·동작·표정을 채웁니다.
-   * 상황·배경·환경·인물·동작·표정·구도를 아주 자세히 적습니다 — 성기게 적으면 생성기가 컷마다 딴 그림을 냅니다.
    */
   runVideoPrompt: () => void;
   videoBusy: boolean;
@@ -47,6 +46,8 @@ export default function CutVideoSection({
   videoSeconds: number;
   /** 로컬 영상의 **첫 프레임**으로 쓸 대표 그림(I2V). */
   heroImage: GeneratedImageAsset | null;
+  /** 「여기만 움직인다」 흑백 마스크. 그려 두면 자동으로 물립니다(`CutCard` 가 찾습니다). */
+  motionMask: GeneratedImageAsset | null;
   localVideoRefs: { kind: "image" | "video" | "audio"; path: string }[];
   /** 구도잡기에서 뽑아 둔 영상들. 그중 하나를 레퍼런스로 고릅니다. */
   renders: { id: string; path: string; seconds: number; at: string; part?: string }[];
@@ -65,9 +66,9 @@ export default function CutVideoSection({
       >
         {/*
           머리줄의 단추는 전부 **한 줄**에 섭니다 — 컷 프롬프트 칸과 같은 모양(규칙 1).
-          로컬 영상 단추가 «모델+단추 / 로라 / 자세» 를 세로로 쌓아 두 줄이 단추 아래로
-          매달리던 것은 `LocalGenerateButton` 과 `LoraPicker` 를 가로 한 줄로 펴서
-          풀었습니다. 여기서는 정렬만 맡습니다.
+          「버튼 여전히 뒤죽박죽인데」: 로컬 영상 단추가 «모델+단추 /
+          로라 / 자세» 를 세로로 쌓아 두 줄이 단추 아래로 매달렸던 것은 `LocalGenerateButton` 과
+          `LoraPicker` 를 가로 한 줄로 펴서 풀었습니다. 여기서는 정렬만 맡습니다.
         */}
         <div className="flex flex-wrap items-center gap-2" data-tour="cut-video-section">
           <p className="text-[11px] font-semibold text-white">
@@ -83,8 +84,8 @@ export default function CutVideoSection({
           </p>
           {/*
             API 로 바로 받는 「프롬프트 작성」 — 그림 칸의 그 단추와 같은 자리·같은 모양(규칙 1).
-            여태 영상 칸은 규칙 조립(「영상 프롬프트」)뿐이라 상황·표정·공기가 한 줄로 끝나,
-            API 키를 넣어 둔 뜻이 없었습니다. 뼈대는 규칙이 짓고 그 사이를 LLM 이 채웁니다.
+            여태 영상 칸은 규칙 조립(「영상 프롬프트」)뿐이라 상황·표정·공기가 한 줄로 끝났습니다
+            (). 뼈대는 규칙이 짓고 그 사이를 LLM 이 채웁니다.
           */}
           <button
             type="button"
@@ -133,6 +134,7 @@ export default function CutVideoSection({
             seconds={videoSeconds}
             firstFrame={heroImage?.filePath}
             references={localVideoRefs}
+            motionMask={motionMask?.filePath || undefined}
             prompt={{ ko: cut.videoPromptKo, en: cut.videoPromptEn }}
             projectName={projectName}
             assetType="scene-video"
@@ -152,9 +154,7 @@ export default function CutVideoSection({
 
         {/*
           ── 구도잡기에서 뽑은 영상 고르기 ────────────────────────────
-          구도잡기에서 뽑은 영상(카메라 무빙·인물 동선)도 컷에서 참조할 수 있어야 합니다 —
-          저절로 등록되고, 폴더에 저장되고, 여기 목록에서 골라지는 데까지 이어져야
-          쓸모가 생깁니다.
+          
 
           **등록과 저장은 이미 되고 있었습니다** — 뽑을 때 프로젝트 폴더에 떨어지고
           (`useReferenceVideo`), 구도가 목록으로 들고 있습니다(`composition.renders`).
@@ -163,8 +163,8 @@ export default function CutVideoSection({
         */}
         {/*
           ── 레퍼런스 영상은 **여기서 바로 봅니다** ──────────────────────────
-          뽑아 둔 구도 레퍼런스 영상을 앱 안에서 볼 길이 없었습니다. 여태 «3.0초» 칩만 있어서
-          무엇이 걸렸는지 이름과 길이로만 알 수 있었습니다. 뽑은 영상은 마그니픽·로컬 생성기에 «카메라
+           여태 «3.0초» 칩만 있어서 무엇이 걸렸는지
+          이름과 길이로만 알 수 있었습니다. 뽑은 영상은 마그니픽·로컬 생성기에 «카메라
           움직임의 기준» 으로 올라가는 것이라, 올리기 전에 눈으로 확인할 자리가 있어야 합니다.
 
           재생기는 `CutVideoShelf` 와 같은 모양(`assetSrc` + controls). 컷에 적힌 것

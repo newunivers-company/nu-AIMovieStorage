@@ -43,7 +43,7 @@ export interface PanoramaFacePlan {
   capped: boolean;
 }
 
-/** 여섯 면 크기 선택지. 6K·8K 까지 열어 두되, 4K 위는 업스케일 엔진이 있어야 뜻이 있습니다. */
+/** 여섯 면 크기 선택지. 4K 위는 업스케일 엔진이 있어야 뜻이 있습니다(). */
 const FACE_SIZE_OPTIONS: { size: number; label: string }[] = [
   { size: 1024, label: "1024 × 1024" },
   { size: 2048, label: "2048 × 2048" },
@@ -119,7 +119,7 @@ export default function PanoramaWorkbench({
 }) {
   const [source, setSource] = useState<HTMLImageElement | null>(null);
   /*
-    기본값이 «등장방형 180» 입니다 — 원통이 아니라 등장방형이 시작 자리입니다.
+    기본값이 «등장방형 180» 입니다. (2026-09-09)
 
     이 앱은 이제 등장방형 프롬프트(P1)로 파노라마를 뽑습니다. 그렇게 뽑은 그림은 손댈 것이
     없는데, 원통 70° 로 시작하면 멀쩡한 파노라마를 가운데 띠로 눌러 놓고 사람이 다시
@@ -330,7 +330,7 @@ export default function PanoramaWorkbench({
         </div>
 
         <div className="space-y-3">
-          {/* 사용 방법 — 손을 놀리면서 같이 읽는 자리입니다. 세로 쌓임이라 단추 아래 목록이 그냥 쌓입니다. */}
+          {/* 사용 방법. 세로 쌓임이라 단추 아래 목록이 그냥 쌓입니다. */}
           {/* 튜토리얼 자리는 HowToPanel 이 아니라 이 감싸개에 답니다 — 패널 뿌리가 display:contents 라 상자가 없어 말풍선이 잡을 네모가 안 생깁니다. */}
           <div className="space-y-2" data-tour="cropper-pano-howto">
             <HowToPanel {...SIX_FACES_HOWTO} />
