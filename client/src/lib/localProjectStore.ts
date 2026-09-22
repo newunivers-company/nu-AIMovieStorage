@@ -2,7 +2,7 @@ import { coverOf } from "@/lib/projectCover";
 import { toast } from "sonner";
 import { migrateProjectLayout } from "@/lib/mediaLibrary";
 import { applyMovedPaths } from "@/lib/ownerFolders";
-import { PROJECT_SCHEMA_VERSION, migrateSavedProject } from "@/lib/projectMigrate";
+import { PROJECT_SCHEMA_VERSION, migrateSavedProject, schemaVersionOf } from "@/lib/projectMigrate";
 import {
   canUseProjectFiles,
   PROJECT_FILE_NAME,
@@ -567,6 +567,9 @@ function wouldWipe(previous: LocalProject | undefined, draft: DraftLike): boolea
   project.json 에는 남아 다음에 열면 카드가 되살아났습니다. (2026-09-05 검증)
   지우는 쪽이 미리 알려 주면 그 다음 «전부 0» 저장 한 번은 통과시킵니다.
 */
+/** 미래 판이라 막았다고 **작품마다 한 번만** 말합니다 — 자동 저장이 돌 때마다 뜨면 안 됩니다. */
+const futureWarned = new Set<string>();
+
 let emptySaveExpected = false;
 export function expectEmptyProjectSave(): void {
   emptySaveExpected = true;
@@ -587,6 +590,28 @@ function stageLocalProject(
   const scenes = draft.scenes || [];
   const projects = currentProjects();
   const previous = projects.find(project => project.id === id);
+
+  /*
+    **이 앱보다 새로운 판에는 쓰지 않습니다.**
+
+    두 대에 판이 다른 앱이 깔려 있는 일은 정상입니다(한쪽만 먼저 올립니다). 읽기는
+    이미 손대지 않고 그대로 씁니다(`migrateSavedProject`) — 그런데 쓰기는 이 앱이 아는
+    칸만 적어 내보냈습니다. 새 판에만 있는 칸이 **말 없이 사라지고**, 판 도장까지 내려
+    찍혀서 다음에 새 앱으로 열어도 되살릴 근거가 없어집니다.
+
+    막고 한 번 알립니다. 자동 저장이 돌 때마다 뜨지 않게 작품마다 한 번만 말합니다.
+  */
+  const theirs = schemaVersionOf(previous);
+  if (previous && theirs > PROJECT_SCHEMA_VERSION) {
+    if (!futureWarned.has(id)) {
+      futureWarned.add(id);
+      toast.error(
+        `이 작품은 더 새로운 판(${theirs})으로 저장돼 있습니다. ` +
+          "덮어쓰면 새 판의 내용이 사라져서 저장하지 않았습니다 — 앱을 올린 뒤 여세요.",
+      );
+    }
+    return { project: previous, persisted: Promise.resolve("blocked") };
+  }
 
   if (wouldWipe(previous, draft)) {
     if (emptySaveExpected) {

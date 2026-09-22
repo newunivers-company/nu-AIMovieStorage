@@ -59,6 +59,15 @@ jobs:
       - name: 파이썬 워커 문법
         run: python -m compileall -q src-tauri/resources
 
+      # 문법만으로는 못 잡는 것이 있습니다. 「여기만 움직인다」 마스크는 프레임의 **자료형과
+      # 눈금**을 그대로 지켜야 하는데(diffusers 는 numpy 프레임을 0~1 실수로 보고 255 를
+      # 곱합니다), 어긋나도 아무 데서도 예외가 안 나고 영상만 조용히 망가집니다.
+      # 모델이 필요 없어 몇 초면 끝납니다.
+      - name: 움직임 구역
+        run: |
+          python -m pip install --quiet numpy pillow
+          python src-tauri/resources/local/test_freeze_by_mask.py
+
   windows:
     needs: check
     runs-on: windows-latest

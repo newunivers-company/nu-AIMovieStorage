@@ -100,3 +100,29 @@ describe("migrateSavedProject", () => {
     expect(migrateSavedProject(undefined as never)).toBe(undefined);
   });
 });
+
+/*
+  **이 앱보다 새로운 판에는 쓰지 않습니다.**
+
+  두 대에 판이 다른 앱이 깔려 있는 일은 정상입니다. 읽기는 손대지 않고 그대로 쓰는데
+  쓰기는 이 앱이 아는 칸만 적어 내보내서, 새 판에만 있는 칸이 말 없이 사라졌습니다.
+  막는 길이 살아 있는지 셉니다.
+*/
+describe("미래 판 쓰기 차단", () => {
+  it("저장 몸통이 미래 판을 보고 물러섭니다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const text = readFileSync(resolve(__dirname, "./localProjectStore.ts"), "utf-8");
+    expect(text).toContain("theirs > PROJECT_SCHEMA_VERSION");
+    // 막고 나서 **반드시** 알려야 합니다 — 조용히 안 쓰면 「저장이 안 된다」 가 됩니다.
+    expect(text).toContain("futureWarned");
+  });
+
+  it("판 재기는 이상한 값에 흔들리지 않습니다", () => {
+    expect(schemaVersionOf({ schemaVersion: 99 })).toBe(99);
+    expect(schemaVersionOf({ schemaVersion: -1 })).toBe(0);
+    expect(schemaVersionOf({ schemaVersion: 1.5 })).toBe(0);
+    expect(schemaVersionOf({})).toBe(0);
+    expect(schemaVersionOf(null)).toBe(0);
+  });
+});
