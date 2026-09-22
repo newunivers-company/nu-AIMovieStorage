@@ -98,6 +98,26 @@ pub fn data_path(base_directory: &str, relative_path: &str) -> Res<PathBuf> {
     Ok(Path::new(base_directory).join(relative))
 }
 
+/// **옆 파일에 다 쓴 뒤 이름을 바꿔 갈아 끼웁니다.**
+///
+/// `fs::write` 는 «비우고 → 채우기» 라, 다른 프로세스(dev:desktop 창 + 조종용 exe 처럼
+/// 창이 둘일 때)가 그 틈에 읽으면 반쪽짜리 JSON 을 봅니다. 그러면 `stored_updated_at`
+/// 이 None 이 되어 «옛 파일» 로 오해하고 검사 없이 덮어씁니다 — 저장 자물쇠는 한
+/// 프로세스 안에서만 듣습니다. 이름 바꾸기는 한 번에 일어나므로 읽는 쪽은 언제나
+/// «다 쓴 파일» 아니면 «옛 파일» 만 봅니다.
+///
+/// 프로젝트 저장본과 앱 설정 거울이 **같이** 씁니다 — 한쪽에만 두었더니 다른 쪽이
+/// 반쪽 파일을 남길 수 있는 채로 남습니다.
+fn write_atomic(path: &Path, contents: &str) -> Res<()> {
+    // 확장자를 갈아 끼우지 않고 **뒤에 붙입니다.** `set_extension` 은 점이 둘인 이름
+    // (`a.b.json`)에서 가운데를 먹어 버려 원래 파일과 다른 이름이 됩니다.
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".writing");
+    let tmp = path.with_file_name(name);
+    fs::write(&tmp, contents).map_err(|e| err("파일을 쓰지 못했습니다", e))?;
+    fs::rename(&tmp, path).map_err(|e| err("쓴 파일을 제자리로 옮기지 못했습니다", e))
+}
+
 #[tauri::command]
 pub fn save_data_file(request: SaveDataRequest) -> Res<SaveDataResult> {
     let path = data_path(&request.base_directory, &request.relative_path)?;
@@ -133,19 +153,7 @@ pub fn save_data_file(request: SaveDataRequest) -> Res<SaveDataResult> {
         }
     }
 
-    /*
-      **옆 파일에 다 쓴 뒤 이름을 바꿔 갈아 끼웁니다.**
-
-      `fs::write` 는 «비우고 → 채우기» 라, 다른 프로세스(dev:desktop 창 + 조종용 exe 처럼
-      창이 둘일 때)가 그 틈에 읽으면 반쪽짜리 JSON 을 봅니다. 그러면 위 `stored_updated_at`
-      이 None 이 되어 «옛 파일» 로 오해하고 검사 없이 덮어씁니다 — 위 자물쇠는 한
-      프로세스 안에서만 듣습니다(2026-09-21 검토에서 지적). 이름 바꾸기는 한 번에
-      일어나므로 읽는 쪽은 언제나 «다 쓴 파일» 아니면 «옛 파일» 만 봅니다.
-    */
-    let mut tmp = path.clone();
-    tmp.set_extension("json.writing");
-    fs::write(&tmp, request.contents).map_err(|e| err("파일을 쓰지 못했습니다", e))?;
-    fs::rename(&tmp, &path).map_err(|e| err("쓴 파일을 제자리로 옮기지 못했습니다", e))?;
+    write_atomic(&path, &request.contents)?;
     Ok(SaveDataResult {
         path: display,
         written: true,
@@ -429,6 +437,62 @@ pub fn save_preset_file(request: SaveNamedRequest) -> Res<()> {
 #[tauri::command]
 pub fn delete_preset_file(directory: String, file_name: String) -> Res<()> {
     delete_named(&directory, &file_name, "json")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 앱 설정 거울 — 웹뷰 저장소 바깥에 한 벌
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 앱 설정 거울 파일 이름. 앱 데이터 폴더(`app_data_dir`) 바로 아래에 둡니다.
+const APP_SETTINGS_FILE: &str = "app-settings.json";
+
+/// 거울 파일의 자리.
+///
+/// # 왜 저장 폴더가 아니라 앱 데이터 폴더인가
+///
+/// 여기 적히는 값 가운데 하나가 **저장 폴더 경로 자체**입니다. 저장 폴더 안에 두면
+/// 그 폴더를 알아야 읽을 수 있는데, 알아내려고 읽는 파일이라 앞뒤가 막힙니다.
+/// 받아 둔 엔진과 API 키가 이미 이 폴더에 있어 «앱이 기억하는 것» 의 자리로 맞습니다.
+///
+/// # 왜 이 파일이 필요한가
+///
+/// 설치본과 개발 서버는 웹뷰 origin 이 달라 `localStorage` 가 통째로 갈립니다.
+/// 그래서 설치하고 처음 열면 **저장 폴더부터 다시 잡아야** 했고, BGM 기록도 안
+/// 보였습니다(곡 파일은 폴더 훑기로 되살아나지만, 사람이 적어 둔 프롬프트·분위기·
+/// 가사는 그 길로는 못 돌아옵니다). 웹뷰 캐시를 비우는 일에도 같이 날아갑니다.
+fn app_settings_path(app: &tauri::AppHandle) -> Res<PathBuf> {
+    use tauri::Manager;
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| err("앱 데이터 폴더를 찾지 못했습니다", e))?;
+    ensure_dir(&base)?;
+    Ok(base.join(APP_SETTINGS_FILE))
+}
+
+/// 거울 파일을 통째로 읽습니다. 아직 없으면 `None` — 처음 켠 것뿐이라 오류가 아닙니다.
+///
+/// 안을 들여다보지 않고 **글 한 덩어리**로만 주고받습니다. 어떤 칸이 있는지는
+/// 프런트가 정하고, 여기는 파일 살림만 합니다 — 칸이 늘 때마다 Rust 를 고쳐야
+/// 하면 한쪽만 고친 판이 생깁니다.
+#[tauri::command]
+pub fn read_app_settings(app: tauri::AppHandle) -> Res<Option<String>> {
+    let path = app_settings_path(&app)?;
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(err("앱 설정을 읽지 못했습니다", e)),
+    }
+}
+
+/// 거울 파일을 통째로 씁니다.
+///
+/// 반쪽 파일이 남으면 다음에 켤 때 JSON 이 깨져 **설정이 통째로 없는 것처럼** 보입니다.
+/// 그래서 프로젝트 저장본과 같은 «옆에 쓰고 이름 바꾸기» 를 씁니다.
+#[tauri::command]
+pub fn write_app_settings(app: tauri::AppHandle, contents: String) -> Res<()> {
+    let path = app_settings_path(&app)?;
+    write_atomic(&path, &contents)
 }
 
 /// 저장 폴더를 asset 프로토콜에 열어 줍니다.

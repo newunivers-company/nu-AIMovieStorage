@@ -37,7 +37,7 @@ import time
 
 import common
 
-_state = {"pipe": None, "manager": None, "workflow": None, "loras": []}
+_state = {"pipe": None, "manager": None, "workflow": None, "loras": [], "plan": None}
 
 #: 24 fps · 5~15초. `17n+5` 로 스냅한 뒤의 실제 범위입니다(n=7 → 124, n=20 → 345).
 MIN_FRAMES = 124
@@ -46,6 +46,26 @@ FPS = 24
 
 
 REPO = "MiniMaxAI/MiniMax-H3"
+
+"""
+bf16 그대로 올릴 때의 크기(GB) — 트랜스포머 61.7 + 조건화기 62.1.
+
+**여기 적는 값은 «모델 크기» 이지 «필요한 VRAM» 이 아닙니다.** 중간값·인코더 몫은
+`common.plan_precision` 이 `PRECISION_HEADROOM`(1.25배)으로 따로 얹습니다 — 그래서
+bf16 으로 가는 문턱은 155 GB 이고, 지금 나와 있는 어떤 카드로도 bf16 은 못 올립니다.
+사실상 늘 int8 인데 그게 맞습니다 — 도는 것이 안 도는 것보다 낫습니다.
+
+여태 이 엔진만 `vram < 155` 를 손으로 들고 있었습니다. 같은 규칙이 두 벌이면 한쪽만
+고치는 날이 옵니다(그때 잘못된 40 을 오래 들고 있었고, 96 GB 카드에서도 bf16 을 골랐습니다).
+"""
+BF16_GB = 124.0
+
+"""
+**이 엔진이 실제로 올릴 수 있는 정밀도.** int4 길은 없습니다 — 여기 양자화는 torchao
+int8(version=2)이라야 텐서가 pin 되고, pin 이 돼야 블록 스트리밍 오프로드가 됩니다.
+작은 카드에서 규칙이 int4 를 고르면 `plan_precision` 이 int8 로 내려 잡습니다.
+"""
+SUPPORTED = ("bf16", "int8")
 
 
 def info(root):
@@ -76,14 +96,6 @@ def _snap_frames(seconds):
     return max(MIN_FRAMES, min(MAX_FRAMES, frames))
 
 
-def _vram_gb():
-    import torch
-
-    if not torch.cuda.is_available():
-        return 0.0
-    return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-
-
 def _pick_workflow(opts):
     if opts.get("references"):
         return "ref2va"
@@ -94,7 +106,10 @@ def _pick_workflow(opts):
 
 def load(root, opts):
     workflow = _pick_workflow(opts)
-    if _state["pipe"] is not None and _state["workflow"] == workflow:
+    # 정밀도를 **먼저** 셈합니다 — 이미 올라가 있어도 사람이 정밀도를 바꿨으면 다시 올려야
+    # 합니다(로라만 다시 걸고 정밀도는 안 보던 자리). 판단은 `common.plan_precision` 한 곳.
+    plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"], supported=SUPPORTED)
+    if _state["pipe"] is not None and _state["workflow"] == workflow and not plan["reload"]:
         _apply_loras(opts)
         return
 
@@ -107,21 +122,13 @@ def load(root, opts):
     manager = ComponentsManager()
     pipe = ModularPipeline.from_pretrained(REPO, components_manager=manager)
 
-    vram = _vram_gb()
-    common.log("MiniMax-H3 {} 워크플로를 올립니다 (VRAM {:.0f} GB).".format(workflow, vram))
+    vram = plan["vram"]
+    common.log("MiniMax-H3 {} 워크플로를 올립니다.".format(workflow))
+    common.log_precision(REPO, plan)
 
-    """
-    **양자화 문턱은 155 GB 입니다.** 2026-09-18 에 고쳤습니다.
-
-    여태 40 이었는데, 바로 아래 주석이 스스로 「bf16 그대로는 트랜스포머 61.7 GB +
-    조건화기 62.1 GB」 라고 적고 있습니다 — 합이 124 GB 입니다. 그런데 40 으로 두면
-    **96 GB 카드에서도 bf16 을 고릅니다.** 안 들어갑니다. 중간값·인코더까지 1.25배를
-    잡아 155 GB 로 둡니다. 지금 나와 있는 어떤 카드로도 bf16 은 못 올리므로 사실상 늘
-    int8 인데, 그게 맞습니다 — 도는 것이 안 도는 것보다 낫습니다.
-    """
-    if vram < 155:
+    if plan["bits"]:
         """
-        48 GB 미만이면 **int8 로 양자화해서** 올립니다.
+        **int8 로 양자화해서** 올립니다.
 
         bf16 그대로는 트랜스포머 61.7 GB + 조건화기 62.1 GB 라 소비자 카드에 안 들어갑니다.
         허깅페이스가 권하는 그대로 int8(version=2) + 블록 단위 스트리밍 오프로드를 씁니다 —
@@ -244,6 +251,7 @@ def load(root, opts):
     _state["pipe"] = pipe
     _state["manager"] = manager
     _state["workflow"] = workflow
+    _state["plan"] = plan
     _state["loras"] = []
     _apply_loras(opts)
 
@@ -253,6 +261,7 @@ def unload():
     _state["manager"] = None
     _state["workflow"] = None
     _state["loras"] = []
+    _state["plan"] = None
     common.free_vram()
 
 
@@ -393,7 +402,7 @@ def generate(output, opts, report):
         audio=results["audio"][0],
         audio_sample_rate=results["sampling_rate"],
     )
-    return {
+    out = {
         "frames": frames,
         "fps": FPS,
         "seconds_video": round(frames / float(FPS), 2),
@@ -402,3 +411,6 @@ def generate(output, opts, report):
         "has_audio": True,
         "generate_seconds": round(time.time() - started, 2),
     }
+    # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+    out.update(common.precision_fields(_state["plan"]))
+    return out

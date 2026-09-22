@@ -23,41 +23,52 @@ import time
 
 import common
 
-_state = {"pipe": None}
+_state = {"pipe": None, "plan": None}
+
+REPO = "MiniMaxAI/MiniMax-Music3"
+
+"""
+bf16 으로 통째로 올릴 때의 **모델 크기**(GB).
+
+필요한 VRAM 은 `common.plan_precision` 이 여유(1.25배)를 얹어 23.75 GB 로 봅니다 — 24 GB
+카드가 통째로 올라가 돌던 자리를 그대로 지키는 값입니다. 여태 이 엔진만 `vram >= 24` 를
+손으로 들고 있었고, 그래서 화면의 안내와 워커의 판단이 서로를 모른 채 갈라져 있었습니다.
+"""
+BF16_GB = 19.0
+
+"""
+**이 엔진이 올릴 수 있는 정밀도는 bf16 뿐입니다.** 모듈러 파이프라인이라 양자화를 끼우려면
+부품마다 따로 만들어야 합니다. 좁은 카드는 대신 언어 모델을 흘려 보냅니다.
+"""
+SUPPORTED = ("bf16",)
 
 
 def info(root):
     return {
-        "repo": "MiniMaxAI/MiniMax-Music3",
+        "repo": REPO,
         "notes": "완곡 BGM. 32kHz 스테레오. 가사를 비우면 연주곡입니다.",
     }
 
 
-def _vram_gb():
-    import torch
-
-    if not torch.cuda.is_available():
-        return 0.0
-    return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-
-
 def load(root, opts):
-    if _state["pipe"] is not None:
+    # 정밀도 판단은 다른 엔진과 **같은 한 곳**입니다. 줄이는 길이 없는 엔진이라 규칙이
+    # «줄여라» 라고 하면 그것이 곧 «언어 모델을 흘려라» 입니다.
+    plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"], supported=SUPPORTED)
+    if _state["pipe"] is not None and not plan["reload"]:
         return
     import torch
     from diffusers import ComponentsManager, ModularPipeline
 
     common.use_engine_cache(root)
-    vram = _vram_gb()
-    common.log("MiniMax-Music3 을 올립니다 (VRAM {:.0f} GB).".format(vram))
+    common.log_precision(REPO, plan)
 
-    if vram >= 24:
-        pipe = ModularPipeline.from_pretrained("MiniMaxAI/MiniMax-Music3")
+    if plan["wanted"] == "bf16":
+        pipe = ModularPipeline.from_pretrained(REPO)
         pipe.load_components(dtype=torch.bfloat16)
         pipe.to("cuda")
     else:
         """
-        24 GB 미만이면 **언어 모델을 잎 단위로 스트리밍**합니다.
+        좁은 카드는 **언어 모델을 잎 단위로 스트리밍**합니다.
 
         Music3 은 8B 짜리 전역 LLM 이 곡의 뼈대를 잡고 그 은닉 상태로 확산 모듈을 조건화하는
         짜임이라, 덩치의 대부분이 그 LLM 입니다. 그것만 흘려 보내면 8 GB 대에서도 돕니다.
@@ -66,9 +77,7 @@ def load(root, opts):
 
         manager = ComponentsManager()
         manager.enable_auto_cpu_offload(device="cuda")
-        pipe = ModularPipeline.from_pretrained(
-            "MiniMaxAI/MiniMax-Music3", components_manager=manager
-        )
+        pipe = ModularPipeline.from_pretrained(REPO, components_manager=manager)
         pipe.load_components(dtype=torch.bfloat16)
         apply_group_offloading(
             pipe.language_model,
@@ -76,11 +85,14 @@ def load(root, opts):
             offload_type="leaf_level",
             use_stream=True,
         )
+        common.log("VRAM 이 좁아 언어 모델을 흘리며 돌립니다 — 느리지만 돕니다.")
     _state["pipe"] = pipe
+    _state["plan"] = plan
 
 
 def unload():
     _state["pipe"] = None
+    _state["plan"] = None
     common.free_vram()
 
 
@@ -115,10 +127,13 @@ def generate(output, opts, report):
     if hasattr(data, "detach"):
         data = data.detach().float().cpu().numpy()
     sf.write(output, data, pipe.sampling_rate)
-    return {
+    out = {
         "seed": seed,
         "seconds_audio": seconds,
         "sample_rate": int(pipe.sampling_rate),
         "instrumental": not bool(lyrics),
         "generate_seconds": round(time.time() - started, 2),
     }
+    # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+    out.update(common.precision_fields(_state["plan"]))
+    return out

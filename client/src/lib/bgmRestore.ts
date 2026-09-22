@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { BGM_ROOT } from "@/lib/bgmLibrary";
 import { createBgmProject, createBgmTrack, loadBgmProjects, saveBgmProjects, type BgmProject } from "@/lib/bgmProjects";
 import { isDesktopApp } from "@/lib/llm";
-import { getMediaLibrarySettings } from "@/lib/mediaLibrary";
+import { getMediaLibrarySettings, whenAppSettingsReady } from "@/lib/mediaLibrary";
 
 /*
   **BGM 을 폴더에서 되살립니다.**
@@ -44,6 +44,15 @@ export function trackNameOf(filePath: string, projectName: string): string {
  * 매번 저장하면 `updatedAt` 만 흔들려 목록 차례가 뒤집힙니다.
  */
 export async function restoreBgmProjectsFromDisk(): Promise<BgmProject[]> {
+  /*
+    **앱 데이터 폴더의 거울을 먼저 기다립니다.**
+
+    설치본과 개발 서버는 웹뷰 origin 이 달라 `localStorage` 가 통째로 갈립니다. 기다리지
+    않고 읽으면 설치본에서는 기록이 비어 있고 저장 폴더도 «없음» 이라, 폴더 훑기까지
+    건너뛰고 「프로젝트가 없습니다」 로 끝납니다. 화면은 이 함수를 기다리는 동안 먼저
+    읽은 목록을 띄우고 있으므로, 여기서 기다려도 빈 화면이 보이지는 않습니다.
+  */
+  await whenAppSettingsReady();
   const projects = loadBgmProjects();
   if (!isDesktopApp() || !getMediaLibrarySettings().baseDirectory.trim()) return projects;
 

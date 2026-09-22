@@ -16,6 +16,7 @@
 const STORAGE_KEY = "ai-video-storage.bgm-projects.v1";
 
 import type { SavedPromptEntry } from "@/lib/promptHistory";
+import { queueMirrorWrite, registerMirrorSection } from "@/lib/mediaLibrary";
 
 export interface BgmTrack {
   id: string;
@@ -305,7 +306,50 @@ export function loadBgmProjects(): BgmProject[] {
 
 export function saveBgmProjects(projects: BgmProject[]) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  // 설치본과 개발 서버는 웹뷰 origin 이 달라 저장소를 따로 씁니다 — 파일에도 한 벌 둡니다.
+  queueMirrorWrite(BGM_MIRROR_SECTION, projects);
 }
+
+/** 거울 안에서 BGM 기록이 앉는 칸 이름. */
+const BGM_MIRROR_SECTION = "bgmProjects";
+
+/**
+ * 양쪽 기록을 합칩니다. **id 로 묶고, 같은 id 는 더 최근에 고친 쪽이 이깁니다.**
+ *
+ * 저장 폴더 설정처럼 «최근 것이 통째로 이긴다» 로 두면, 다른 origin 에서 적어 둔 곡이
+ * 통째로 사라집니다. 한쪽에만 있는 것은 그냥 둡니다 — 곡 파일은 `bgmRestore` 가 폴더에서
+ * 되살리지만, 사람이 적어 둔 프롬프트·분위기·가사는 이 기록에만 있어 한 번 지우면 끝입니다.
+ *
+ * 그래서 이 거울은 **지우기를 옮기지 않습니다.** 같은 origin 안에서는 지운 뒤 저장이
+ * 곧바로 파일에도 가니 문제가 없고, origin 이 갈린 두 벌 사이에서는 잃는 쪽보다
+ * 남는 쪽이 낫습니다(폴더에서 되살아나는 곡과 같은 태도입니다).
+ */
+function mergeBgmProjects(mine: BgmProject[], theirs: BgmProject[]): BgmProject[] {
+  const merged = [...(mine || [])];
+  for (const item of theirs || []) {
+    const at = merged.findIndex((seen) => seen.id === item.id);
+    if (at < 0) {
+      merged.push(item);
+      continue;
+    }
+    if ((item.updatedAt || 0) > (merged[at].updatedAt || 0)) merged[at] = item;
+  }
+  return merged;
+}
+
+registerMirrorSection<BgmProject[]>(BGM_MIRROR_SECTION, {
+  read: () => {
+    if (typeof window === "undefined") return null;
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved) as BgmProject[];
+    return Array.isArray(parsed) ? parsed : null;
+  },
+  write: (value) => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  },
+  merge: mergeBgmProjects,
+});
 
 /**
  * 규칙 기반 프롬프트 조립.

@@ -36,7 +36,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write as _};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write as _};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -442,10 +442,17 @@ fn write_record(engine_root: &Path, record: &InstalledRecord) -> Res<()> {
       읽혀 «설치 안 됨» 으로 보이고, 그 조회가 되받아 쓰면 진짜 기록(판·모델·weights_ready)이 기본값으로 덮입니다.
       이름 바꾸기는 한 번에 갈아 끼우므로 읽는 쪽은 늘 옛 기록이거나 새 기록입니다. 기록을 쓰는 곳은 여기 하나입니다.
     */
+    // 임시 이름도 작업마다 달라야 합니다 — 고정이면 설치 스레드와 뒤에서 도는 크기 재기가
+    // **같은 임시 파일**에 겹쳐 쓰고, 먼저 이름을 바꾼 쪽 때문에 나중 쪽은 바꿀 것이 없어집니다.
     let path = engine_root.join("manifest.json");
-    let temp = engine_root.join("manifest.json.tmp");
+    let temp = engine_root.join(format!("manifest.json.{}.tmp", job_tag()));
     fs::write(&temp, text).map_err(|e| err("설치 기록을 쓰지 못했습니다", e))?;
-    fs::rename(&temp, &path).map_err(|e| err("설치 기록을 갈아 끼우지 못했습니다", e))
+    if let Err(e) = fs::rename(&temp, &path) {
+        // 갈아 끼우지 못했으면 임시 파일을 치웁니다. 남으면 엔진 폴더에 찌꺼기가 쌓입니다.
+        let _ = fs::remove_file(&temp);
+        return Err(err("설치 기록을 갈아 끼우지 못했습니다", e));
+    }
+    Ok(())
 }
 
 /// 폴더 크기(재귀). 못 읽는 것은 건너뜁니다 — 상태 표시용이라 정확도보다 안 죽는 게 중요합니다.
@@ -2348,6 +2355,76 @@ pub(crate) fn stop_workers_command(app: AppHandle, family: &'static Family) -> R
     Ok(())
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 결과 자리 잡아 두기
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 작업마다 다른 번호표. 임시 파일 이름에 섞습니다.
+static JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// 프로세스 번호까지 섞는 까닭: 저장 폴더 하나를 앱 두 벌이 볼 수 있어, 번호표만으로는
+/// 둘 다 「1번」 에서 시작합니다.
+fn job_tag() -> String {
+    format!("{}-{}", std::process::id(), JOB_COUNTER.fetch_add(1, Ordering::SeqCst) + 1)
+}
+
+/// 잡아 둔 결과 자리. **빈 파일을 실제로 만들어** 그 이름이 남의 것이 되지 않게 합니다.
+///
+/// 왜 «고르기» 만으로는 모자랐나: 번호를 고르는 것과 결과를 놓는 것 사이가 몇 분입니다
+/// (엔진이 도는 시간). 그 틈에 들어온 다음 요청이 같은 번호를 고르고, 둘 다 같은 이름으로
+/// 이름 바꾸기를 해서 **먼저 끝난 결과가 사라졌습니다**.
+struct Reserved {
+    path: PathBuf,
+    /// 결과를 제자리에 놓았는가. 놓기 전에 떨어지면 빈 껍데기를 치웁니다 —
+    /// 0 바이트 파일을 인물 폴더에 남기면 폴더를 다시 읽을 때 깨진 그림으로 되살아납니다.
+    kept: bool,
+}
+
+impl Reserved {
+    fn keep(&mut self) {
+        self.kept = true;
+    }
+}
+
+impl Drop for Reserved {
+    fn drop(&mut self) {
+        if self.kept {
+            return;
+        }
+        // **비어 있을 때만** 지웁니다. 엔진이 이 자리에 직접 쓴 뒤라면 그것이 유일한 결과입니다.
+        if fs::metadata(&self.path).map(|m| m.len() == 0).unwrap_or(false) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+/// 비어 있는 다음 번호 자리를 잡습니다. 번호 규칙은 `next_numbered_path` 하나뿐이고,
+/// 여기서는 그것이 고른 이름을 **원자적으로** 만들어 봅니다 — 이미 있으면 남이 먼저
+/// 잡은 것이라 다음 번호로 넘어갑니다.
+fn reserve_numbered_path(dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
+    for _ in 0..64 {
+        let candidate = next_numbered_path(dir, stem, ext);
+        match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(_) => return Ok(Reserved { path: candidate, kept: false }),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(err("결과 자리를 만들지 못했습니다", e)),
+        }
+    }
+    Err("결과 파일 이름을 고르지 못했습니다. 같은 이름이 너무 많습니다.".into())
+}
+
+/// 부른 대로의 이름을 먼저 잡아 보고, 이미 있으면 번호를 올립니다.
+/// 생성은 늘 새 파일이라 덮어쓰지 않습니다.
+fn reserve_free_path(out: &Path, out_dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
+    match fs::OpenOptions::new().write(true).create_new(true).open(out) {
+        Ok(_) => Ok(Reserved { path: out.to_path_buf(), kept: false }),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            reserve_numbered_path(out_dir, &safe_name(stem), ext)
+        }
+        Err(e) => Err(err("결과 자리를 만들지 못했습니다", e)),
+    }
+}
+
 /// 그림 한 장을 업스케일합니다.
 ///
 /// - `output_path` 와 `input_path` 가 같으면 **덮어씁니다**(6면 세트는 이름이 곧 세트라 이름을 지켜야 합니다).
@@ -2407,18 +2484,20 @@ fn run_blocking(
         return Err("결과를 놓을 폴더가 없습니다.".into());
     };
 
-    let final_path = if numbered {
+    // 덮어쓰기는 잡을 것이 없습니다 — 그 자리는 이미 원본 그림입니다.
+    let mut reserved = if numbered {
         let stem = out
             .file_stem()
             .and_then(|s| s.to_str())
             .filter(|s| !s.is_empty())
             .ok_or("결과 파일 이름이 비어 있습니다.")?;
-        next_numbered_path(out_dir, &safe_name(stem), &out_ext)
+        Some(reserve_numbered_path(out_dir, &safe_name(stem), &out_ext)?)
     } else {
-        out.clone()
+        None
     };
+    let final_path = reserved.as_ref().map(|r| r.path.clone()).unwrap_or_else(|| out.clone());
     /*
-      임시 이름은 **확장자를 끝에 남깁니다** — `.<이름>.업스케일중.<확장자>`.
+      임시 이름은 **확장자를 끝에 남깁니다** — `.<이름>.업스케일중.<작업번호>.<확장자>`.
 
       예전에는 `.<이름>.업스케일중` 이라 파이썬의 `os.path.splitext` 도 Rust 의
       `ImageFormat::from_extension` 도 확장자를 «업스케일중» 으로 읽었습니다. 그래서
@@ -2426,9 +2505,11 @@ fn run_blocking(
       통째로 죽은 코드였습니다), 이름만 .jpg 인 PNG 를 마그니픽·생성기에 올렸습니다.
       앞의 점 때문에 프로젝트 폴더 훑기에는 여전히 안 잡힙니다(lib.rs 의 «.» 로 시작하면 건너뜀).
     */
+    // 임시 이름에 작업 번호표를 섞는 까닭: 덮어쓰기 업스케일은 결과 이름이 늘 같아서,
+    // 같은 그림을 두 번 겹쳐 돌리면 두 작업이 **같은 임시 파일**을 썼습니다.
     let final_name = final_path.file_name().and_then(|n| n.to_str()).unwrap_or("결과");
     let final_stem = final_path.file_stem().and_then(|n| n.to_str()).unwrap_or(final_name);
-    let temp = out_dir.join(format!(".{final_stem}.업스케일중.{out_ext}"));
+    let temp = out_dir.join(format!(".{final_stem}.업스케일중.{}.{out_ext}", job_tag()));
 
     let manifest = read_manifest(&app, &engine)?;
     let root = engine_dir(&app, &engine)?;
@@ -2498,6 +2579,10 @@ fn run_blocking(
             "결과 파일로 바꾸지 못했습니다: {e}. 원본은 그대로 있고, 업스케일 결과는 여기 남겨 두었습니다 — {}",
             temp.display()
         ));
+    }
+    // 자리에 결과가 들어갔습니다. 이제 잡아 둔 자리를 치우면 안 됩니다.
+    if let Some(slot) = reserved.as_mut() {
+        slot.keep();
     }
     progress(&app, &engine, "run", Some(100.0), "받았습니다");
 
@@ -2588,7 +2673,7 @@ pub struct GenerateResult {
 /// 끼어들면 둘 다 느려지거나 VRAM 이 터집니다(`state.queue` 는 엔진별이지만, 무거운 엔진을
 /// 동시에 올리지 않는 것은 프런트가 지킵니다).
 ///
-/// 결과는 `.<이름>.생성중.<확장자>` 임시 파일에 먼저 쓰고 마지막에 이름을 바꿉니다 —
+/// 결과는 `.<이름>.생성중.<작업번호>.<확장자>` 임시 파일에 먼저 쓰고 마지막에 이름을 바꿉니다 —
 /// 중간에 끊겨도 반쪽짜리가 프로젝트 폴더에 남지 않게.
 pub(crate) fn generate_blocking(
     app: AppHandle,
@@ -2612,7 +2697,17 @@ pub(crate) fn generate_blocking(
         return Err("결과를 놓을 폴더가 없습니다.".into());
     };
     let stem = out.file_stem().and_then(|n| n.to_str()).unwrap_or("결과");
-    let temp = out_dir.join(format!(".{stem}.생성중.{out_ext}"));
+    /*
+      결과 자리를 **뽑기 전에** 잡아 둡니다.
+
+      예전에는 다 뽑은 뒤에야 `out.exists()` 를 보고 이름을 정했습니다. 영상 한 편은 몇 분이라,
+      그 사이에 들어온 다음 요청도 «비어 있다» 를 보고 같은 이름을 골랐고, 나중 것이 먼저 것을
+      덮었습니다. 임시 이름에도 작업 번호표를 섞습니다 — 고정 이름이면 두 작업이 서로 밟습니다.
+    */
+    let mut reserved = reserve_free_path(&out, out_dir, stem, &out_ext)?;
+    let final_path = reserved.path.clone();
+    let final_stem = final_path.file_stem().and_then(|n| n.to_str()).unwrap_or(stem);
+    let temp = out_dir.join(format!(".{final_stem}.생성중.{}.{out_ext}", job_tag()));
 
     let manifest = read_manifest(&app, &engine)?;
     let root = engine_dir(&app, &engine)?;
@@ -2661,19 +2756,13 @@ pub(crate) fn generate_blocking(
     if !temp.is_file() {
         return Err("결과 파일이 만들어지지 않았습니다.".into());
     }
-    // 덮어쓰기가 아니라 **비어 있는 자리에만** 놓습니다 — 생성은 늘 새 파일이라,
-    // 같은 이름이 있으면 번호를 올려 원본을 지키는 편이 맞습니다.
-    let final_path = if out.exists() {
-        next_numbered_path(out_dir, &safe_name(stem), &out_ext)
-    } else {
-        out.clone()
-    };
     if let Err(e) = fs::rename(&temp, &final_path) {
         return Err(format!(
             "결과 파일로 바꾸지 못했습니다: {e}. 만든 것은 여기 남겨 두었습니다 — {}",
             temp.display()
         ));
     }
+    reserved.keep();
     progress(&app, &engine, "run", Some(100.0), "받았습니다");
     // 첫 생성이 가중치를 받아 왔을 수 있습니다 — 카드의 크기가 그것을 따라가게 뒤에서 다시 잽니다.
     remeasure_disk_in_background(&app, &engine, DISK_REMEASURE_AFTER_RUN_SECS);

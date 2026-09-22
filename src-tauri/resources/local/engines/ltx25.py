@@ -18,7 +18,7 @@ import time
 
 import common
 
-_state = {"pipe": None, "mode": None, "loras": [], "precision": "bf16", "pose": False}
+_state = {"pipe": None, "mode": None, "loras": [], "plan": None, "pose": False}
 
 """이 모델을 bf16 그대로 올리는 데 필요한 VRAM(GB) — 정밀도를 고르는 잣대."""
 BF16_GB = 48.0
@@ -42,7 +42,10 @@ def _mode_of(opts):
 
 def load(root, opts):
     mode = _mode_of(opts)
-    if _state["pipe"] is not None and _state["mode"] == mode:
+    # 정밀도를 **먼저** 셈합니다 — 이미 올라가 있어도 사람이 정밀도를 바꿨으면 다시 올려야
+    # 합니다(로라만 다시 걸고 정밀도는 안 보던 자리). 판단은 `common.plan_precision` 한 곳.
+    plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"])
+    if _state["pipe"] is not None and _state["mode"] == mode and not plan["reload"]:
         _apply_loras(opts)
         return
     import diffusers
@@ -90,13 +93,7 @@ def load(root, opts):
     """
     repo = (os.environ.get("LTX25_REPO") or "").strip() or REPO
     # 이 GPU 에 bf16 이 안 들어가면 **정말로 줄여서** 올립니다.
-    plan = common.plan_precision(BF16_GB, opts)
-    _state["precision"] = plan["mode"]
-    common.log(
-        "{} 를 {} 로 올립니다 (VRAM {} GB · {}).".format(
-            repo, plan["mode"], plan["vram"], plan["why"]
-        )
-    )
+    common.log_precision(repo, plan)
     """
     `prompt_enhancer=None` — 저장소에 든 Gemma4 «프롬프트 다듬기» 모델(10 GB)은 우리가 안 씁니다
     (프롬프트는 앱이 이미 다듬어서 줍니다). 이렇게 빼 두면 diffusers 가 그 폴더를 **받지도
@@ -131,6 +128,7 @@ def load(root, opts):
     common.use_fast_attention(getattr(pipe, "transformer", None))
     _state["pipe"] = pipe
     _state["mode"] = mode
+    _state["plan"] = plan
     _state["loras"] = []
     _apply_loras(opts)
 
@@ -139,7 +137,7 @@ def unload():
     _state["pipe"] = None
     _state["mode"] = None
     _state["loras"] = []
-    _state["precision"] = "bf16"
+    _state["plan"] = None
     _state["pose"] = False
     common.free_vram()
 
@@ -326,13 +324,15 @@ def generate(output, opts, report):
     result = common.run_attention_safe(pipe, lambda: pipe(**kwargs))
     report(95, "mp4 로 내보내는 중")
     common.save_video(result.frames[0], output, fps)
-    return {
+    out = {
         "width": width,
         "height": height,
         "frames": frames,
         "fps": fps,
         "seconds_video": round(frames / float(fps), 2),
         "seed": seed,
-        "precision": _state["precision"],
         "generate_seconds": round(time.time() - started, 2),
     }
+    # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+    out.update(common.precision_fields(_state["plan"]))
+    return out

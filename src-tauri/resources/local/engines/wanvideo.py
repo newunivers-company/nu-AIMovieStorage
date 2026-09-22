@@ -24,7 +24,7 @@ import time
 
 import common
 
-_state = {"pipe": None, "mode": None, "loras": [], "precision": "bf16"}
+_state = {"pipe": None, "mode": None, "loras": [], "plan": None}
 
 """이 모델을 bf16 그대로 올리는 데 필요한 VRAM(GB) — 정밀도를 고르는 잣대."""
 """
@@ -76,7 +76,10 @@ def prefetch(root, report):
 
 def load(root, opts):
     mode = "i2v" if (opts.get("image") or "").strip() else "t2v"
-    if _state["pipe"] is not None and _state["mode"] == mode:
+    # 정밀도를 **먼저** 셈합니다 — 이미 올라가 있어도 사람이 정밀도를 바꿨으면 다시 올려야
+    # 합니다(로라만 다시 걸고 정밀도는 안 보던 자리). 판단은 `common.plan_precision` 한 곳.
+    plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"])
+    if _state["pipe"] is not None and _state["mode"] == mode and not plan["reload"]:
         _apply_loras(opts)
         return
     import diffusers
@@ -89,13 +92,7 @@ def load(root, opts):
     )
     repo = _repo(mode)
     # 이 GPU 에 bf16 이 안 들어가면 **정말로 줄여서** 올립니다.
-    plan = common.plan_precision(BF16_GB, opts)
-    _state["precision"] = plan["mode"]
-    common.log(
-        "{} 를 {} 로 올립니다 (VRAM {} GB · {}).".format(
-            repo, plan["mode"], plan["vram"], plan["why"]
-        )
-    )
+    common.log_precision(repo, plan)
     if plan["bits"]:
         # Wan 2.2 A14B 는 전문가가 **둘**입니다(`transformer` + `transformer_2`).
         # 하나만 줄이면 절반이 bf16 으로 남아 여전히 안 들어갑니다.
@@ -114,6 +111,7 @@ def load(root, opts):
     )
     _state["pipe"] = pipe
     _state["mode"] = mode
+    _state["plan"] = plan
     _state["loras"] = []
     _apply_loras(opts)
 
@@ -122,7 +120,7 @@ def unload():
     _state["pipe"] = None
     _state["mode"] = None
     _state["loras"] = []
-    _state["precision"] = "bf16"
+    _state["plan"] = None
     common.free_vram()
 
 
@@ -198,13 +196,15 @@ def generate(output, opts, report):
     result = common.run_attention_safe(pipe, lambda: pipe(**kwargs))
     report(95, "mp4 로 내보내는 중")
     common.save_video(result.frames[0], output, fps)
-    return {
+    out = {
         "width": width,
         "height": height,
         "frames": frames,
         "fps": fps,
         "seconds_video": round(frames / float(fps), 2),
         "seed": seed,
-        "precision": _state["precision"],
         "generate_seconds": round(time.time() - started, 2),
     }
+    # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+    out.update(common.precision_fields(_state["plan"]))
+    return out

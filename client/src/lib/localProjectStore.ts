@@ -2,6 +2,7 @@ import { coverOf } from "@/lib/projectCover";
 import { toast } from "sonner";
 import { migrateProjectLayout } from "@/lib/mediaLibrary";
 import { applyMovedPaths } from "@/lib/ownerFolders";
+import { PROJECT_SCHEMA_VERSION, migrateSavedProject } from "@/lib/projectMigrate";
 import {
   canUseProjectFiles,
   PROJECT_FILE_NAME,
@@ -32,6 +33,15 @@ export interface LocalProjectSummary {
 }
 
 export interface LocalProject extends LocalProjectSummary {
+  /**
+   * 저장 형식의 **판**. 없으면 판을 매기기 전의 저장본(0 판)입니다.
+   *
+   * 초안(`draft`) 안이 아니라 여기 둡니다 — 아래 「내용이 그대로면 쓰지 않습니다」 검사가
+   * 초안을 통째로 견주기 때문에, 판이 초안 안에 있으면 옛 저장본을 열기만 해도 전부
+   * «달라졌다» 가 되어 켤 때마다 작품 수만큼 파일 쓰기가 나갑니다. 자세한 까닭은
+   * `lib/projectMigrate.ts`.
+   */
+  schemaVersion?: number;
   draft: Record<string, unknown>;
 }
 
@@ -60,7 +70,9 @@ function readLocalStorage(): LocalProject[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const projects = raw ? JSON.parse(raw) : [];
-    return Array.isArray(projects) ? projects : [];
+    if (!Array.isArray(projects)) return [];
+    // 거울에도 옛 판이 남아 있습니다(폴더를 안 쓰는 브라우저 실행에서는 여기가 본체).
+    return projects.map((project: LocalProject) => migrateSavedProject(project, project?.id));
   } catch {
     return [];
   }
@@ -243,7 +255,9 @@ function adoptFromDisk(mine: LocalProject, contents: string | null | undefined):
     });
     return false;
   }
-  const fromDisk: LocalProject = { ...parsed, folder: folderFor(mine) };
+  // 되읽는 길도 목록 읽기와 **같은 판 올리기**를 거칩니다 — 한쪽만 올리면 같은 작품이
+  // 어느 길로 들어왔느냐에 따라 다른 모양이 됩니다.
+  const fromDisk: LocalProject = migrateSavedProject({ ...parsed, folder: folderFor(mine) }, mine.id);
   markReadFromDisk(fromDisk);
   const next = [fromDisk, ...currentProjects().filter((item) => item.id !== fromDisk.id)];
   cache = next;
@@ -352,7 +366,12 @@ export async function loadProjects(): Promise<LocalProject[]> {
           const parsed = JSON.parse(file.contents) as LocalProject;
           // 폴더 이름은 파일이 실제로 있던 자리를 그대로 씁니다.
           // 저장된 값과 폴더가 다르면 다음 저장이 엉뚱한 곳으로 갑니다.
-          return { ...parsed, folder: folderOf(file) };
+          //
+          // 판 올리기는 **읽는 이 자리 한 곳**에서 합니다 — 화면·`readProject` 는 전부 cache 를
+          // 거쳐 가므로, 여기서 한 번 올려 두면 읽는 쪽마다 다시 보정할 일이 없습니다.
+          // 여기서 올린 것을 곧바로 되쓰지는 않습니다(도장만 새로 찍는 쓰기는 상대 창의 다음
+          // 편집을 버리게 합니다). 다음 진짜 저장이 나갈 때 판이 함께 파일로 갑니다.
+          return migrateSavedProject({ ...parsed, folder: folderOf(file) }, file.relativePath);
         } catch {
           console.warn(`프로젝트 파일을 읽지 못했습니다: ${file.relativePath}`);
           return null;
@@ -591,6 +610,13 @@ function stageLocalProject(
 
   const project: LocalProject = {
     id,
+    /*
+      판은 **새로 쓰는 저장본에만** 찍습니다. 바로 위 「내용이 그대로면 쓰지 않습니다」 를
+      지나온 뒤라, 열기만 한 작품에는 판이 찍히지 않고 파일도 그대로 남습니다. 옛 판 파일은
+      다음 진짜 편집 때 판과 함께 갱신됩니다 — 판을 붙이겠다고 멀쩡한 파일을 되쓰면 그 사이
+      다른 창이 한 편집을 버리게 됩니다.
+    */
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     title: draft.title?.trim() || "Untitled project",
     genre: draft.genre || "",
     logline: draft.logline || "",

@@ -26,6 +26,254 @@ import { PANORAMA_DIR, SIX_FACES_DIR } from "@/lib/faceSets";
 
 const SETTINGS_KEY = "ai-video-storage.media-library.v1";
 
+/*
+  ── 웹뷰 저장소 바깥의 거울 ───────────────────────────────────────────────
+
+  **`localStorage` 는 origin 단위로 갈립니다.** 설치본과 개발 서버는 웹뷰 origin 이
+  달라서 저장소를 통째로 따로 씁니다. 그래서 설치하고 처음 열면 **저장 폴더부터 다시
+  잡아야** 했고(그전까지 프로젝트 목록이 텅 빈 채로 보입니다), BGM 기록도 안 보였습니다.
+  웹뷰 캐시를 비우는 일에도 같이 날아갑니다.
+
+  그래서 같은 값을 앱 데이터 폴더의 파일에 한 벌 더 둡니다(`read_app_settings` ·
+  `write_app_settings`). 역할을 나눠 두는 것이 요점입니다.
+
+  - `localStorage` — **화면이 곧장(동기로) 읽는 쪽.** `getMediaLibrarySettings()` 를
+    부르는 곳이 스무 곳이 넘고 대부분 렌더 도중이라, 이 함수는 비동기가 될 수 없습니다.
+  - 거울 파일 — **origin 을 건너 살아남는 쪽.** 앱을 켤 때 한 번 읽어 `localStorage`
+    를 채웁니다.
+
+  칸(섹션)마다 다루는 법이 달라서 «누가 어떻게 읽고 쓰는가» 는 그 칸을 둔 파일이
+  `registerMirrorSection` 으로 알려 줍니다. 여기 있는 것은 **거울 살림 한 벌**뿐입니다 —
+  칸마다 읽기·쓰기·시각 비교를 따로 적으면 한 칸만 규칙이 어긋난 판이 생깁니다.
+*/
+
+/**
+ * `localStorage` 쪽 값이 **언제 저장됐는지.**
+ *
+ * 둘 다 값을 들고 있을 때 «더 최근 것» 을 가리려면 양쪽에 시각이 있어야 합니다.
+ * 저장하는 값의 모양을 건드리지 않으려고 시각만 따로 둡니다 — 예전 저장본을
+ * 그대로 읽을 수 있어야 하고, 값 안에 시각을 끼워 넣으면 그 값을 쓰는 곳이
+ * 전부 모르는 칸을 하나씩 더 들고 다니게 됩니다.
+ */
+const MIRROR_STAMP_KEY = "ai-video-storage.mirror-saved-at.v1";
+
+/** 거울 파일 안의 칸 하나. */
+interface MirrorEntry {
+  /** 저장한 때(ms). */
+  savedAt: number;
+  value: unknown;
+}
+
+interface MirrorFile {
+  entries: Record<string, MirrorEntry>;
+}
+
+/** 거울에 칸을 둔 쪽이 알려 주는 «다루는 법». */
+export interface MirrorSectionSpec<T> {
+  /** 지금 `localStorage` 에 있는 값. 없으면 null. */
+  read(): T | null;
+  /** 거울에서 가져온 값을 `localStorage` 에 씁니다. */
+  write(value: T): void;
+  /**
+   * 양쪽에 값이 있을 때 하나로 만듭니다. **없으면 더 최근 쪽이 통째로 이깁니다.**
+   *
+   * 저장 폴더처럼 «하나를 고르는 값» 은 최근 것이 이기면 그만입니다. 그런데 BGM
+   * 기록처럼 **모음**은 한쪽이 통째로 이기면 다른 origin 에서 적은 곡이 사라집니다 —
+   * 그런 칸은 합치는 법을 같이 줍니다.
+   */
+  merge?(mine: T, theirs: T): T;
+}
+
+const mirrorSections = new Map<string, MirrorSectionSpec<unknown>>();
+
+/**
+ * 거울에 칸 하나를 겁니다. 모듈이 읽히는 때(모듈 최상위)에 부르세요.
+ *
+ * 늦게 건 칸도 곧바로 맞춰 줍니다 — 읽기가 이미 끝난 뒤에 등록되면(동적 import 로
+ * 늦게 읽히는 모듈) 그 칸만 조용히 안 채워지는 판이 생깁니다.
+ */
+export function registerMirrorSection<T>(section: string, spec: MirrorSectionSpec<T>) {
+  const stored = spec as unknown as MirrorSectionSpec<unknown>;
+  mirrorSections.set(section, stored);
+  if (settingsHydrated && isDesktopApp()) hydrateSection(section, stored);
+}
+
+/** 파일에서 읽어 둔 거울 한 벌. 쓸 때는 이것을 통째로 다시 씁니다. */
+let mirrorFile: MirrorFile = { entries: {} };
+
+function readMirrorStamps(): Record<string, number> {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = window.localStorage.getItem(MIRROR_STAMP_KEY);
+    return saved ? (JSON.parse(saved) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMirrorStamp(section: string, savedAt: number) {
+  if (typeof window === "undefined") return;
+  try {
+    const stamps = readMirrorStamps();
+    stamps[section] = savedAt;
+    window.localStorage.setItem(MIRROR_STAMP_KEY, JSON.stringify(stamps));
+  } catch {
+    // 저장소를 못 쓰면 시각만 없는 것입니다 — 거울은 그래도 돕니다(«없으면 0»).
+  }
+}
+
+/** 파일 쓰기를 한 줄로 세웁니다. 두 칸이 같은 순간에 저장하면 뒤엣것이 앞엣것을 지웁니다. */
+let mirrorWrites: Promise<void> = Promise.resolve();
+
+/**
+ * 거울 파일에 한 칸을 씁니다. 화면을 기다리게 하지 않으려고 줄에 세우기만 합니다.
+ *
+ * `localStorage` 쪽은 부르는 쪽이 이미 썼다고 봅니다 — 여기서 같이 쓰면 «어느 쪽이
+ * 진짜인가» 가 두 군데가 됩니다.
+ */
+export function queueMirrorWrite(section: string, value: unknown, savedAt = Date.now()) {
+  writeMirrorStamp(section, savedAt);
+  mirrorFile.entries[section] = { savedAt, value };
+  if (!isDesktopApp()) return;
+  mirrorWrites = mirrorWrites
+    // **다 읽기 전에 쓰면 아직 못 읽은 칸을 지웁니다.** 읽기가 끝난 뒤에 줄을 섭니다.
+    .then(() => appSettingsReady)
+    .then(() => invoke("write_app_settings", { contents: JSON.stringify(mirrorFile) }))
+    .then(() => undefined)
+    // 못 써도 앱은 그대로 돕니다. 거울이 낡을 뿐입니다.
+    .catch(() => undefined);
+}
+
+/** 거울을 다 읽었는가. 읽기 전에는 `localStorage` 가 비어 있어도 «없다» 고 단정할 수 없습니다. */
+let settingsHydrated = false;
+/** 다 읽기 전에 «폴더 없음» 을 읽어 간 곳이 있는가(아래 `recoverFromEmptyRender`). */
+let readEmptyBeforeHydration = false;
+
+function applyFromMirror(section: string, spec: MirrorSectionSpec<unknown>, value: unknown, savedAt: number) {
+  try {
+    spec.write(value);
+  } catch {
+    return;
+  }
+  writeMirrorStamp(section, savedAt);
+}
+
+/**
+ * 칸 하나를 파일과 맞춥니다. **값을 잃지 않는 것이 첫째입니다.**
+ *
+ * - 파일에 없고 여기에만 있으면 → **그것을 파일로 올려 둡니다**(옮기는 중인 사용자).
+ * - 여기에 없고 파일에만 있으면 → 파일 것을 받습니다(새 origin — 이게 고치려던 증상입니다).
+ * - 둘 다 있으면 → 합치는 법이 있으면 합치고, 없으면 **더 최근 것**이 이깁니다.
+ *
+ * 시각이 없는 옛 저장본은 0으로 봅니다. 그 값은 이 거울이 생기기 전에 적힌 것이고,
+ * 파일에 적힌 것은 생긴 뒤에 적힌 것이라 실제로 더 나중입니다.
+ */
+function hydrateSection(section: string, spec: MirrorSectionSpec<unknown>) {
+  let mine: unknown = null;
+  try {
+    mine = spec.read();
+  } catch {
+    mine = null;
+  }
+  const theirs = mirrorFile.entries[section];
+  const mineAt = readMirrorStamps()[section] ?? 0;
+
+  if (!theirs) {
+    if (mine !== null) queueMirrorWrite(section, mine, mineAt || Date.now());
+    return;
+  }
+  if (mine === null) {
+    applyFromMirror(section, spec, theirs.value, theirs.savedAt);
+    return;
+  }
+  if (spec.merge) {
+    const merged = spec.merge(mine, theirs.value);
+    const mergedText = JSON.stringify(merged);
+    // 달라진 쪽만 씁니다 — 켤 때마다 양쪽을 쓰면 안 바뀐 목록도 새로 그려집니다.
+    if (mergedText !== JSON.stringify(mine)) applyFromMirror(section, spec, merged, Date.now());
+    if (mergedText !== JSON.stringify(theirs.value)) queueMirrorWrite(section, merged, Date.now());
+    return;
+  }
+  if (theirs.savedAt > mineAt) applyFromMirror(section, spec, theirs.value, theirs.savedAt);
+  else if (JSON.stringify(mine) !== JSON.stringify(theirs.value))
+    queueMirrorWrite(section, mine, mineAt || Date.now());
+}
+
+/** 거울 파일을 읽어 `localStorage` 를 채웁니다. 앱을 켤 때 한 번. */
+async function hydrateAppSettings(): Promise<void> {
+  if (typeof window === "undefined" || !isDesktopApp()) return;
+
+  let text: string | null = null;
+  try {
+    text = await invoke<string | null>("read_app_settings");
+  } catch {
+    // 못 읽으면 `localStorage` 만으로 갑니다 — 거울은 «있으면 좋은 것» 입니다.
+    return;
+  }
+  if (text) {
+    try {
+      const parsed = JSON.parse(text) as MirrorFile;
+      if (parsed && typeof parsed === "object" && parsed.entries) mirrorFile = { entries: parsed.entries };
+    } catch {
+      // 깨진 파일은 없는 셈 칩니다. 다음 저장에서 성한 것으로 다시 씁니다.
+    }
+  }
+
+  for (const [section, spec] of mirrorSections) hydrateSection(section, spec);
+}
+
+/** 새로 그리기를 이번 실행에 이미 한 번 했다는 표. */
+const RELOAD_GUARD_KEY = "ai-video-storage.settings-recovered.v1";
+
+/**
+ * **«폴더 없음» 으로 먼저 그려졌다면 한 번만 다시 그립니다.**
+ *
+ * 거울 읽기는 비동기라, 화면이 먼저 그려지고 그때 저장 폴더가 아직 비어 있으면
+ * 프로젝트 목록이 **텅 빈 채로** 나옵니다. 뒤늦게 채워 봐야 이미 읽어 간 곳은
+ * 다시 읽지 않아서, 사람 눈에는 「깔고 열었더니 작품이 다 사라졌다」 로 보입니다.
+ *
+ * 대개는 거울 읽기(작은 파일 하나)가 첫 목록 읽기보다 먼저 끝나서 여기까지 오지
+ * 않습니다. **정말 늦은 때만** 새로 그립니다 — 이 길은 origin 하나에서 딱 한 번,
+ * 앱을 켠 직후에만 지나갑니다(그다음부터는 `localStorage` 에 값이 있습니다).
+ *
+ * 되돌기를 도는 일이 없게 이번 실행에 한 번 지났다는 표를 남깁니다.
+ */
+function recoverFromEmptyRender() {
+  if (!readEmptyBeforeHydration) return;
+  if (!getMediaLibrarySettings().baseDirectory.trim()) return;
+  try {
+    if (window.sessionStorage.getItem(RELOAD_GUARD_KEY)) return;
+    window.sessionStorage.setItem(RELOAD_GUARD_KEY, "1");
+  } catch {
+    // 표를 못 남기면 새로 그리지 않습니다. 되돌기를 도는 것보다 한 번 더 누르는 편이 낫습니다.
+    return;
+  }
+  window.location.reload();
+}
+
+/**
+ * 거울을 다 읽을 때까지 기다립니다.
+ *
+ * **모듈이 읽히는 때 시작합니다** — 화면이 그려지기 전에 출발해야 «폴더 없음» 으로
+ * 먼저 그려지는 일이 줄어듭니다. 칸을 등록하는 쪽(BGM 기록)이 이 파일보다 늦게
+ * 읽힐 수 있어서, 모듈이 전부 읽히고 난 **다음 첫 틈**에 시작합니다.
+ */
+const appSettingsReady: Promise<void> = new Promise<void>((resolve) => {
+  queueMicrotask(() => {
+    void hydrateAppSettings()
+      .catch(() => undefined)
+      .then(() => {
+        settingsHydrated = true;
+        resolve();
+        recoverFromEmptyRender();
+      });
+  });
+});
+
+export function whenAppSettingsReady(): Promise<void> {
+  return appSettingsReady;
+}
+
 export interface MediaLibrarySettings {
   /** 작업 결과를 모아 두는 폴더. 비어 있으면 아직 안 고른 것입니다. */
   baseDirectory: string;
@@ -33,18 +281,49 @@ export interface MediaLibrarySettings {
 
 export function getMediaLibrarySettings(): MediaLibrarySettings {
   if (typeof window === "undefined") return { baseDirectory: "" };
+  let settings: MediaLibrarySettings = { baseDirectory: "" };
   try {
     const saved = window.localStorage.getItem(SETTINGS_KEY);
-    return saved ? { baseDirectory: "", ...JSON.parse(saved) } : { baseDirectory: "" };
+    if (saved) settings = { baseDirectory: "", ...JSON.parse(saved) };
   } catch {
-    return { baseDirectory: "" };
+    settings = { baseDirectory: "" };
   }
+  /*
+    거울을 아직 못 읽었는데 «폴더 없음» 을 내준 것은 **모른다고 답한 것**입니다.
+    다 읽은 뒤에 폴더가 나오면 그때 화면을 한 번 새로 그립니다(`recoverFromEmptyRender`).
+  */
+  if (!settingsHydrated && !settings.baseDirectory.trim() && isDesktopApp())
+    readEmptyBeforeHydration = true;
+  return settings;
 }
 
 export function saveMediaLibrarySettings(settings: MediaLibrarySettings) {
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  // 설치본·개발 서버가 저장소를 따로 쓰므로 파일에도 같이 둡니다.
+  queueMirrorWrite(MEDIA_LIBRARY_SECTION, settings);
   void allowStorageDirectory();
 }
+
+/** 거울 안에서 저장 폴더 설정이 앉는 칸 이름. */
+const MEDIA_LIBRARY_SECTION = "mediaLibrary";
+
+registerMirrorSection<MediaLibrarySettings>(MEDIA_LIBRARY_SECTION, {
+  read: () => {
+    if (typeof window === "undefined") return null;
+    const saved = window.localStorage.getItem(SETTINGS_KEY);
+    if (!saved) return null;
+    // 옛 저장본에 칸이 빠져 있을 수 있어 기본값을 깔고 덮습니다.
+    const parsed: MediaLibrarySettings = {
+      baseDirectory: "",
+      ...(JSON.parse(saved) as Partial<MediaLibrarySettings>),
+    };
+    // 폴더를 안 고른 것은 «값이 없는 것» 과 같습니다 — 빈 값이 파일의 진짜 폴더를 이기면 안 됩니다.
+    return parsed.baseDirectory.trim() ? parsed : null;
+  },
+  write: (value) => {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(value));
+  },
+});
 
 /**
  * 저장 폴더를 asset 프로토콜에 열어 줍니다.
@@ -55,6 +334,12 @@ export function saveMediaLibrarySettings(settings: MediaLibrarySettings) {
  */
 export async function allowStorageDirectory(): Promise<void> {
   if (!isDesktopApp()) return;
+  /*
+    거울을 먼저 기다립니다. 설치하고 처음 열면 `localStorage` 가 비어 있어서, 안 기다리면
+    폴더를 «없다» 고 보고 그냥 돌아갑니다 — 그 뒤 거울로 폴더가 채워져도 허용은 안 걸려
+    있어서 썸네일이 전부 깨진 그림으로 뜹니다.
+  */
+  await appSettingsReady;
   const directory = getMediaLibrarySettings().baseDirectory.trim();
   if (!directory) return;
   await invoke("allow_storage_directory", { directory }).catch(() => null);

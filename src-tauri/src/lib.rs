@@ -38,6 +38,8 @@ mod magnific;
 mod local;
 mod lora;
 mod magnific_mcp;
+/// 지운 것을 곧바로 없애지 않고 `.휴지통/` 에 한 단계 둡니다.
+mod trash;
 mod upscale;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +120,7 @@ fn owner_dir_name(name: &str) -> Res<String> {
     Ok(cleaned)
 }
 
-fn project_root(base_directory: &str, project_name: &str) -> PathBuf {
+pub(crate) fn project_root(base_directory: &str, project_name: &str) -> PathBuf {
     Path::new(base_directory).join(safe_name(project_name))
 }
 
@@ -522,6 +524,11 @@ fn list_reference_files(
 ///
 /// 화면에서 뺐는데 폴더에 남아 있으면, 다음에 폴더를 읽을 때 되살아납니다.
 /// 그래서 화면에서 빼는 것과 파일을 지우는 것이 늘 같이 가야 합니다.
+///
+/// 다만 **곧바로 없애지는 않습니다.** 화면에서 빼는 일과 프로젝트 저장이 따로 돌아서,
+/// 저장이 실패하면 «목록에는 남아 있는데 파일은 없는» 상태가 됩니다. `.휴지통/` 으로
+/// 옮겨 두면 `restore_project_media_file` 로 되돌릴 수 있고, 정말 없애는 것은
+/// 며칠 뒤 `empty_project_trash` 가 합니다.
 #[tauri::command]
 fn delete_project_media_file(
     base_directory: String,
@@ -533,7 +540,8 @@ fn delete_project_media_file(
     if !extension_allowed(&target) {
         return Err("지울 수 있는 종류의 파일이 아닙니다.".into());
     }
-    fs::remove_file(&target).map_err(|e| err("파일을 지우지 못했습니다", e))
+    trash::move_to_trash(&root, &target)?;
+    Ok(())
 }
 
 /// 캐릭터·배경 이름이 바뀌면 폴더 이름도 따라갑니다.
@@ -707,7 +715,7 @@ fn stem_base(stem: &str) -> &str {
 /// 윈도우가 «이미 있음» 으로 막습니다.
 ///
 /// 돌려주는 것은 실제로 놓인 자리입니다.
-fn rename_file_safely(from: &Path, to: &Path) -> Res<PathBuf> {
+pub(crate) fn rename_file_safely(from: &Path, to: &Path) -> Res<PathBuf> {
     if from == to {
         return Ok(from.to_path_buf());
     }
@@ -741,8 +749,9 @@ fn rename_file_safely(from: &Path, to: &Path) -> Res<PathBuf> {
 /// 이름 바꾸기의 사정거리를 인물 폴더로 좁히려고 `magnific/`·`storyboard/`·`composition/`
 /// 에는 들어가지 않습니다. 인물 폴더 안에 있을 일은 없지만, 후보함은 마그니픽이
 /// 동기화하는 자리라 우리가 이름을 바꾸면 안 되고, 컷·구도 산출물은 인물 것이 아닙니다.
+/// 휴지통도 건너뜁니다 — 지운 것의 이름을 따라 바꾸면 되살렸을 때 옛 이름으로 돌아옵니다.
 fn collect_owner_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    const SKIP: &[&str] = &["magnific", "storyboard", "composition"];
+    const SKIP: &[&str] = &["magnific", "storyboard", "composition", trash::DIR];
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -911,11 +920,16 @@ fn rename_owner_tree(
 }
 
 /// 폴더 아래 파일을 전부 모읍니다 (한 층 더 들어간 `ref/` 까지).
+///
+/// 휴지통은 들어가지 않습니다. 지운 것이 목록에 딸려 오면 되살아난 것처럼 보입니다.
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
+            if entry.file_name().to_string_lossy().as_ref() == trash::DIR {
+                continue;
+            }
             collect_files(&path, out);
         } else if path.is_file() {
             out.push(path);
@@ -955,7 +969,9 @@ fn delete_asset_owner(
         return Ok(None);
     }
     let dir = ensure_inside(&root, &dir)?;
-    fs::remove_dir_all(&dir).map_err(|e| err("폴더를 지우지 못했습니다", e))?;
+    // 인물 폴더도 곧바로 없애지 않습니다. 한 사람의 시트·변형·에셋이 통째로 들어 있어서,
+    // 잘못 눌렀을 때 잃는 것이 가장 큽니다. 파일 하나와 같은 길(`.휴지통/`)로 보냅니다.
+    trash::move_to_trash(&root, &dir)?;
     Ok(Some(dir.to_string_lossy().to_string()))
 }
 
@@ -1360,6 +1376,12 @@ pub fn run() {
             datafiles::list_project_data,
             datafiles::list_data_files,
             datafiles::list_sub_folders,
+            // 앱 설정 거울 — 웹뷰 저장소는 설치본과 개발 서버가 따로 써서 설치하면 비어 있습니다.
+            datafiles::read_app_settings,
+            datafiles::write_app_settings,
+            // 지운 원본은 곧바로 없애지 않고 프로젝트 폴더 안 휴지통으로 옮깁니다.
+            trash::restore_project_media_file,
+            trash::empty_project_trash,
             datafiles::list_markdown_files,
             datafiles::save_markdown_file,
             datafiles::delete_markdown_file,

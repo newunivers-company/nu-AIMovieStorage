@@ -264,15 +264,43 @@ def vram_gb():
     return round(total / (1024 ** 3), 1)
 
 
-def plan_precision(bf16_gb, opts=None):
-    """이 GPU 에서 **어떤 정밀도로 올릴지** 정합니다.
+#: 가중치 말고도 텍스트 인코더·VAE·중간값이 함께 올라갑니다. VRAM 을 이만큼 나눈 것이
+#: «실제로 모델이 앉을 수 있는 자리» 입니다 — 그냥 VRAM 과 견주면 아슬아슬하게 들어간다고
+#: 보고는 첫 생성의 최고점에서 터집니다.
+PRECISION_HEADROOM = 1.25
+#: int8 은 bf16 의 절반쯤을 씁니다. 그 절반이 들어가면 int8 로 내려갑니다.
+INT8_FRACTION = 2.0
+#: 정밀도 사다리 — 왼쪽이 원본, 오른쪽으로 갈수록 작고 거칩니다.
+PRECISION_LADDER = ("bf16", "int8", "int4")
+#: 정밀도 이름 → 양자화 비트(0 은 «줄이지 않음»).
+PRECISION_BITS = {"bf16": 0, "int8": 8, "int4": 4}
 
-    여태는 **아니었습니다.** 화면에 «줄이면 됩니다» 라고 적어만
-    두고 실제로는 늘 원본을 받아 CPU 오프로드로 버텼습니다. 오프로드는 «안 죽게» 해 줄
-    뿐이라 24 GB 카드에서 26 GB 짜리를 돌리면 블록이 계속 오가며 몇 배로 느려집니다.
 
-    여기서 진짜로 고릅니다. 판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과
-    torch 가 보는 값이 다를 수 있고(여러 장·MIG), 실제로 올리는 쪽이 torch 니까요.
+def _nearest_precision(wanted, supported):
+    """엔진이 실제로 할 수 있는 것 중 `wanted` 에 가장 가까운 것.
+
+    **작은 쪽을 먼저** 봅니다 — 못 줄여서 안 도는 것보다, 더 줄여서라도 도는 편이 낫습니다.
+    작은 쪽에 아무것도 없으면 그제야 큰 쪽으로 올라갑니다.
+    """
+    order = list(PRECISION_LADDER)
+    start = order.index(wanted)
+    for mode in order[start:] + list(reversed(order[:start])):
+        if mode in supported:
+            return mode
+    return wanted
+
+
+def plan_precision(bf16_gb, opts=None, loaded=None, supported=None):
+    """이 GPU 에서 **어떤 정밀도로 올릴지**, 그리고 **다시 올려야 하는지** 정합니다.
+
+    여태는 화면에 «줄이면 됩니다» 라고 적어만 두고 실제로는 늘 원본을 받아 CPU 오프로드로
+    버텼습니다. 오프로드는 «안 죽게» 해 줄 뿐이라 24 GB 카드에서 26 GB 짜리를 돌리면
+    블록이 계속 오가며 몇 배로 느려집니다. 여기서 진짜로 고릅니다.
+
+    판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과 torch 가 보는 값이 다를 수
+    있고(여러 장·MIG), 실제로 올리는 쪽이 torch 니까요. 화면 쪽에는 같은 공식을 옮긴
+    `client/src/lib/localEngines.ts` 의 `planPrecision` 이 있고, **두 벌이 어긋나면
+    `precisionPolicy.test.ts` 가 이 파일의 상수를 직접 읽어 잡습니다.**
 
       · 넉넉하면            bf16 그대로
       · 8비트로 들어가면    int8  (품질 손실이 거의 없습니다)
@@ -280,22 +308,80 @@ def plan_precision(bf16_gb, opts=None):
 
     `opts.precision` 으로 사람이 못 박을 수 있습니다("bf16"·"int8"·"int4"·"auto").
     자동 판단이 틀릴 때(다른 프로그램이 VRAM 을 쥐고 있을 때 등) 손으로 내리라고 둔 길입니다.
-    """
-    wanted = str((opts or {}).get("precision") or "auto").lower()
-    have = vram_gb()
-    if wanted in ("bf16", "int8", "int4"):
-        return {"mode": wanted, "bits": {"bf16": 0, "int8": 8, "int4": 4}[wanted], "vram": have, "why": "사람이 고름"}
-    if have <= 0:
-        # CPU 뿐이면 양자화가 오히려 느립니다(bitsandbytes 는 CUDA 전용).
-        return {"mode": "bf16", "bits": 0, "vram": have, "why": "GPU 없음"}
 
-    # 가중치 말고도 텍스트 인코더·VAE·중간값이 올라갑니다. 1.25배쯤 잡아야 실제로 들어갑니다.
-    room = have / 1.25
-    if room >= bf16_gb:
-        return {"mode": "bf16", "bits": 0, "vram": have, "why": "넉넉함"}
-    if room >= bf16_gb / 2.0:
-        return {"mode": "int8", "bits": 8, "vram": have, "why": "bf16 이 안 들어감"}
-    return {"mode": "int4", "bits": 4, "vram": have, "why": "int8 도 안 들어감"}
+    `supported` 는 **그 엔진이 실제로 올릴 수 있는 정밀도**입니다(모듈러 파이프라인처럼 아직
+    양자화 길이 없는 엔진이 있습니다). 못 하는 것을 고르면 여기서 할 수 있는 것으로 내려
+    잡습니다 — 그래야 결과에 적히는 값이 «정말로 올라간 것» 이 됩니다.
+
+    `loaded` 에 **지금 올라가 있는 정밀도**(모드 문자열이나 지난번 plan)를 주면 `reload` 로
+    «내리고 다시 올려야 하는가» 를 함께 돌려줍니다. 이 판단이 엔진마다 흩어져 있으면
+    한 엔진만 빠뜨립니다 — 실제로 로라는 바뀌면 다시 걸면서 정밀도는 아무 엔진도 안 봐서,
+    사람이 bf16 → int4 로 내려도 앞서 올린 것이 그대로 돌았습니다.
+    """
+    requested = str((opts or {}).get("precision") or "auto").lower()
+    if requested not in PRECISION_LADDER:
+        requested = "auto"
+    have = vram_gb()
+
+    if requested != "auto":
+        wanted, why = requested, "사람이 고름"
+    elif have <= 0:
+        # CPU 뿐이면 양자화가 오히려 느립니다(bitsandbytes 는 CUDA 전용).
+        wanted, why = "bf16", "GPU 없음"
+    else:
+        room = have / PRECISION_HEADROOM
+        if room >= bf16_gb:
+            wanted, why = "bf16", "넉넉함"
+        elif room >= bf16_gb / INT8_FRACTION:
+            wanted, why = "int8", "bf16 이 안 들어감"
+        else:
+            wanted, why = "int4", "int8 도 안 들어감"
+
+    mode = wanted
+    if supported and mode not in supported:
+        mode = _nearest_precision(wanted, supported)
+        why = "{} 로 가고 싶지만 이 엔진은 {} 까지입니다".format(wanted, "·".join(supported))
+
+    if isinstance(loaded, dict):
+        loaded = loaded.get("mode")
+    changed = bool(loaded) and loaded != mode
+    if changed:
+        log("정밀도가 {} → {} 로 바뀌었습니다. 올라가 있는 것을 내리고 다시 올립니다.".format(loaded, mode))
+    return {
+        "mode": mode,
+        "bits": PRECISION_BITS[mode],
+        # 규칙이 고른 값. `mode` 와 다르면 엔진이 그것을 못 해서 내려 잡은 것입니다.
+        "wanted": wanted,
+        # 사람이 고른 값("auto" 면 맡긴 것). 화면이 «요청» 과 «실제» 를 구분해 보여 줍니다.
+        "requested": requested,
+        "vram": have,
+        "bf16_gb": bf16_gb,
+        "why": why,
+        "reload": changed,
+    }
+
+
+def log_precision(what, plan):
+    """«무엇을 어떤 정밀도로 올리는가» 한 줄. 엔진마다 적으면 한 곳만 모양이 달라집니다."""
+    log("{} 를 {} 로 올립니다 (VRAM {} GB · {}).".format(what, plan["mode"], plan["vram"], plan["why"]))
+
+
+def precision_fields(plan):
+    """생성 결과에 실을 정밀도 값 — 화면이 «요청한 설정» 과 «실제로 올라간 설정» 을 구분해
+    보여 줄 수 있게 합니다.
+
+    「왜 이번엔 결이 다르지」 와 「int4 로 내렸는데 왜 안 빨라지지」 의 답이 여기 있습니다.
+    이름을 엔진마다 적으면 한쪽만 고치는 날이 오므로 한 곳에서 만듭니다.
+    """
+    plan = plan or {}
+    mode = plan.get("mode", "bf16")
+    return {
+        "precision": mode,
+        "precision_requested": plan.get("requested", "auto"),
+        "precision_planned": plan.get("wanted", mode),
+        "precision_why": plan.get("why", ""),
+        "vram_gb": plan.get("vram", 0),
+    }
 
 
 def quantized_transformers(repo, dtype, bits, extra=()):

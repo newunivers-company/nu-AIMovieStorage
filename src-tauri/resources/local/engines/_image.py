@@ -36,7 +36,8 @@ class ImageEngine(object):
         # 이 모델을 bf16 그대로 올리는 데 필요한 VRAM(GB). 정밀도를 고르는 잣대입니다.
         self.bf16_gb = bf16_gb
         self.pipe = None
-        self.precision = "bf16"
+        # 지금 올라가 있는 것의 정밀도 계획. 없으면 아무것도 안 올라가 있다는 뜻입니다.
+        self.plan = None
         self.loaded_loras = []
 
     # ── 살림 ────────────────────────────────────────────────────────────
@@ -44,29 +45,26 @@ class ImageEngine(object):
         return {"repo": self.repo, "notes": self.notes, "bf16_gb": self.bf16_gb}
 
     def load(self, root, opts):
-        if self.pipe is not None:
+        """**이 GPU 에 맞는 정밀도로 올립니다.**
+
+        정밀도를 먼저 셈하는 까닭: 이미 올라가 있어도 **사람이 정밀도를 바꿨으면 다시
+        올려야** 합니다. 여태는 로라만 다시 걸고 정밀도는 보지 않아서, bf16 → int4 로
+        내려도 앞서 올린 것이 그대로 돌았습니다(판단은 `common.plan_precision` 한 곳).
+        """
+        plan = common.plan_precision(self.bf16_gb, opts, loaded=self.plan)
+        if self.pipe is not None and not plan["reload"]:
             self._apply_loras(opts)
             return
+        if self.pipe is not None:
+            # 새것을 올리기 **전에** 내립니다. 안 그러면 두 벌이 잠깐 VRAM 에 겹쳐 터집니다.
+            self.unload()
         import diffusers
         import torch  # noqa: F401  (device_and_dtype 가 씁니다)
 
         common.use_engine_cache(root)
         device, dtype = common.device_and_dtype()
         pipeline_class = getattr(diffusers, self.pipeline_name)
-        """
-        **이 GPU 에 맞는 정밀도로 올립니다.**
-
-        여태는 아니었습니다. 늘 bf16 원본을 올리고 CPU 오프로드로 버텼는데,
-        오프로드는 «안 죽게» 해 줄 뿐이라 24 GB 카드에서 26 GB 짜리를 돌리면 블록이 계속
-        오가며 몇 배로 느려집니다. 이제 안 들어가면 **정말로 줄여서** 올립니다.
-        """
-        plan = common.plan_precision(self.bf16_gb, opts)
-        self.precision = plan["mode"]
-        common.log(
-            "{} 를 {} 로 올립니다 (VRAM {} GB · {}).".format(
-                self.repo, plan["mode"], plan["vram"], plan["why"]
-            )
-        )
+        common.log_precision(self.repo, plan)
         if plan["bits"]:
             transformer = common.quantized_component(self.repo, dtype, plan["bits"])
             pipe = pipeline_class.from_pretrained(
@@ -85,11 +83,13 @@ class ImageEngine(object):
             getattr(pipe, "transformer", None), getattr(pipe, "unet", None)
         )
         self.pipe = pipe
+        self.plan = plan
         self.loaded_loras = []
         self._apply_loras(opts)
 
     def unload(self):
         self.pipe = None
+        self.plan = None
         self.loaded_loras = []
         common.free_vram()
 
@@ -170,16 +170,17 @@ class ImageEngine(object):
         result = common.run_attention_safe(self.pipe, lambda: self.pipe(**kwargs))
         image = result.images[0]
         image.save(output)
-        return {
+        out = {
             "width": image.width,
             "height": image.height,
             "seed": seed,
             "steps": steps,
-            # 어떤 정밀도로 돌았는지 결과에 남깁니다 — 「왜 이번엔 결이 다르지」 의 답이 여기 있습니다.
-            "precision": self.precision,
             "generate_seconds": round(time.time() - started, 2),
             # 프롬프트가 한도를 넘었는지 — 화면이 「뒤쪽이 잘렸을 수 있습니다」 를 말해 줄 근거.
             "prompt_words": words,
             "prompt_budget": budget,
             "prompt_overflow": rough_tokens > budget,
         }
+        # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+        out.update(common.precision_fields(self.plan))
+        return out

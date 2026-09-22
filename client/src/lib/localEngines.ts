@@ -7,7 +7,7 @@ import { isEngineIncluded } from "@/lib/edition";
 /**
  * 로컬 생성 엔진 — 프런트 쪽.
  *
- * 로컬 모델은 컴피UI 를 거치지 않고 업스케일 엔진처럼 앱이 직접 돌립니다.
+ *
  *
  * 살림(설치·워커·취소·제거)은 업스케일 엔진과 **같은 Rust 코드**를 씁니다
  * (`src-tauri/src/upscale.rs` 의 `Family`). 이 파일은 `upscale.ts` 와 같은 모양의
@@ -16,8 +16,9 @@ import { isEngineIncluded } from "@/lib/edition";
  *
  * # 미니맥스를 씁니다
  *
- * **MiniMax-H3**(영상+오디오)와 **MiniMax-Music3** 가 오픈 웨이트로 공개돼 diffusers 로
- * 바로 돕니다. 컴피UI 를 거치지 않고 우리가 직접 돌립니다.
+ * 맞습니다. **MiniMax-H3**
+ * (영상+오디오, 2026-08-03)와 **MiniMax-Music3**(2026-08-13)가 오픈 웨이트로 공개됐고
+ * diffusers 로 바로 돕니다. 컴피UI 를 거치지 않고 우리가 직접 돌립니다.
  *
  * Wan·ACE-Step 은 **가벼운 대안**으로 남깁니다. H3 는 bf16 기준 125 GB 짜리라 int8 로
  * 줄여도 호스트 RAM 이 75 GB 쯤 있어야 합니다. 그 문턱에 못 미치는 기계에서도 뭔가는
@@ -63,6 +64,61 @@ export const LOCAL_ENGINE_IDS: LocalEngineId[] = (
   ] as LocalEngineId[]
 ).filter(isEngineIncluded);
 
+/* ────────────────────────── 정밀도 규칙(워커와 한 벌) ────────────────────────── */
+
+/**
+ * **판단은 워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과 torch 가 보는 값이 다를 수
+ * 있고(여러 장·MIG), 실제로 모델을 올리는 쪽이 torch 니까요. 아래는 그 규칙을 화면이
+ * **미리 보여 주려고** 옮겨 적은 것입니다(`src-tauri/resources/local/common.py`).
+ *
+ * 옮겨 적은 것이라 어긋날 수 있어서, `precisionPolicy.test.ts` 가 파이썬 파일의 상수와
+ * 공식을 직접 읽어 견줍니다. 한쪽만 고치면 시험이 멈춥니다.
+ */
+
+/** 가중치 말고도 텍스트 인코더·VAE·중간값이 함께 올라갑니다 — VRAM 을 이만큼 나눠 봅니다. */
+export const PRECISION_HEADROOM = 1.25;
+/** int8 은 bf16 의 절반쯤을 씁니다. */
+export const INT8_FRACTION = 2;
+/** 정밀도 사다리 — 왼쪽이 원본, 오른쪽으로 갈수록 작고 거칩니다. */
+export const PRECISION_LADDER = ["bf16", "int8", "int4"] as const;
+
+/** 실제로 모델이 올라가는 정밀도(«자동» 은 아직 고르지 않은 상태라 여기 없습니다). */
+export type EnginePrecision = (typeof PRECISION_LADDER)[number];
+
+/**
+ * 이 크기의 모델을 이 VRAM 에 올리면 **어떤 정밀도가 되는가** — 워커의 `plan_precision`
+ * 과 같은 공식입니다.
+ *
+ * GPU 를 못 읽었거나 없으면 bf16 입니다 — CPU 뿐이면 양자화가 오히려 느립니다
+ * (bitsandbytes 는 CUDA 전용).
+ */
+export function planPrecision(bf16Gb: number, vramGb: number): EnginePrecision {
+  if (!(vramGb > 0)) return "bf16";
+  const room = vramGb / PRECISION_HEADROOM;
+  if (room >= bf16Gb) return "bf16";
+  if (room >= bf16Gb / INT8_FRACTION) return "int8";
+  return "int4";
+}
+
+/**
+ * 엔진이 실제로 할 수 있는 것 중 `wanted` 에 가장 가까운 것.
+ *
+ * **작은 쪽을 먼저** 봅니다 — 못 줄여서 안 도는 것보다, 더 줄여서라도 도는 편이 낫습니다.
+ * (워커의 `_nearest_precision` 과 같은 차례여야 합니다.)
+ */
+export function clampPrecision(
+  wanted: EnginePrecision,
+  supported?: EnginePrecision[],
+): EnginePrecision {
+  if (!supported || supported.length === 0 || supported.includes(wanted)) return wanted;
+  const order = [...PRECISION_LADDER];
+  const start = order.indexOf(wanted);
+  for (const mode of [...order.slice(start), ...order.slice(0, start).reverse()]) {
+    if (supported.includes(mode)) return mode;
+  }
+  return wanted;
+}
+
 export interface LocalEngineInfo {
   id: LocalEngineId;
   kind: LocalEngineKind;
@@ -78,7 +134,7 @@ export interface LocalEngineInfo {
   /**
    * **동작을 그대로 옮길 수 있는가**(컨트롤넷·포즈 조건).
    *
-   * 모캡 영상을 옮겨 쓰려면 엔진에 컨트롤넷이 붙어 있어야 합니다.
+   *
    *
    * 아무 모델에나 뼈 그림을 준다고 따라 그리지 않습니다 — **그 조건을 학습한 가지**가
    * 따로 있어야 합니다. 없는 엔진에 주면 조용히 무시되고, 사람은 「왜 안 따라 하지」 를
@@ -88,22 +144,70 @@ export interface LocalEngineInfo {
   /**
    * **이 기계에서 돌아갈까**를 재는 기준.
    *
-   * 기계마다 VRAM 이 달라, 큰 카드에서는 원본이 돌고 작은 카드에서는 양자화로 내려야 합니다.
-   *
    * 125 GB 를 한 시간 받고 나서 「VRAM 이 모자랍니다」 를 보는 것이 가장 나쁩니다.
    * 그래서 설치 단추 옆에 미리 적습니다.
    */
-  needs: {
-    /** 원래 정밀도(bf16)로 돌리는 데 필요한 VRAM(GB). */
-    vramGb: number;
-    /** 양자화해서 줄였을 때의 VRAM(GB). 줄일 수 없는 엔진은 없습니다. */
-    quantVramGb?: number;
-    /** 양자화로 돌 때 호스트 RAM 이 이만큼 필요합니다(GB) — 오프로드가 여기로 흘립니다. */
-    ramGb?: number;
-    /** 디스크(GB) — `sizeHint` 의 숫자와 같아야 합니다. */
-    diskGb: number;
-    /** 줄이는 방법을 사람 말로. 없으면 줄일 수 없습니다. */
-    quantNote?: string;
+  needs: EngineNeeds;
+  /**
+   * 이 엔진이 **실제로 올릴 수 있는 정밀도**. 안 적으면 셋 다 됩니다.
+   *
+   * 워커 엔진 모듈의 `SUPPORTED` 와 **같아야** 합니다(`precisionPolicy.test.ts` 가 셉니다).
+   * 모듈러 파이프라인처럼 아직 양자화 길이 없는 엔진이 있어서, 규칙이 int8 을 골라도
+   * 실제로는 bf16 이 올라갑니다 — 그 차이를 화면이 알고 있어야 「줄였는데 왜 안 가벼워지지」
+   * 를 설명할 수 있습니다.
+   */
+  precisionModes?: EnginePrecision[];
+}
+
+export interface EngineNeeds {
+  /**
+   * 이 모델을 bf16 으로 통째로 올릴 때의 **모델 크기**(GB).
+   *
+   * 워커 엔진 모듈의 `BF16_GB` 와 **같은 값**이어야 합니다 — 정밀도를 고르는 잣대가 이
+   * 숫자 하나이고, 두 벌로 적어 두면 한쪽만 고치는 날이 옵니다(`precisionPolicy.test.ts`
+   * 가 파이썬 쪽을 직접 읽어 셉니다). 모션 캡처 엔진처럼 정밀도 개념이 없는 쪽은 없습니다.
+   */
+  bf16Gb?: number;
+  /**
+   * 원래 정밀도(bf16)로 돌리는 데 필요한 VRAM(GB).
+   *
+   * `bf16Gb` 가 있으면 **손으로 적지 않습니다** — 워커와 같은 여유(`PRECISION_HEADROOM`)를
+   * 얹어 `vramNeeds` 가 셈합니다. 손으로 적던 시절에는 화면이 「24 GB 면 원래 정밀도로
+   * 돕니다」 라고 적고 워커는 그 카드에서 int8 로 올리고 있었습니다.
+   */
+  vramGb: number;
+  /**
+   * 양자화해서(또는 흘려서) 줄였을 때 최소 이만큼의 VRAM(GB).
+   *
+   * 이것은 공식이 아니라 **실측**입니다 — 오프로드가 어디까지 버티느냐라서 계산으로 안 나옵니다.
+   * 없으면 줄여도 안 돈다는 뜻입니다.
+   */
+  quantVramGb?: number;
+  /** 양자화로 돌 때 호스트 RAM 이 이만큼 필요합니다(GB) — 오프로드가 여기로 흘립니다. */
+  ramGb?: number;
+  /** 디스크(GB) — `sizeHint` 의 숫자와 같아야 합니다. */
+  diskGb: number;
+  /** 줄이는 방법을 사람 말로. 없으면 줄일 수 없습니다. */
+  quantNote?: string;
+}
+
+/**
+ * `needs` 한 칸을 만듭니다 — `bf16Gb` 를 주면 `vramGb` 는 **여기서** 셈합니다.
+ *
+ * 카탈로그에 숫자를 두 개 적어 두면 하나만 고치게 됩니다. 정밀도가 없는 엔진(모션 캡처)은
+ * `vramGb` 를 그대로 적습니다.
+ */
+function vramNeeds(
+  spec: Omit<EngineNeeds, "vramGb"> & { vramGb?: number },
+): EngineNeeds {
+  const { bf16Gb, vramGb, ...rest } = spec;
+  if (bf16Gb == null && vramGb == null) {
+    throw new Error("엔진의 VRAM 기준이 없습니다 — bf16Gb 나 vramGb 중 하나는 있어야 합니다.");
+  }
+  return {
+    ...rest,
+    bf16Gb,
+    vramGb: bf16Gb != null ? bf16Gb * PRECISION_HEADROOM : (vramGb as number),
   };
 }
 
@@ -131,10 +235,7 @@ export interface EngineFit {
  */
 export function engineFit(engine: LocalEngineInfo, probe: HardwareProbe | null): EngineFit {
   if (!probe) return { level: "unknown", note: "하드웨어를 아직 확인하지 않았습니다" };
-  const vram = probe.gpus.reduce<number | null>(
-    (best, gpu) => (gpu.vramGb != null && (best == null || gpu.vramGb > best) ? gpu.vramGb : best),
-    null,
-  );
+  const vram = bestVramGb(probe);
   const disk = probe.diskFreeGb;
   const needs = engine.needs;
 
@@ -148,7 +249,15 @@ export function engineFit(engine: LocalEngineInfo, probe: HardwareProbe | null):
   if (vram == null) {
     return { level: "unknown", note: "GPU 를 읽지 못했습니다 — 직접 확인하세요" };
   }
-  if (vram >= needs.vramGb) {
+  /*
+    bf16 으로 도는가는 **워커와 같은 공식**으로 봅니다. 여기서 재는 것은 «줄여야 하는가» 라서
+    엔진이 실제로 줄일 수 있는지(`precisionModes`)는 보지 않습니다 — 못 줄이는 엔진이라면
+    아래 `quantVramGb` 가 없어 그대로 «안 됩니다» 가 됩니다.
+    정밀도 개념이 없는 엔진(모션 캡처)은 손으로 적은 `vramGb` 와 그냥 견줍니다.
+  */
+  const bf16 =
+    needs.bf16Gb != null ? planPrecision(needs.bf16Gb, vram) === "bf16" : vram >= needs.vramGb;
+  if (bf16) {
     return { level: "ok", note: `VRAM ${vram} GB — 원래 정밀도로 돕니다` };
   }
   const quant = needs.quantVramGb;
@@ -167,8 +276,26 @@ export function engineFit(engine: LocalEngineInfo, probe: HardwareProbe | null):
   }
   return {
     level: "no",
-    note: `VRAM ${vram} GB — ${needs.vramGb} GB 가 필요합니다${quant != null ? ` (줄여도 ${quant} GB)` : ""}`,
+    note: `VRAM ${vram} GB — ${gb(needs.vramGb)} GB 가 필요합니다${quant != null ? ` (줄여도 ${quant} GB)` : ""}`,
   };
+}
+
+/** 셈해서 나온 GB 를 화면에 적을 꼴로 — `23.75` 는 «23.8», `60` 은 그냥 «60». */
+function gb(value: number): string {
+  return String(Math.round(value * 10) / 10);
+}
+
+/**
+ * 여러 장이면 **가장 큰 것** 하나로 봅니다 — 모델 하나는 한 장에 올라가고, 워커도 0번
+ * 장치를 봅니다. 못 읽었으면 null(«모르면 모른다»).
+ */
+function bestVramGb(probe: HardwareProbe | null): number | null {
+  return (
+    probe?.gpus.reduce<number | null>(
+      (best, gpu) => (gpu.vramGb != null && (best == null || gpu.vramGb > best) ? gpu.vramGb : best),
+      null,
+    ) ?? null
+  );
 }
 
 /**
@@ -184,16 +311,18 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
       "영상과 사운드트랙을 한 번에. 구도잡기 레퍼런스 영상·인물 시트·배경을 통째로 물려 그 움직임과 인물을 그대로 따릅니다. 24fps · 5~15초.",
     license: "모델 카드 확인 — 오픈 웨이트(2026-08-03)",
     /*
-      125 → 190 GB. 먼저 깐 기계에는 글·첫 프레임용 transformer(62 GB)·text_encoder(63 GB)만
+      125 → 190 GB (2026-09-22). 사용자의 기계에는 글·첫 프레임용 transformer(62 GB)·text_encoder(63 GB)만
       있고 **레퍼런스용 transformer_ref(62 GB)가 없었습니다** — 첫 생성 때 그 워크플로 것만 받았기 때문.
       이제 설치 때 저장소를 통째로 받아 두므로 그 62 GB 까지 넣어 적습니다.
     */
     sizeHint: "약 190 GB (레퍼런스용 transformer_ref 62 GB 까지 설치 때 받아 둡니다) · 24~32 GB 카드는 int8 로 돌며 호스트 RAM 75 GB 필요",
     extension: "mp4",
     priority: 0,
-    // vramGb 80 은 틀린 값이었습니다. 워커는 VRAM 155 GB 아래면 양자화합니다 —
-    // 96 GB 카드에서도 bf16 원본은 안 들어갑니다. 워커 기준과 같은 숫자로 맞춥니다.
-    needs: { vramGb: 155, quantVramGb: 24, ramGb: 75, diskGb: 190, quantNote: "int8 로 줄이고 호스트 RAM 으로 흘려" },
+    // 트랜스포머 61.7 + 조건화기 62.1. 여유를 얹으면 bf16 문턱이 155 GB 라, 지금 나와 있는
+    // 어떤 카드로도 원본은 못 올립니다 — 96 GB 카드도 int8 입니다.
+    needs: vramNeeds({ bf16Gb: 124, quantVramGb: 24, ramGb: 75, diskGb: 190, quantNote: "int8 로 줄이고 호스트 RAM 으로 흘려" }),
+    // int4 길은 없습니다 — 여기 양자화는 torchao int8 이라야 텐서가 pin 되고, pin 이 돼야 스트리밍 오프로드가 됩니다.
+    precisionModes: ["bf16", "int8"],
   },
   minimaxmusic: {
     id: "minimaxmusic",
@@ -205,7 +334,10 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 20 GB · 24 GB 권장, 8 GB 대도 돎",
     extension: "wav",
     priority: 0,
-    needs: { vramGb: 24, quantVramGb: 8, ramGb: 16, diskGb: 20, quantNote: "fp16 로 줄여" },
+    // 「fp16 로 줄여」 라고 적어 두었지만 워커에는 그런 길이 없습니다 — 모듈러 파이프라인이라
+    // 양자화를 못 끼웁니다. 좁으면 8B 짜리 언어 모델만 흘려 보냅니다. 적힌 대로 고쳤습니다.
+    needs: vramNeeds({ bf16Gb: 19, quantVramGb: 8, ramGb: 16, diskGb: 20, quantNote: "언어 모델을 CPU 로 흘려" }),
+    precisionModes: ["bf16"],
   },
   qwenimage: {
     id: "qwenimage",
@@ -217,10 +349,10 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 45 GB (가중치 40 GB + 파이썬 환경)",
     extension: "png",
     priority: 0,
-    needs: { vramGb: 24, quantVramGb: 12, ramGb: 32, diskGb: 45, quantNote: "모델을 블록 단위로 흘려" },
+    needs: vramNeeds({ bf16Gb: 24, quantVramGb: 12, ramGb: 32, diskGb: 45, quantNote: "int8·int4 로 줄이고 CPU 로 흘려" }),
   },
   /*
-    FLUX 와 스테이블 디퓨전을 빼고 Z-Image Turbo·Anima 를 넣었습니다.
+    
     둘 다 게이트 저장소라 토큰을 받아야 했고, FLUX 는 가중치가 비상업이었습니다.
     새로 들어온 둘은 성격이 확실히 갈립니다 — 하나는 «빠르고 가벼운 실사», 하나는 «애니메 전용».
   */
@@ -234,7 +366,8 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 18 GB (가중치 12 GB + 파이썬 환경) · 토큰 필요 없음",
     extension: "png",
     priority: 1,
-    needs: { vramGb: 16, quantVramGb: 8, ramGb: 16, diskGb: 18, quantNote: "fp8 로 줄여" },
+    // 워커는 bitsandbytes 로 줄입니다(fp8 이 아닙니다) — 적힌 대로 고쳤습니다.
+    needs: vramNeeds({ bf16Gb: 16, quantVramGb: 8, ramGb: 16, diskGb: 18, quantNote: "int8·int4 로 줄여" }),
   },
   krea2: {
     id: "krea2",
@@ -246,7 +379,7 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 32 GB (bf16 가중치 26 GB) · 허깅페이스 토큰 필요(게이트 저장소)",
     extension: "png",
     priority: 2,
-    needs: { vramGb: 32, quantVramGb: 16, ramGb: 32, diskGb: 32, quantNote: "fp8(약 13 GB)로 줄여" },
+    needs: vramNeeds({ bf16Gb: 32, quantVramGb: 16, ramGb: 32, diskGb: 32, quantNote: "int8·int4 로 줄여" }),
   },
   anima: {
     id: "anima",
@@ -258,8 +391,10 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 14 GB (가중치 8 GB) · 토큰 필요 없음",
     extension: "png",
     priority: 3,
-    // 모듈러 파이프라인이라 아직 양자화 길을 안 냈습니다 — 2B 는 8 GB 카드에 bf16 으로 들어갑니다.
-    needs: { vramGb: 8, ramGb: 8, diskGb: 14 },
+    // 모듈러 파이프라인이라 아직 양자화 길을 안 냈습니다. `quantVramGb` 가 없으니 여유까지
+    // 얹은 10 GB 아래에서는 «안 됩니다» 로 나옵니다 — 워커가 그 카드에서 하는 말과 같습니다.
+    needs: vramNeeds({ bf16Gb: 8, ramGb: 8, diskGb: 14 }),
+    precisionModes: ["bf16"],
   },
   wanvideo: {
     id: "wanvideo",
@@ -268,19 +403,18 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     purpose:
       "미니맥스 H3 가 무거운 기계를 위한 가벼운 대안. 대표 그림을 주면 그 그림에서 시작하고(I2V), 로라를 여러 개 겹칩니다.",
     license: "Apache 2.0 — 상업 이용 제한 없음",
-    // 65 → 120 GB. 첫 장면 그림을 주는 컷에서 I2V 판 60 GB 를 «생성 중» 안에서 말없이
+    // 65 → 120 GB (2026-09-22). 첫 장면 그림을 주는 컷에서 I2V 판 60 GB 를 «생성 중» 안에서 말없이
     // 받던 것을, 설치 때 T2V·I2V 두 판을 다 받아 두는 것으로 바꿨습니다. 둘을 합친 값입니다.
     sizeHint: "약 120 GB (T2V·I2V 두 판을 설치 때 받아 둡니다)",
     extension: "mp4",
     // 미니맥스 H3 가 무거워 못 돌릴 때의 **가벼운 대안**입니다. 기본은 H3.
     priority: 1,
     /*
-      vramGb 는 오래 24 였는데 실측해 보니 **틀린 값**이었습니다. A14B 는 전문가가 둘이라
-      bf16 원본이 126 GB 이고, 텍스트 인코더까지 올리면 157 GB 쯤 필요합니다. 24 로 적어 두면
-      24 GB 카드 주인에게 「원래 정밀도로 돕니다」 라고 알리고는 실제로는 int4 로 내려가
-      오프로드로 버팁니다. 워커의 BF16_GB 와 같은 근거로 맞춥니다.
+      A14B 는 전문가가 **둘**이라 bf16 원본이 126 GB 입니다(트랜스포머 57.2 × 2 + 텍스트 인코더 11.4).
+      오래 24 로 적어 두었는데, 그러면 24 GB 카드 주인에게 「원래 정밀도로 돕니다」 라고 알리고는
+      실제로는 int4 로 내려가 오프로드로 버팁니다.
     */
-    needs: { vramGb: 157, quantVramGb: 12, ramGb: 48, diskGb: 120, quantNote: "int4 로 줄이고 블록 오프로드로" },
+    needs: vramNeeds({ bf16Gb: 126, quantVramGb: 12, ramGb: 48, diskGb: 120, quantNote: "int4 로 줄이고 블록 오프로드로" }),
   },
   ltx25: {
     id: "ltx25",
@@ -293,12 +427,13 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     extension: "mp4",
     priority: 2,
     /*
-      동작을 그대로 옮길 수 있는 **유일한** 엔진입니다. Lightricks 가 낸
+      동작을 그대로 옮길 수 있는 **유일한** 엔진입니다(2026-09-17 기준). Lightricks 가 낸
       포즈 IC-LoRA 를 얹어 씁니다. Wan 2.2 도 Fun-Control 로 되지만 diffusers 가 아니라
       VideoX-Fun 저장소를 따로 깔아야 해서 아직 안 붙였습니다.
     */
     pose: true,
-    needs: { vramGb: 48, quantVramGb: 24, ramGb: 64, diskGb: 170, quantNote: "fp8-cast 로 줄이고 CPU 로 흘려" },
+    // 워커는 bitsandbytes 로 줄입니다(fp8-cast 가 아닙니다) — 적힌 대로 고쳤습니다.
+    needs: vramNeeds({ bf16Gb: 48, quantVramGb: 24, ramGb: 64, diskGb: 170, quantNote: "int8·int4 로 줄이고 CPU 로 흘려" }),
   },
   acestep: {
     id: "acestep",
@@ -311,17 +446,18 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     extension: "wav",
     // 미니맥스 Music3 를 못 돌릴 때의 **가벼운 대안**입니다.
     priority: 1,
-    // 「fp16 로 줄여」 라고 적어 두었지만 워커에는 그런 길이 없었습니다. 이 파이프라인은
-    // bitsandbytes 로 못 줄입니다 — 대신 좁으면 CPU 오프로드로 내립니다. 적힌 대로 고쳤습니다.
-    needs: { vramGb: 10, quantVramGb: 6, ramGb: 16, diskGb: 12, quantNote: "CPU 로 흘려" },
+    // 이 파이프라인은 bitsandbytes 로 못 줄입니다 — 대신 좁으면 CPU 오프로드로 내립니다.
+    // 모델이 10 GB 라 여유를 얹은 bf16 문턱은 12.5 GB 입니다(10 GB 카드에 통째로 올리면 중간값 자리가 없습니다).
+    needs: vramNeeds({ bf16Gb: 10, quantVramGb: 6, ramGb: 16, diskGb: 12, quantNote: "CPU 로 흘려" }),
+    precisionModes: ["bf16"],
   },
   /*
     ── 모션 캡처 ──────────────────────────────────────────────────────────
-    업스케일처럼 모델을 골라 분석할 수 있게 합니다. 앱 안 MediaPipe 는 설치가 필요 없어
+     앱 안 MediaPipe 는 설치가 필요 없어
     목록에 없고(구도잡기 창에서 늘 고를 수 있음), 여기는 파이썬으로 도는 무거운 모델들입니다. 결과는 영상 속 사람들의 관절
     좌표 JSON — 앱이 이어 붙이기·튐 보정·리타깃을 똑같이 합니다.
 
-    넣지 않은 것: WHAM 은 torch 1.11 판이라 RTX 50 계열(Blackwell) GPU 에서 안 돌고, DanceHMR 은 코드가
+    넣지 않은 것(2026-09-16 확인): WHAM 은 torch 1.11 판이라 RTX 50 계열(Blackwell) GPU 에서 안 돌고, DanceHMR 은 코드가
     공개되지 않았고, SAM3DBody-cpp 는 SAM 3D Body 와 같은 모델의 C++ 판이라 따로 둘 까닭이 없습니다.
   */
   sam3dbody: {
@@ -335,7 +471,8 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
       "약 12 GB · 허깅페이스 토큰 필요 — facebook/sam-3d-body-dinov3 페이지에서 접근 승인을 먼저 받아야 합니다",
     extension: "json",
     priority: 0,
-    needs: { vramGb: 12, quantVramGb: 8, ramGb: 16, diskGb: 12 },
+    // 모션 캡처는 정밀도를 고르지 않습니다 — 여기 VRAM 은 실측으로 적은 값입니다.
+    needs: vramNeeds({ vramGb: 12, quantVramGb: 8, ramGb: 16, diskGb: 12 }),
   },
   nlf: {
     id: "nlf",
@@ -347,7 +484,7 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 7 GB (파이썬 환경 6.5 GB + 모델 0.5 GB)",
     extension: "json",
     priority: 1,
-    needs: { vramGb: 8, quantVramGb: 6, ramGb: 16, diskGb: 7 },
+    needs: vramNeeds({ vramGb: 8, quantVramGb: 6, ramGb: 16, diskGb: 7 }),
   },
   gvhmr: {
     id: "gvhmr",
@@ -360,7 +497,7 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     sizeHint: "약 15 GB",
     extension: "json",
     priority: 2,
-    needs: { vramGb: 12, quantVramGb: 8, ramGb: 16, diskGb: 15 },
+    needs: vramNeeds({ vramGb: 12, quantVramGb: 8, ramGb: 16, diskGb: 15 }),
   },
 };
 
@@ -377,7 +514,7 @@ export interface LocalEngineStatus extends LocalEngineInfo {
   /**
    * 지금 가중치를 미리 받는 중인가(Rust `UpscaleState::prefetching`). `installing` 과 따로인 까닭은 «멈추기»
    * 단추 문구 — 예전에는 `installed` 로 골랐는데, 새로 까는 엔진은 uv venv 직후부터 «설치됨» 이라 패키지를
-   * 받는 동안에도 「받기 멈추기」 로 보였습니다.
+   * 받는 동안에도 「받기 멈추기」 로 보였습니다(2026-09-22 점검).
    */
   prefetching: boolean;
   version: string;
@@ -597,7 +734,7 @@ function ensureProgressHook(): Promise<void> {
       if (!payload || typeof payload !== "object") return;
       /*
         «disk» 는 Rust 가 엔진 폴더 크기를 **뒤에서** 다시 재고 난 뒤 보내는 살림 신호입니다
-        (카드에는 「4.5 GB」 라고 떠 있는데 폴더는 183 GB 이던 적이 있습니다). 상태를 한 번 더 읽어 카드 숫자를
+        . 상태를 한 번 더 읽어 카드 숫자를
         맞추고, 생성 진행을 듣는 쪽에는 넘기지 않습니다 — 빈 문구가 생성 상태 줄을 지우면 안 됩니다.
       */
       if (payload.stage === "disk") {
@@ -673,8 +810,8 @@ export async function cancelLocalInstall(id: LocalEngineId): Promise<void> {
 /**
  * 이미 깔린 엔진의 가중치를 **지금** 통째로 받아 둡니다(«가중치 미리 받기» 단추).
  *
- * 이 개편 뒤에 새로 까는 엔진은 설치 끝에 받지만, 이미 깔려 있던 엔진은 그 길을 지나쳤으므로
- * 단추가 따로 있어야 합니다. 진행은 설치와 같은
+ * 이 개편 뒤에 새로 까는 엔진은 설치 끝에 받지만, 사용자의
+ * 기계처럼 이미 깔린 것은 그 길을 지나쳤으므로 단추가 따로 있어야 합니다. 진행은 설치와 같은
  * «가중치 받기(models)» 막대로 오고, 멈추기도 `cancelLocalInstall` 이 그대로 듣습니다.
  */
 export async function prefetchLocalWeights(id: LocalEngineId): Promise<void> {
@@ -715,14 +852,14 @@ export async function stopLocalWorkers(): Promise<void> {
 
 /* ────────────────────────── 생성 ────────────────────────── */
 
-/** 로라 한 장. 경로는 사람이 직접 받아 둔 `.safetensors` 입니다. */
+/** 로라 한 장. 경로는 사용자가 직접 받아 둔 `.safetensors` 입니다. */
 export interface LocalLora {
   path: string;
   weight: number;
   /**
    * 이 로라를 **불러오는 말**. 프롬프트 앞에 붙여야 먹는 로라가 있습니다.
    *
-   * 점검에서 드러났습니다 — 이 칸이 아예 없어서 `lorasToRun` 이 돌려준
+   * 2026-09-18 점검에서 드러났습니다 — 이 칸이 아예 없어서 `lorasToRun` 이 돌려준
    * 트리거가 **타입 단계에서 조용히 버려지고** 있었습니다. 화면에는 「프롬프트에 넣어야
    * 먹습니다」 라고 적어 두고 정작 안 보내고 있었던 것입니다.
    *
@@ -755,7 +892,7 @@ export interface LocalRunOptions {
   /**
    * 레퍼런스 — 구도잡기 영상·인물 시트·배경을 **순서대로** 물립니다(H3 의 `ref2va`).
    *
-   * 구도잡기 레퍼런스 영상과 인물·배경을 한꺼번에 물려 컷 영상을 바로 뽑는 길입니다.
+   * 로컬에서 그 일을 하는 길이 이것입니다.
    *
    * **순서가 뜻입니다.** 모델이 프롬프트에 「<Video 1>」 처럼 이름을 붙이고 공유 시계에
    * 올려 두기 때문에, 같은 것을 다른 순서로 주면 다른 요청이 됩니다.
@@ -764,12 +901,11 @@ export interface LocalRunOptions {
   references?: { kind: "image" | "video" | "audio"; path: string }[];
   /** 음악 가사. 비우면 연주곡(`[inst]`). */
   lyrics?: string;
-  /** 여러 개를 겹쳐 먹입니다 — 화풍·동작·질감을 나눠 건 로라를 한 번에 씁니다. */
+  /** 여러 개를 겹쳐 먹입니다. */
   loras?: LocalLora[];
   /**
    * **동작 기준** — 모캡에서 구운 뼈 그림들(차례가 곧 시간).
    *
-   * 댄스 커버 영상에서 동작만 뽑아 인물과 배경을 갈아 끼우는 길입니다.
    * 원본 영상이 아니라 **뼈 그림**을 주는 까닭은
    * `lib/poseFrames.ts` 머리말에 있습니다.
    *
@@ -783,9 +919,12 @@ export interface LocalRunOptions {
   /**
    * **어떤 정밀도로 올릴까.** 안 주면 `auto` — 워커가 이 GPU 의 VRAM 을 보고 정합니다.
    *
-   * 기계의 GPU 를 보고 맞는 정밀도를 스스로 고릅니다. 판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과
-   * torch 가 보는 값이 다를 수 있고(여러 장·MIG), 실제로 올리는 쪽이 torch 라서요.
-   * 여기서 못 박는 것은 자동이 틀릴 때(다른 프로그램이 VRAM 을 쥐고 있을 때)를 위한 길입니다.
+   * 판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과 torch 가 보는 값이 다를 수
+   * 있고(여러 장·MIG), 실제로 올리는 쪽이 torch 라서요. 여기서 못 박는 것은 자동이 틀릴 때
+   * (다른 프로그램이 VRAM 을 쥐고 있을 때)를 위한 길입니다.
+   *
+   * 못 박은 값을 **못 하는 엔진**이 있습니다(모듈러 파이프라인). 그때는 워커가 할 수 있는
+   * 것으로 내려 잡고, 무엇을 요청했고 무엇이 올라갔는지를 결과에 함께 실어 보냅니다.
    */
   precision?: LocalPrecision;
 }
@@ -818,33 +957,83 @@ export function savePrecision(value: LocalPrecision): void {
 }
 
 /**
- * 이 엔진을 **지금 켜면 어떤 정밀도로 돌까** — 워커와 같은 셈을 화면에서 미리 합니다.
+ * 이 엔진을 **지금 켜면 어떻게 올라갈까** — 워커와 같은 셈을 화면에서 미리 합니다.
  *
- * 워커의 `plan_precision` 과 규칙이 같아야 합니다(가중치 말고도 텍스트 인코더·VAE·중간값이
- * 올라가므로 1.25배로 잡습니다). 두 곳에 다른 규칙을 두면 화면이 「bf16」 이라 적고
- * 워커는 int8 로 올리는 일이 생깁니다.
+ * «요청» 과 «실제» 를 나눠 돌려주는 까닭: 사람이 int4 를 못 박아도 그 길이 없는 엔진은
+ * bf16 을 올립니다. 예전에는 못 박은 값을 그대로 화면에 적어서, 화면은 「int4 로 줄여서
+ * 올립니다」 라고 하고 실제로는 원본이 올라가고 있었습니다.
+ *
+ * VRAM 을 못 읽었거나 정밀도를 고르지 않는 엔진(모션 캡처)이면 null — «모르면 모른다» 입니다.
  */
+export interface PrecisionPlan {
+  /** 사람이 고른 것. «auto» 면 이 GPU 에 맡긴 것입니다. */
+  requested: LocalPrecision;
+  /** 규칙이 고른 것. */
+  planned: EnginePrecision;
+  /** 이 엔진이 **실제로** 올릴 것. `planned` 와 다르면 그 정밀도 길이 아직 없는 엔진입니다. */
+  mode: EnginePrecision;
+  /** 셈에 쓴 VRAM(GB). */
+  vramGb: number;
+}
+
+export function precisionPlanFor(
+  engine: LocalEngineInfo,
+  probe: HardwareProbe | null,
+  pinned: LocalPrecision = "auto",
+): PrecisionPlan | null {
+  const vram = bestVramGb(probe);
+  const bf16Gb = engine.needs.bf16Gb;
+  if (vram == null || bf16Gb == null) return null;
+  const planned = pinned === "auto" ? planPrecision(bf16Gb, vram) : pinned;
+  return {
+    requested: pinned,
+    planned,
+    mode: clampPrecision(planned, engine.precisionModes),
+    vramGb: vram,
+  };
+}
+
+/** 위의 것에서 «실제로 올라갈 정밀도» 하나만. 모르면 못 박은 값(또는 «auto»)을 그대로 돌려줍니다. */
 export function precisionFor(
   engine: LocalEngineInfo,
   probe: HardwareProbe | null,
   pinned: LocalPrecision = "auto",
 ): LocalPrecision {
-  if (pinned !== "auto") return pinned;
-  const vram = probe?.gpus.reduce<number | null>(
-    (best, gpu) => (gpu.vramGb != null && (best == null || gpu.vramGb > best) ? gpu.vramGb : best),
-    null,
-  );
-  if (vram == null) return "auto";
-  const room = vram / 1.25;
-  if (room >= engine.needs.vramGb) return "bf16";
-  if (room >= engine.needs.vramGb / 2) return "int8";
-  return "int4";
+  return precisionPlanFor(engine, probe, pinned)?.mode ?? pinned;
 }
 
 export interface LocalRunResult {
   output: string;
   seconds: number;
   meta: Record<string, unknown>;
+}
+
+/**
+ * 방금 뽑은 것이 **실제로 어떤 정밀도로 올라갔는지** — 워커가 결과에 실어 보낸 값입니다
+ * (`common.precision_fields`). 미리 셈한 것이 아니라 그 자리에서 torch 가 본 값이라,
+ * 「자동인데 왜 int8 이지」 의 답은 이쪽입니다.
+ *
+ * 옛 결과에는 이 값이 없으므로 없으면 null 입니다.
+ */
+export function precisionOfRun(meta: Record<string, unknown> | null | undefined): {
+  requested: LocalPrecision;
+  mode: EnginePrecision;
+  why: string;
+  vramGb: number | null;
+} | null {
+  const mode = meta?.precision;
+  if (typeof mode !== "string" || !(PRECISION_LADDER as readonly string[]).includes(mode)) {
+    return null;
+  }
+  const requested = meta?.precision_requested;
+  const vram = meta?.vram_gb;
+  return {
+    requested:
+      requested === "bf16" || requested === "int8" || requested === "int4" ? requested : "auto",
+    mode: mode as EnginePrecision,
+    why: typeof meta?.precision_why === "string" ? meta.precision_why : "",
+    vramGb: typeof vram === "number" && vram > 0 ? vram : null,
+  };
 }
 
 /**
@@ -896,7 +1085,7 @@ export interface LoraEntry {
   id: string;
   /** 화면에 보일 이름. 비면 파일 이름을 씁니다. */
   name: string;
-  /** 사람이 직접 받아 둔 `.safetensors` 의 전체 경로. */
+  /** 사용자가 직접 받아 둔 `.safetensors` 의 전체 경로. */
   path: string;
   /** 0~2. 1 이 원래 세기입니다. */
   weight: number;
@@ -905,9 +1094,9 @@ export interface LoraEntry {
   /**
    * 이 로라가 **무엇을 바꾸는가**.
    *
-   * 어느 로라로 뽑을지 고르려면 그 로라가 무엇을 바꾸는지부터 알아야 합니다.
    *
-   * **화풍 로라는 한 번에 하나**입니다. 둘을 겹치면 어느 쪽도 아닌 그림이 나오고,
+   *
+   * 맞습니다 — **화풍 로라는 한 번에 하나**입니다. 둘을 겹치면 어느 쪽도 아닌 그림이 나오고,
    * 그게 로라 탓인지 프롬프트 탓인지 가려낼 수가 없습니다. 반면 «동작»·«질감» 은 화풍과
    * 겹쳐도 됩니다. 그래서 갈래를 적어 두고, 화풍이 둘 이상 켜지면 경고합니다.
    */
@@ -939,8 +1128,8 @@ export const LORA_STYLES: { id: LoraStyle; label: string; exclusive: boolean; hi
 /**
  * 로라 목록 — **설정입니다.** 프로젝트가 아니라 이 컴퓨터에 붙습니다.
  *
- * 로라 파일은 사람이 직접 받아 어딘가에 둡니다(수 GB 짜리도 있어 프로젝트 폴더에
- * 복사하지 않습니다). 우리는 **경로와 세기만** 기억합니다.
+ * 로라 파일은 사용자가 직접 받아 어딘가에 둡니다(수 GB 짜리도 있어
+ * 프로젝트 폴더에 복사하지 않습니다). 우리는 **경로와 세기만** 기억합니다.
  */
 export function loadLoras(): LoraEntry[] {
   if (typeof window === "undefined") return [];

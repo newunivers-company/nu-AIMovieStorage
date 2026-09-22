@@ -17,10 +17,24 @@ import time
 
 import common
 
-_state = {"pipe": None}
+_state = {"pipe": None, "plan": None}
 
-# bf16 으로 통째로 올릴 때 필요한 GB(가중치 7 + 텍스트 인코더·중간값). 이보다 좁으면 흘립니다.
+"""
+bf16 으로 통째로 올릴 때의 **모델 크기**(GB) — 가중치 7 + 텍스트 인코더.
+
+필요한 VRAM 은 `common.plan_precision` 이 여유(1.25배)를 얹어 12.5 GB 로 봅니다. 여태
+이 엔진만 `vram < 10` 을 손으로 들고 있었는데, 10 GB 짜리를 10 GB 카드에 통째로 올리면
+중간값 자리가 없어 터집니다. 이제 다른 엔진과 같은 잣대를 씁니다.
+"""
 BF16_GB = 10.0
+
+"""
+**이 엔진이 올릴 수 있는 정밀도는 bf16 뿐입니다.**
+
+bitsandbytes 로는 못 줄이는 파이프라인입니다(자체 `quantized` 는 따로 받은 체크포인트를
+요구합니다). 그래서 규칙이 «줄여라» 라고 하면 이 엔진에서는 그것이 곧 «CPU 로 흘려라» 입니다.
+"""
+SUPPORTED = ("bf16",)
 
 
 def info(root):
@@ -31,18 +45,19 @@ def info(root):
 
 
 def load(root, opts):
-    if _state["pipe"] is not None:
+    # 정밀도 판단은 다른 엔진과 **같은 한 곳**입니다. 이 엔진만 사양을 안 보고 늘 bf16 으로
+    # 통째로 올려서, 8 GB 카드에서는 그대로 터졌습니다.
+    plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"], supported=SUPPORTED)
+    if _state["pipe"] is not None and not plan["reload"]:
         return
     from acestep.pipeline_ace_step import ACEStepPipeline
 
     models = common.use_engine_cache(root)
-    # 이 엔진만 **사양을 안 보고** 늘 bf16 으로 통째로 올렸습니다.
-    # 3.5B 라 가중치는 7 GB 쯤이지만 텍스트 인코더까지 올리면 10 GB 를 넘습니다 —
-    # 8 GB 카드에서는 그대로 터집니다. bitsandbytes 로는 못 줄이는 파이프라인이라
-    # (자체 `quantized` 는 따로 받은 체크포인트를 요구합니다) **CPU 오프로드**로 내립니다.
-    vram = common.vram_gb()
-    tight = 0 < vram < BF16_GB
-    common.log("ACE-Step 을 올립니다 (VRAM {:.0f} GB{}).".format(vram, " · CPU 로 흘립니다" if tight else ""))
+    # 규칙이 «줄여라» 라고 했다는 것은 이 엔진에서는 «CPU 로 흘려라» 입니다(줄이는 길이 없습니다).
+    tight = plan["wanted"] != "bf16"
+    common.log_precision("ACE-Step", plan)
+    if tight:
+        common.log("VRAM 이 좁아 CPU 로 흘리며 돌립니다 — 느리지만 돕니다.")
     pipe = ACEStepPipeline(
         checkpoint_dir=models,
         dtype="bfloat16",
@@ -52,10 +67,12 @@ def load(root, opts):
     # 첫 호출에서 가중치를 받아 올립니다(없으면 여기서 내려받습니다).
     pipe.load_checkpoint(models)
     _state["pipe"] = pipe
+    _state["plan"] = plan
 
 
 def unload():
     _state["pipe"] = None
+    _state["plan"] = None
     common.free_vram()
 
 
@@ -81,11 +98,14 @@ def generate(output, opts, report):
         save_path=output,
         format=output.rsplit(".", 1)[-1].lower(),
     )
-    return {
+    out = {
         "seed": seed,
         "seconds_audio": seconds,
         "generate_seconds": round(time.time() - started, 2),
     }
+    # 요청한 정밀도와 실제로 올라간 정밀도 — 한 곳에서 만듭니다.
+    out.update(common.precision_fields(_state["plan"]))
+    return out
 
 
 def _save_with_soundfile():
