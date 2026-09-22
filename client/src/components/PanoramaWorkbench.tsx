@@ -1,3 +1,4 @@
+import { SURFACE_BOX, SURFACE_MEDIA } from "@/lib/imageSurface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Save, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,7 +43,7 @@ export interface PanoramaFacePlan {
   capped: boolean;
 }
 
-/** 여섯 면 크기 선택지. 4K 위는 업스케일 엔진이 있어야 뜻이 있습니다(). */
+/** 여섯 면 크기 선택지. 6K·8K 까지 열어 두되, 4K 위는 업스케일 엔진이 있어야 뜻이 있습니다. */
 const FACE_SIZE_OPTIONS: { size: number; label: string }[] = [
   { size: 1024, label: "1024 × 1024" },
   { size: 2048, label: "2048 × 2048" },
@@ -118,7 +119,7 @@ export default function PanoramaWorkbench({
 }) {
   const [source, setSource] = useState<HTMLImageElement | null>(null);
   /*
-    기본값이 «등장방형 180» 입니다. (2026-09-09)
+    기본값이 «등장방형 180» 입니다 — 원통이 아니라 등장방형이 시작 자리입니다.
 
     이 앱은 이제 등장방형 프롬프트(P1)로 파노라마를 뽑습니다. 그렇게 뽑은 그림은 손댈 것이
     없는데, 원통 70° 로 시작하면 멀쩡한 파노라마를 가운데 띠로 눌러 놓고 사람이 다시
@@ -306,10 +307,10 @@ export default function PanoramaWorkbench({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="space-y-2">
           <div
-            className="relative overflow-hidden rounded-lg"
+            className={`${SURFACE_BOX} overflow-hidden rounded-lg`}
             style={{ background: "oklch(0.10 0.006 265)", border: "1px solid oklch(1 0 0 / 10%)" }}
           >
-            <canvas ref={previewRef} className="block w-full" />
+            <canvas ref={previewRef} className={SURFACE_MEDIA} />
             {/* 지평선이 정확히 한가운데 와야 합니다. 어긋나면 여섯 면이 전부 기울어집니다. */}
             <div
               className="pointer-events-none absolute inset-x-0 top-1/2"
@@ -329,12 +330,17 @@ export default function PanoramaWorkbench({
         </div>
 
         <div className="space-y-3">
-          {/* 사용 방법. 세로 쌓임이라 단추 아래 목록이 그냥 쌓입니다. */}
-          <div className="space-y-2">
+          {/* 사용 방법 — 손을 놀리면서 같이 읽는 자리입니다. 세로 쌓임이라 단추 아래 목록이 그냥 쌓입니다. */}
+          {/* 튜토리얼 자리는 HowToPanel 이 아니라 이 감싸개에 답니다 — 패널 뿌리가 display:contents 라 상자가 없어 말풍선이 잡을 네모가 안 생깁니다. */}
+          <div className="space-y-2" data-tour="cropper-pano-howto">
             <HowToPanel {...SIX_FACES_HOWTO} />
           </div>
 
-          <label className="flex items-center gap-2 text-[11px]" style={{ color: "oklch(0.72 0.01 265)" }}>
+          <label
+            className="flex items-center gap-2 text-[11px]"
+            style={{ color: "oklch(0.72 0.01 265)" }}
+            data-tour="cropper-pano-fix"
+          >
             <input
               type="checkbox"
               checked={alreadyEquirect}
@@ -458,7 +464,7 @@ export default function PanoramaWorkbench({
             )}
           </div>
 
-          <div className="space-y-1.5 pt-1">
+          <div className="space-y-1.5 pt-1" data-tour="cropper-pano-faces">
             <button
               type="button"
               disabled={!ready || saving}

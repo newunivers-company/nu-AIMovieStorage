@@ -21,7 +21,7 @@ import type { CompositionState } from "@/lib/composition";
 /**
  * 타임라인에 **노래를 깝니다.**
  *
- *
+ * 뮤직비디오는 노래가 먼저 있고 그림이 뒤따릅니다. 그래서 곡을 타임라인 위에 얹고, 그 위에서 움직임을 잡습니다.
  *
  * # 왜 씬이 아니라 여기인가
  *
@@ -83,8 +83,8 @@ export function MusicSection({
   /**
    * 파일로 올리기 — 고른 음원을 **BGM 업로드 폴더로 옮겨 놓고** 그 경로를 씁니다.
    *
-   * 사람이 고른 자리(바탕화면·다운로드)를 그대로 가리키면, 그 파일을 옮기거나 지우는 순간
-   * 컷의 노래가 사라집니다.
+   * 올린 음원은 BGM 프로젝트의 업로드 폴더에 씬·컷 번호로 따로 쌓입니다. 사람이 고른 자리(바탕화면·다운로드)를
+   * 그대로 가리키면, 그 파일을 옮기거나 지우는 순간 컷의 노래가 사라집니다.
    */
   const pick = async () => {
     if (!isDesktopApp()) {
@@ -128,7 +128,7 @@ export function MusicSection({
         <div data-tour="timeline-music-pick" className="space-y-1.5">
           {/*
             길이 둘입니다 — **BGM 화면에서 뽑아 둔 곡**을 그대로 쓰거나, 밖에서 받은 음원을 올리거나.
-            
+            앱에서 만든 곡을 쓰자고 파일 탐색기를 거치게 하면, 제 폴더에 있는 것을 굳이 밖으로 돌아 찾아오게 됩니다.
           */}
           {choices.length > 0 && (
             <select
@@ -197,7 +197,7 @@ export function MusicSection({
 
           {/*
             타임라인이 노래보다 짧으면 뒤쪽은 뽑을 화면이 없습니다. 길이를 맞추는 일이 가장 잦아 단추로 둡니다
-            — 3분 곡이면 타임라인도 3분.
+            — 3분 곡이면 타임라인도 3분. 노래 한 곡은 보통 3분을 넘겨서, 기본 길이로는 늘 모자랍니다.
           */}
           <div className="flex items-center gap-1 text-[9px]" style={{ color: "oklch(0.58 0.01 265)" }}>
             <span className="shrink-0">타임라인 {timeline.duration.toFixed(1)}초</span>

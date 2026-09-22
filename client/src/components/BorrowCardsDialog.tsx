@@ -17,6 +17,9 @@ import type { RoomPreset } from "@/lib/roomPreset";
 /**
  * **다른 작품에서 끌어오기** — 고르는 창.
  *
+ * 시리즈물은 인물을 작품끼리 나눠 씁니다. 한 인물에 쌓인 카드가 이미 여럿이라, 통째가 아니라
+ * 그중 몇 개만 골라 와서 이 작품에서 다시 변형하는 것이 실제 쓰임새입니다.
+ *
  * 두 단으로 고릅니다 — **카드를 고르고, 그 카드의 그림 중 몇 장을 고릅니다.** 카드만
  * 고르고 그림을 안 고르면 설정만 옵니다(그것도 쓸모가 있습니다 — 이쪽에서 새로 뽑으면 됩니다).
  *
@@ -49,7 +52,8 @@ export default function BorrowCardsDialog({
   );
   /*
     방은 카드가 아니라 **라이브러리 한 칸**이라 목록이 따로입니다.
-    면 표에 값이 있는 칸만 복사합니다.
+    방에 실제로 걸린 6면·파노라마 그림만 따라옵니다 — 면 표에 값이 있는 칸만 복사합니다.
+    안 건 그림까지 끌면 저쪽 작품 폴더를 통째로 옮기는 꼴이 됩니다.
   */
   const rooms = useMemo(
     () => (kind === "room" ? borrowRoomCandidates(projectName) : []),
@@ -60,8 +64,8 @@ export default function BorrowCardsDialog({
   /**
    * 카드마다 **고른 변형과 그 변형의 그림**. 열쇠는 `카드키|변형id`.
    *
-   * 변형이 수십 개인 카드를 통째로
-   * 가져오면 폴더가 금세 붑니다 — 대부분은 이 작품에서 안 씁니다.
+   * 켠 변형만 따라옵니다. 변형이 수십 개인 카드를 통째로 가져오면 폴더가 금세 붑니다 —
+   * 대부분은 이 작품에서 안 씁니다.
    */
   const [varPicked, setVarPicked] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
@@ -222,6 +226,7 @@ export default function BorrowCardsDialog({
               <button
                 key={item.preset.id}
                 type="button"
+                data-tour="env-room-borrow"
                 onClick={() =>
                   setPickedRooms((current) =>
                     current.includes(item.preset.id)
@@ -325,8 +330,10 @@ export default function BorrowCardsDialog({
 
                 {/*
                   ── 변형 ──────────────────────────────────────────────
-                   카드와 같은 방식으로
-                  **변형을 켜고, 그 변형의 그림을 고릅니다.*                */}
+                  변형은 **켠 것만** 따라옵니다 — 원본에서 구도만 바꾼 클로즈업 변형이
+                  여럿 달린 경우가 흔해, 통째로 딸려 오면 고르는 뜻이 없어집니다. 카드와
+                  같은 방식으로 **변형을 켜고, 그 변형의 그림을 고릅니다.**
+                */}
                 {on && item.variations.length > 0 && (
                   <div className="space-y-1 px-3 pb-3">
                     <p className="text-[9px] font-semibold" style={{ color: "oklch(0.55 0.01 265)" }}>

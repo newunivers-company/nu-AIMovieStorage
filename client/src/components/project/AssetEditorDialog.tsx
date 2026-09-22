@@ -1,5 +1,6 @@
 import { Package, Trash2 } from "lucide-react";
 import { EDITOR_DIALOG } from "@/lib/layout";
+import { HOLDS_ENTITY_CARD } from "@/lib/useTutorialPanel";
 import { uid } from "@/lib/projectTypes";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import PromptCardBody from "@/components/project/PromptCardBody";
@@ -108,7 +109,9 @@ export default function AssetEditorDialog({
 
   return (
     <Dialog open onOpenChange={(next: boolean) => !next && void finish()}>
-      <DialogContent className={EDITOR_DIALOG} style={{ background: "oklch(0.13 0.009 265)" }}>
+      <DialogContent
+        tutorialHolds={HOLDS_ENTITY_CARD}
+        className={EDITOR_DIALOG} style={{ background: "oklch(0.13 0.009 265)" }}>
         <DialogTitle className="sr-only">{asset.name || "에셋"} 원본</DialogTitle>
         <DialogDescription className="sr-only">이 에셋의 기준이 되는 첫 그림을 만듭니다</DialogDescription>
 

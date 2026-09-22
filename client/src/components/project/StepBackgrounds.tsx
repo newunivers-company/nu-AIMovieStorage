@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { cardWantFor, useCurrentTutorialAnchor } from "@/lib/tutorialStore";
+import { isInPanoramaDir } from "@/lib/faceSets";
+import { useEffect, useState } from "react";
 import { EDITOR_DIALOG } from "@/lib/layout";
+import { HOLDS_ENTITY_CARD } from "@/lib/useTutorialPanel";
 import { MapPin, PackageOpen, Plus, Trash2 } from "lucide-react";
 import BorrowCardsDialog from "@/components/BorrowCardsDialog";
 import GeneratedImageShelf from "@/components/project/GeneratedImageShelf";
@@ -73,6 +76,7 @@ export default function StepBackgrounds({
    */
   onChange: (updater: (current: ProjectDraft) => Partial<ProjectDraft>) => void;
 }) {
+  const anchor = useCurrentTutorialAnchor();
   const [borrowing, setBorrowing] = useState(false);
   // 펼친 카드 id 는 세터만 씁니다 — 어느 것이 열렸는지는 카드가 스스로 압니다.
   const [, setOpenId] = useState<string | null>(
@@ -93,6 +97,41 @@ export default function StepBackgrounds({
     openEntity: openBackground,
     patchEntity: patchBackground,
   } = lineage;
+
+  /*
+    **장소 카드는 지금 걸음을 보고 스스로 엽니다.**
+
+    인물 쪽처럼 «열어 줘» 부탁을 듣게 했더니 안내가 카드에 안 붙었습니다 — 이 화면은 구도잡기의
+    «장소 라이브러리» 창 안에서 뜨는 탓에 **부탁이 오간 뒤에 태어나서** 아무도 못 듣습니다.
+    그래서 듣는 대신 지금 걸음의 앵커를 직접 봅니다(`cardWantFor`).
+
+    전개도 여섯 면·파노라마·앵커 찍기·표시하기는 **장소 그림**에서 하는 일입니다.
+    카드를 여는 길이 인물에만 있던 동안 그 걸음들이 인물 사진 위에서 돌았습니다.
+
+    **전개도가 붙은 카드를 고릅니다** — 파노라마나 6면이 든 장소가 있으면 그것, 없으면 첫 장소.
+    그래야 가위를 열었을 때 «파노라마»·«전개도 6면» 탭이 실제로 서 있습니다.
+  */
+  useEffect(() => {
+    const want = cardWantFor(anchor ?? undefined);
+    if (!want) return;
+    if (want === "closed") {
+      setEditing(null);
+      return;
+    }
+    if (editing) return;
+    const unfolded = draft.backgrounds.find((item) =>
+      (item.generatedImages || []).some((image) => image.face || isInPanoramaDir(image.filePath)),
+    );
+    const pick = unfolded ?? draft.backgrounds[0];
+    if (pick) {
+      setEditing({ entityId: pick.id, kind: "root" });
+      return;
+    }
+    const made = newBackground();
+    onChange((current) => ({ backgrounds: [...current.backgrounds, made] }));
+    setOpenId(made.id);
+    setEditing({ entityId: made.id, kind: "root" });
+  }, [anchor, draft.backgrounds, editing, setEditing, onChange]);
 
   const add = () => {
     const created = newBackground();
@@ -119,7 +158,7 @@ export default function StepBackgrounds({
           장면이 벌어지는 장소를 등록합니다. 마스터 이미지를 만들고, 앵커를 찍어
           여섯 면이나 파노라마를 뽑습니다.
         </p>
-        {/* «추가» 단추는 목록 끝 하나뿐입니다 — 캐릭터 탭과 같은 규칙. */}
+        {/* «추가» 단추는 목록 끝 하나뿐입니다 — 캐릭터 탭과 같은 규칙(규칙 1). */}
       </div>
 
       {draft.backgrounds.length === 0 && (
@@ -232,7 +271,7 @@ export default function StepBackgrounds({
               spaceKindOf: (alternate) => alternate.spaceKind || "exterior",
             }}
             /*
-              보유 애셋은 패널 안 미니 계보로 — 캐릭터 탭과 같은 규칙.
+              보유 애셋은 패널 안 미니 계보로 — 캐릭터 탭과 같은 규칙(규칙 1).
               파일은 이 장소 폴더 안에 «장소_에셋_번호» 로 들어가므로(규칙 5), 장소(와 변형)의
               파일 목록을 넘겨 에셋 카드가 폴더를 읽을 때 장소 파일을 제 것으로 줍지 않게 합니다.
             */
@@ -275,7 +314,7 @@ export default function StepBackgrounds({
         ))}
       </div>
 
-      {/* 위 단추까지 올라갔다 내려오지 않게 목록 끝에도 같은 단추를 둡니다. */}
+      {/* 위 단추까지 올라갔다 내려오지 않게 목록 끝에도 같은 단추를 둡니다 — 캐릭터 탭과 같은 규칙. */}
       {draft.backgrounds.length > 0 && (
         <button
           type="button"
@@ -292,7 +331,7 @@ export default function StepBackgrounds({
 
       {/*
         캐릭터 탭과 **같은 창**을 씁니다(규칙 1). 갈래만 다릅니다 —
-        
+        캐릭터는 캐릭터에서, 배경·방은 배경·방에서만 빌려 옵니다.
       */}
       <button
         type="button"
@@ -337,6 +376,7 @@ export default function StepBackgrounds({
           onOpenChange={(next: boolean) => !next && setEditing(null)}
         >
           <DialogContent
+            tutorialHolds={HOLDS_ENTITY_CARD}
             className={EDITOR_DIALOG}
             style={{ background: "oklch(0.13 0.009 265)" }}
           >
@@ -409,7 +449,7 @@ export default function StepBackgrounds({
               /*
               보유 에셋·다른 원본(과 그 변형)의 파일과 접두 — 캐릭터 탭과 같은 규칙(규칙 1). 다른 원본 «겨울» 의
               접두 `숲_겨울` 은 이 변형 «겨울» 과 같아서, 안 넘기면 변형 창이 그 파일을 제 것으로 줍고(X 로 지움)
-              이름 바꾸기가 그 파일까지 끌고 갑니다(검토 2026-09-08). 제 파일과 형제 변형은 창이 따로 셉니다.
+              이름 바꾸기가 그 파일까지 끌고 갑니다. 제 파일과 형제 변형은 창이 따로 셉니다.
             */
               claimedPaths={() =>
                 ownerClaimedPaths(openBackground, {
@@ -447,7 +487,7 @@ export default function StepBackgrounds({
             { label: "위치", value: sheetOwner.location },
           ].filter((item) => item.value)}
           patchOwner={(updater) => patchBackground(sheetOwner.id, updater)}
-          // 배치도는 프로젝트 공용 — 캐릭터 탭과 같은 목록에서 고릅니다.
+          // 배치도는 프로젝트 공용 — 캐릭터 탭과 같은 목록에서 고릅니다(규칙 1).
           layouts={draft.sheetLayouts || []}
           patchProject={(updater) =>
             onChange((current) => ({
@@ -546,8 +586,9 @@ export function BackgroundCard({
   /*
     전개도가 들어오면 **자동으로 여섯 면을 잘라 저장합니다.**
 
-     그림이 들어오는 길은 여럿이라(선반·후보함·로컬·폴더 읽기)
-    길마다 걸면 새 길이 생길 때 빠뜨립니다. 카드가 제 목록을 지켜보는 자리 하나면 됩니다.
+    전개도는 규격을 정해 뽑으므로 여섯 칸의 자리가 늘 같습니다 — 손으로 자를 까닭이 없습니다.
+    그림이 들어오는 길은 여럿이라(선반·후보함·로컬·폴더 읽기) 길마다 걸면 새 길이 생길 때
+    빠뜨립니다. 카드가 제 목록을 지켜보는 자리 하나면 됩니다.
 
     접두·폴더는 잘라낸 칸을 저장할 때와 **같은 규칙**입니다(위 `cropSave` 와 같은 값) —
     다른 원본은 제 폴더가 없어서 주인 폴더에 «주인_이름» 접두로 들어가야 합니다(규칙 5).
@@ -622,6 +663,7 @@ ${background.promptKo ?? ""}`),
         />
         <button
           type="button"
+          data-tour="env-place-remove"
           onClick={onRemove}
           aria-label="지우기"
           className="shrink-0 rounded p-1.5 hover:bg-white/10"
@@ -699,7 +741,7 @@ ${background.promptKo ?? ""}`),
             /*
               다른 원본은 제 폴더가 없습니다. `cropSave` 없이는 `SheetPanelCropper` 가 이름(«겨울»)으로 폴더를
               파 잘라낸 칸·표시가 `background/겨울/` 로 가고, 그 파일은 주인 폴더 읽기·이름 바꾸기·주인 지우기가
-              전부 못 봅니다(규칙 5·3 위반, 검토 2026-09-08). 캐릭터 카드와 같은 규칙(규칙 1). 주인 장소는 지금대로.
+              전부 못 봅니다(규칙 5·3 위반). 캐릭터 카드와 같은 규칙(규칙 1). 주인 장소는 지금대로.
             */
             cropSave={
               folder

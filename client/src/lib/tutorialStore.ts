@@ -1,8 +1,13 @@
 import { useSyncExternalStore } from "react";
 import { FULL_TUTORIAL, tutorialById, type TutorialPage, type TutorialRoute } from "@/tutorials";
+import { HOLDS_ENTITY_CARD } from "@/lib/tutorialPanels";
 
 /**
  * **튜토리얼 살림** — 켜짐 · 본 것 · 지금 따라가는 걸음.
+ *
+ * 켜고 끄기는 설정에 두고, 갈래는 나눕니다 — 설정부터 페이지 구성·구도잡기·씬 구성까지 한 바퀴
+ * 도는 전체 한 벌과, 화면별·구도잡기별로 짧게 끊은 것들. 한 벌로 뭉치면 이미 아는 화면까지
+ * 매번 다시 지나야 합니다.
  *
  * # 왜 React 상태가 아니라 모듈인가
  *
@@ -117,15 +122,51 @@ export function useTutorial(): TutorialState {
   return useSyncExternalStore(subscribeTutorials, getTutorialState, getTutorialState);
 }
 
+/**
+ * 지금 걸음이 가리키는 자리 이름. 따라가는 것이 없으면 `null`.
+ *
+ * 창이 **스스로 닫을 때를 알려면** 이것이 필요합니다 — 「내가 품은 자리 중에 지금 걸음의 것이
+ * 없다」 면 이 창은 이 걸음에 쓸모가 없습니다(`DialogContent` 의 `tutorialHolds`).
+ */
+export function useCurrentTutorialAnchor(): string | null {
+  const { active } = useTutorial();
+  if (!active) return null;
+  const tutorial = tutorialById(active.tutorialId);
+  return tutorial?.steps[active.stepIndex]?.anchor ?? null;
+}
+
 export function setTutorialsEnabled(enabled: boolean) {
   if (enabled === state.enabled) return;
   // 끄면 따라가던 걸음도 접습니다 — 꺼 놓았는데 안내 창만 남아 있으면 «껐는데 왜 뜨나» 가 됩니다.
   commit({ ...state, enabled, active: enabled ? state.active : null });
 }
 
+/**
+ * **튜토리얼이 설 자리를 함께 마련합니다.**
+ *
+ * 걸음 여럿은 «내용이 있어야 생기는» 자리를 가리킵니다 — 뽑은 그림이 없으면 가위가 없습니다. 그
+ * 준비를 설정 화면의 단추 하나에 맡겨 두었더니, 갓 깐 사람은 그 단추를 볼 일이 없었습니다.
+ * 그래서 **튜토리얼을 여는 순간** 마련합니다.
+ *
+ * 실패해도 조용합니다 — 갓 깐 직후에는 기본 저장 폴더가 아직 없어 만들 수 없습니다. 그때는 한 바퀴가
+ * 폴더를 정하는 걸음을 지난 뒤, 프로젝트가 필요한 걸음에서 다시 시도합니다(`TutorialOverlay`).
+ * 그래서 기회가 두 번입니다.
+ *
+ * 붙여 넣기(import)를 미루는 까닭 — 이 파일은 앱이 켜질 때 바로 읽히는데, 예시 작품 만드는 쪽은
+ * 파일 살림과 미디어까지 끌고 옵니다. 튜토리얼을 열지 않는 사람에게까지 지울 이유가 없습니다.
+ */
+function prepareSampleProject() {
+  void import("@/lib/tutorialSample")
+    .then((module) => module.ensureTutorialSample())
+    .catch(() => {
+      // 폴더가 아직 없거나 데스크톱이 아닙니다. 다음 기회에.
+    });
+}
+
 export function startTutorial(id: string) {
   const tutorial = tutorialById(id);
   if (!tutorial || !tutorial.steps.length) return;
+  prepareSampleProject();
   commit({ ...state, active: { tutorialId: id, stepIndex: 0 } });
 }
 
@@ -170,6 +211,7 @@ export function prevStep() {
  * 스위치가 꺼져 있었으면 켭니다 — 다시 보겠다는 뜻이니까요.
  */
 export function resetTutorials() {
+  prepareSampleProject();
   commit({ enabled: true, seen: {}, active: { tutorialId: FULL_TUTORIAL.id, stepIndex: 0 } });
 }
 
@@ -207,8 +249,12 @@ export function routeMatches(route: TutorialRoute, location: string): boolean {
 }
 
 /**
- * 주소와 (껍데기가 알려 준) 단계로 «지금 화면» 을 정합니다. 위 띠의 «이 페이지 기능» 이 이걸로
- * 목록을 고릅니다. 구도잡기 창은 주소가 없어서 여기서는 안 나옵니다 — 그 갈래는 메뉴에 늘 있습니다.
+ * 주소와 (껍데기가 알려 준) 단계로 «지금 화면» 을 정합니다. 튜토리얼 목록이 이걸로 «이 화면의 것» 만
+ * 고릅니다.
+ *
+ * 구도잡기 창은 주소가 없습니다 — 대신 창이 열리는 동안 스스로 `planner` 라고 알립니다
+ * (`CompositionPlanner`). 구도잡기 갈래는 그 창이 떠 있을 때만 목록에 나옵니다 —
+ * 창이 닫혀 있는데 목록에 구도잡기 갈래가 늘어서 있으면 눌러도 가리킬 자리가 없습니다.
  */
 export function pageForLocation(location: string, reported: TutorialPage | null): TutorialPage | null {
   if (location === "/") return "projects";
@@ -232,6 +278,15 @@ function getReportedPage(): TutorialPage | null {
   return reportedPage;
 }
 
+/**
+ * 지금 알려져 있는 화면. 겹쳐 뜨는 창(구도잡기)이 **덮기 전의 것을 기억해 두었다가 닫을 때
+ * 되돌리려고** 씁니다 — 그냥 `null` 로 되돌리면 프로젝트 껍데기의 단계 보고가 다시 오지 않아
+ * («단계가 안 바뀌었으니») 창을 닫은 뒤 목록이 텅 빕니다.
+ */
+export function currentTutorialPage(): TutorialPage | null {
+  return reportedPage;
+}
+
 /** 프로젝트 껍데기가 «지금 이 단계» 를 알립니다. 화면을 떠나면 `null`. */
 export function reportTutorialPage(page: TutorialPage | null) {
   if (page === reportedPage) return;
@@ -250,6 +305,67 @@ export function useReportedTutorialPage(): TutorialPage | null {
  * 껍데기가 듣습니다. 이름을 여기 한 곳에 두어 보내는 쪽과 듣는 쪽이 어긋나지 않게 합니다.
  */
 export const TUTORIAL_PAGE_EVENT = "tutorial:page";
+
+/* ── 인물 카드 창을 걸음에 맞춰 열고 닫기 ───────────────────────────────────── */
+
+/**
+ * 캐릭터 걸음은 **두 층**에 걸쳐 있습니다 — 인물 카드 창 «안»(레퍼런스·분석·프롬프트·뽑은 그림·가위)과
+ * 그 아래 «패널»(인물 패널·캐릭터 추가·시트 제작·변형). 사람이 손으로 맞춰 열고 닫아야 했더니
+ * 떠야 할 때 안 뜨고 닫혀야 할 때 안 닫혔습니다 — 창이 덮고 있으면 패널의 자리를
+ * 못 가리키고, 창이 닫혀 있으면 창 안의 자리를 못 가리킵니다.
+ *
+ * 규칙은 **앵커 이름에 이미 있습니다.** `card-…` 는 카드 안의 것이고, 아래 넷은 창 밖의 것입니다.
+ * 그래서 걸음마다 따로 적지 않고 여기 한 곳에서 읽습니다(규칙 1 — 같은 규칙을 두 벌 적지 않기).
+ */
+const OUTSIDE_THE_CARD = new Set([
+  "character-panel",
+  "characters-add",
+  "character-sheet-compose",
+  "character-variation",
+]);
+
+export type TutorialCardWant = "open" | "closed";
+
+const INSIDE_THE_CARD = new Set(HOLDS_ENTITY_CARD.split(/\s+/).filter(Boolean));
+
+export function cardWantFor(anchor: string | undefined): TutorialCardWant | null {
+  if (!anchor) return null;
+  /*
+    **이름 앞머리로 짐작하지 않습니다.** 예전에는 `card-…` 로 시작하면 열고 나머지는 두었는데,
+    가위 창(`cropper-…`)과 그림 위 아이콘(`image-actions`)처럼 **다른 이름으로 생긴 자리**가
+    카드 안에 있을 때마다 새어 나갔습니다(같은 모양으로 두 번). 이제 카드가 «내가 품었다» 고
+    적어 둔 목록 그대로 봅니다 — 새 자리를 그 목록에 넣으면 여기도 저절로 맞습니다.
+  */
+  if (INSIDE_THE_CARD.has(anchor)) return "open";
+  return OUTSIDE_THE_CARD.has(anchor) ? "closed" : null;
+}
+
+export const TUTORIAL_CARD_EVENT = "tutorial:card";
+
+/** 「인물 카드 창을 열어 줘 / 닫아 줘」 — `StepCharacters` 가 듣습니다. */
+export function requestTutorialCard(want: TutorialCardWant) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<TutorialCardWant>(TUTORIAL_CARD_EVENT, { detail: want }));
+}
+
+/**
+ * 컷도 같은 사정입니다 — 접힌 컷 카드는 머리줄(«구도잡기» · «구도 불러오기»)만 보입니다.
+ * 그 아래 `cut-…` 자리들은 펴야 생깁니다. 접혀 있어도 보이는 둘은 뺍니다.
+ */
+const CUT_HEADER = new Set(["cut-open-planner", "cut-import-composition"]);
+
+export function cutWantFor(anchor: string | undefined): "open" | null {
+  if (!anchor || !anchor.startsWith("cut-")) return null;
+  return CUT_HEADER.has(anchor) ? null : "open";
+}
+
+export const TUTORIAL_CUT_EVENT = "tutorial:cut";
+
+/** 「컷 하나를 펴 줘」 — `StepScenes` 가 듣고, 없으면 장면과 컷을 만들어 폅니다. */
+export function requestTutorialCut() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(TUTORIAL_CUT_EVENT));
+}
 
 export function requestTutorialPage(page: TutorialPage) {
   if (typeof window === "undefined") return;

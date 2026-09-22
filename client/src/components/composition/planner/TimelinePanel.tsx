@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { HOLDS_MOCAP } from "@/lib/useTutorialPanel";
 import { Eye, EyeOff, X } from "lucide-react";
 import {
   AxisVectorFields,
@@ -93,8 +94,8 @@ export function TimelinePanel({
   /** 레퍼런스 영상을 몇 초씩 잘라 뽑을지. "whole" 이면 통째로. */
   const [split, setSplit] = useState<(typeof SPLIT_OPTIONS)[number]["id"] | "music">("whole");
   /*
-    «노래 구간대로» 는 길이가 아니라 **자를 시각들**입니다.
-    타임라인에 노래를 올린 컷에서만 선택지에 나옵니다.
+    «노래 구간대로» 는 길이가 아니라 **자를 시각들**입니다 — 후렴이 시작하는 자리는 5초·10초 같은
+    고른 간격에 걸리지 않습니다. 타임라인에 노래를 올린 컷에서만 선택지에 나옵니다.
   */
   const music = musicOf(state);
   const renders = state.renders || [];
@@ -129,7 +130,7 @@ export function TimelinePanel({
     <>
       {/*
         ── «재생» 구역은 없앴습니다 ──────────────────────────────────────
-        
+        재생·처음·미리보기·길이·영상 FPS 는 화면 아래 타임라인이 그대로 들고 있어 여기 것을 걷어냈습니다.
 
         같은 손잡이가 두 군데 있으면 둘 중 어느 것이 «진짜» 인지 매번 확인하게 됩니다.
         재생·처음·길이·프레임 수는 전부 화면 아래 타임라인에 있고, 거기가 시간 축 옆이라
@@ -138,7 +139,6 @@ export function TimelinePanel({
 
       {/*
         ── 노래 ──────────────────────────────────────────────────────────
-        
         노래가 맨 위에 있는 까닭은 뮤직비디오에서 **노래가 먼저 정해지고** 나머지(길이·구간·나눠 뽑기)가 그 뒤를 따라서입니다.
       */}
       <MusicSection
@@ -154,9 +154,11 @@ export function TimelinePanel({
 
       {/*
         ── 영상 모션 ─────────────────────────────────────────────────────
-         결과는 인물의 이동·회전·자세 키라, GLB 처럼 따로 얹는 것이 아니라 손으로 찍은 키와 똑같이 고칩니다.
+        올린 영상에서 사람의 움직임을 떠다 마네킹에 옮깁니다 — 춤처럼 손으로는 키를 다 찍을 수 없는 동작이 뮤직비디오의
+        대부분입니다. 결과는 인물의 이동·회전·자세 키라, GLB 처럼 따로 얹는 것이 아니라 손으로 찍은 키와 똑같이 고칩니다.
       */}
       <PanelSection
+        tour="timeline-mocap"
         title="영상에서 모션 가져오기"
         open={openSections.motionCapture ?? true}
         onToggle={() => toggleSection("motionCapture")}
@@ -165,6 +167,8 @@ export function TimelinePanel({
           type="button"
           onClick={onMotionCapture}
           data-tour="timeline-mocap-open"
+          // 모캡 창 안의 자리들은 창이 떠야 생깁니다 — 이 단추가 그 창을 엽니다.
+          data-tour-open={HOLDS_MOCAP}
           className="w-full rounded-md px-2 py-2 text-[10px] font-semibold"
           style={{
             background: "oklch(0.18 0.012 265)",
@@ -485,8 +489,9 @@ export function TimelinePanel({
         </p>
 
         {/*
-           생성기는 한 번에 몇 초만 받고 연장은 비싸서, 긴 타임라인을 생성기 길이로
-          미리 잘라 두면 조각마다 그대로 넣습니다. 14 초는 사용자가 말한 AI 영상 기본 길이라 따로 둡니다.
+          노래 한 곡은 3분을 넘기는데 생성기는 한 번에 몇 초만 받고 연장은 비쌉니다. 그래서 긴 타임라인을 생성기 길이로
+          미리 잘라 두면 조각마다 그대로 넣습니다. 5·10·15·30초와 1·2분은 곡을 세는 단위이고, 14 초는 AI 영상의 기본
+          길이라 따로 둡니다.
         */}
         <div data-tour="timeline-render-split" className="mt-2">
           <ChoiceRow
@@ -578,7 +583,8 @@ export function TimelinePanel({
 
         {/*
           ── 뽑아 둔 영상(구도별 라이브러리) ──────────────────────────────
-           목록은 **이 구도**가 들고 있어 창을 닫았다 열어도 남습니다. 누르면 컷이 쓰는 레퍼런스
+          뽑아 둔 레퍼런스 영상은 구도마다 따로 쌓입니다 — 영상을 만드는 단위가 구도라, 프로젝트 전체 목록에 섞어 두면
+          어느 구도에서 나온 것인지 알 수 없습니다. 목록은 **이 구도**가 들고 있어 창을 닫았다 열어도 남습니다. 누르면 컷이 쓰는 레퍼런스
           영상이 그것으로 바뀝니다 — 길이를 바꿔 여러 번 뽑아 놓고 고르는 것이 실제 작업 방식입니다.
         */}
         {renders.length > 0 && (

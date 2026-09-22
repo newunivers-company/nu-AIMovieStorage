@@ -32,7 +32,8 @@ export const READING_WIDTH = "mx-auto w-full max-w-6xl px-6";
  * 인물·장소·에셋·변형 편집 창. **본문(WORK_WIDTH)과 같은 1800px** 까지 넓힙니다.
  *
  * 창이 본문보다 좁아서(1024px) 한글·영문 프롬프트 네 칸이 세로로 길게 늘어져
- * 한눈에 안 들어왔습니다. (2026-09-07)
+ * 한눈에 안 들어왔습니다. 창과 본문의 너비가 다르면 같은 프롬프트가 두 곳에서 다르게
+ * 접혀, 밖에 옮겨 붙일 글을 창 안에서 가늠할 수 없습니다.
  */
 export const EDITOR_DIALOG =
   "max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[1800px] overflow-y-auto border-0 p-0 text-white sm:max-w-[1800px]";

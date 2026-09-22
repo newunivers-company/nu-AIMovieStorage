@@ -4,7 +4,7 @@ import { addRoomIn } from "@/lib/compositionEdit/rooms";
 import { buildCutVideoPrompt, dedupePhrases } from "@/lib/cutVideoPrompt";
 
 /*
-  사용자 2026-09-22 스크린샷 — 영상 프롬프트에 「natural visible pores, …, fine film grain」 이 두 번 박혀
+  영상 프롬프트에 «natural visible pores, …, fine film grain» 이 두 번 박혀
   있었습니다. 일괄 생성이 컷의 `styleTags` 에 자동 질감 칩을 합쳐 넣고 그 위에 `autoRealism().en` 을 한 번
   더 이어 붙인 탓입니다. 모든 호출이 지나는 `buildCutVideoPrompt` 안에서 걷어 냅니다.
 */
@@ -40,7 +40,7 @@ describe("buildCutVideoPrompt — 질감 한 줄", () => {
 
 /*
   **호리존이 장소를 이깁니다** — 컷 프롬프트와 같은 규칙(`horizonOverridesLocation`). 영상 뼈대만 «장소는 첨부한 배경
-  그대로» 와 «배경: 호리존 스튜디오» 를 같이 싣고 있었습니다(2026-09-22 검토) — 그림과 영상이 다른 배경을 말하면 안 됩니다.
+  그대로» 와 «배경: 호리존 스튜디오» 를 같이 싣고 있었습니다 — 그림과 영상이 다른 배경을 말하면 안 됩니다.
 */
 describe("buildCutVideoPrompt — 호리존이 장소를 이깁니다", () => {
   const base = { title: "제품 컷", description: "병을 천천히 돌린다", backgroundName: "카페", plannedSeconds: 4 };

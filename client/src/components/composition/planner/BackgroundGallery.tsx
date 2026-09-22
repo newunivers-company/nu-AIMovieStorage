@@ -7,12 +7,11 @@ import type { FaceLike, FaceSet } from "@/lib/faceSets";
 /**
  * **6면 세트 전체보기** — 만들어 둔 전개도 세트를 큰 그리드로 놓고, 누르면 그 세트가 **방에 통째로** 걸립니다.
  *
+ * 그전에는 낱장 목록이라 고른 그림이 «지금 면»(정면) 한 장에만 붙었습니다 — 여섯 면 세트를 늘어놓고
+ * 고르게 해 놓고 한 면만 거는 것은 화면이 거짓말을 하는 셈이라, 목록 자체를 세트로 바꿨습니다.
  *
- *
- * 그전에는 낱장 목록이라 고른 그림이 «지금 면»(정면) 한 장에만 붙었습니다 — 세트를 보여 주면서 한 면만 거는 것은
- * 화면이 거짓말을 하는 것이라 목록 자체를 세트로 바꿨습니다.
- *
- * 이름은 **그림 아래**에, 자르지 않고 다 보입니다.
+ * 이름은 **그림 아래**에, 자르지 않고 다 보입니다 — 그림 위에 겹쳐 놓으면 그림도 가리고 긴 이름은
+ * 잘려서 어느 세트인지 구별이 안 됩니다.
  */
 export function BackgroundGallery<T extends FaceLike>({
   sets,
@@ -24,7 +23,8 @@ export function BackgroundGallery<T extends FaceLike>({
 }: {
   sets: FaceSet<T>[];
   /**
-   * **전개도 원본**(자르기 전 한 장)들. 세트는 걸 수 있고, 원본은 «무엇에서 잘렸는지» 를 보는 자리입니다.
+   * **전개도 원본**(자르기 전 한 장)들. 이 창은 방에 거는 자리이자 라이브러리를 살피는 자리라 원본도 같이
+   * 놓습니다 — 세트는 걸 수 있고, 원본은 «무엇에서 잘렸는지» 를 보는 자리입니다.
    */
   sources?: { id: string; name?: string; thumb?: string | null }[];
   /** 어느 방에 걸릴지 — 제목에 적습니다. */
@@ -56,6 +56,7 @@ export function BackgroundGallery<T extends FaceLike>({
           </p>
         </div>
         <input
+          data-tour="env-gallery-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="이름 검색..."
@@ -119,10 +120,10 @@ export function BackgroundGallery<T extends FaceLike>({
         {/*
           ── 전개도 원본 ────────────────────────────────────────────────
           자르기 전 한 장입니다. 세트와 달리 **걸 수 없습니다** — 방에 붙는 것은 잘린 여섯 면이고, 원본은
-          「이 세트가 무엇에서 나왔나」 를 확인하는 자리입니다().
+          «이 세트가 무엇에서 나왔나» 를 확인하는 자리입니다 — 여기는 거는 곳이자 라이브러리를 살피는 곳입니다.
         */}
         {(sources ?? []).filter((item) => matches(item.name)).length > 0 && (
-          <div className="mt-6">
+          <div data-tour="env-gallery-sources" className="mt-6">
             <p className="mb-2 text-xs font-semibold" style={{ color: "oklch(0.62 0.01 265)" }}>
               전개도 원본 · 배경 그림
             </p>

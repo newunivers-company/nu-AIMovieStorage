@@ -1,3 +1,4 @@
+import { HOLDS_MAGNIFIC_IMPORT, useTutorialPanel } from "@/lib/useTutorialPanel";
 import { useEffect, useState } from "react";
 import { useEscapeClose } from "@/components/useEscapeClose";
 import { Check, Download, Loader2, Search, X } from "lucide-react";
@@ -62,6 +63,8 @@ export default function MagnificImportDialog({
   /** 내려받아 폴더에 놓은 뒤 부릅니다. */
   onPicked: (filePath: string, name: string) => void;
 }) {
+  // 제 걸음이 아니면 스스로 닫습니다 — 위 라이트박스와 같은 규칙.
+  useTutorialPanel({ open, holds: HOLDS_MAGNIFIC_IMPORT, onClose });
   const magnific = useMagnificStatus();
   const [items, setItems] = useState<Creation[]>([]);
   const [query, setQuery] = useState("");
@@ -146,6 +149,7 @@ export default function MagnificImportDialog({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.key === "Enter" && void load()}
+            data-tour="shelf-import-search"
             placeholder="프롬프트로 찾기"
             className="w-48 shrink-0 rounded-md px-2.5 py-1.5 text-[11px] outline-none"
             style={{
@@ -191,7 +195,8 @@ export default function MagnificImportDialog({
             </p>
           )}
 
-          <div className="grid grid-cols-4 gap-2">
+          {/* 앵커는 타일 하나가 아니라 격자 전체에 — 후보가 없는 날에도 밝힐 자리가 남습니다. */}
+          <div data-tour="shelf-import-grid" className="grid grid-cols-4 gap-2">
             {shown.map((item) => (
               <button
                 key={item.identifier}

@@ -17,6 +17,7 @@ import type { SpaceKind } from "@/lib/blueprint";
 /**
  * 6면 세트 카드 — 여섯 면을 낱장으로 늘어놓지 않고 한 장(3×2 미니 썸네일)으로.
  *
+ * 한 장을 앵커 찍어 여섯 면으로 가르면 원본까지 여덟 장이 되어 선반이 한 장소로 가득 찹니다.
  * 생성 이미지 선반·씬 그림 고르기·시트 소스·구도잡기 환경 탭이 **전부 이 카드
  * 하나** 를 씁니다(규칙 1) — 한 곳에만 세트가 생기고 다른 곳은 여덟 장으로 남는 일이 없게.
  *
@@ -115,6 +116,9 @@ export default function FaceSetCard<T extends FaceLike>({
 
   return (
     <div
+      // 튜토리얼은 3×2 격자가 아니라 **이 바깥 상자**를 밝힙니다 — 격자만 잡으면
+      // 오른쪽 위 X 와 이름 줄의 세트 업스케일이 말풍선 밖으로 빠집니다.
+      data-tour="shelf-face-set"
       className="group relative shrink-0"
       style={{ width: width ? `${width}px` : undefined }}
       title={label}
@@ -250,7 +254,7 @@ export default function FaceSetCard<T extends FaceLike>({
         업스케일 손잡이는 **그림 위가 아니라 이름 줄**에 섭니다.
 
         예전에는 카드 오른쪽 가운데에 겹쳐 있어서 3×2 격자의 «하늘»·«바닥» 칸을 가렸습니다
-        (). 세트 카드는 여섯 면을 한눈에
+        — 손잡이가 그림을 덮고 있었습니다. 세트 카드는 여섯 면을 한눈에
         보려고 있는 것이라, 그림을 가리는 자리는 어디든 틀립니다. 이름 줄은 늘 비어 있고
         가로로 남습니다. 마우스를 올려야 보이던 것도 그만뒀습니다 — 이제 안 가리니까요.
       */}

@@ -8,7 +8,7 @@ import type { TransformConstraint } from "@/components/composition/CompositionVi
 /**
  * 구도잡기 3D 화면의 **키보드** — 걷기(W/A/S/D/Q/E)와 한 글자 단축키(1·2·3 · F · G · M).
  *
- * `CompositionViewport` 의 마운트 이펙트 안에 있던 것을 2026-09-14에 옮겼습니다.
+ * `CompositionViewport` 의 마운트 이펙트 안에 있던 것을 여기로 옮겼습니다.
  * `orbit.ts` 와 같은 뜻입니다 — 그 이펙트가 1300줄이라 «어디까지가 키보드인지» 를 읽어
  * 내기가 어려웠습니다. **동작은 한 줄도 바꾸지 않았습니다.**
  *
@@ -102,7 +102,7 @@ export function createKeyboardMove(deps: KeyboardMoveDeps) {
       1·2·3 = 이동·회전·크기.
 
       언리얼은 W/E/R, 블렌더는 G/R/S 인데 우리는 W·A·S·D·Q·E 가 카메라 걷기라 글자를 쓸
-      자리가 없습니다().
+      자리가 없습니다 — 그래서 글자 대신 숫자 1·2·3 을 씁니다.
       숫자 줄 위쪽(Digit)만 봅니다 — 숫자패드는 다른 데서 쓸 여지를 남깁니다.
     */
     if (!event.altKey) {
@@ -136,8 +136,9 @@ export function createKeyboardMove(deps: KeyboardMoveDeps) {
     /*
       F = 고른 인물로 중심 옮기기, **Ctrl+F = 화면 한가운데 바닥으로 되돌리기**.
 
-       인물을 고른 채로는 F 가 늘 그 인물을
-      잡으므로, 선택을 풀지 않고 되돌릴 길이 따로 있어야 합니다. Alt+F 는 안 건드립니다.
+      F 로 소품 중심에 회전 기준을 잡고 나면, 기준을 화면 한가운데로 되돌릴 길이
+      있어야 합니다. 인물을 고른 채로는 F 가 늘 그 인물을 잡으므로, 선택을 풀지 않고
+      되돌릴 수 있게 Ctrl+F 를 따로 둡니다. Alt+F 는 안 건드립니다.
     */
     if (event.code === "KeyF" && !event.altKey) {
       event.preventDefault();
@@ -158,7 +159,6 @@ export function createKeyboardMove(deps: KeyboardMoveDeps) {
     /*
       M = 고른 것 **앞으로 카메라를 옮기기**.
 
-      
       F 는 회전 중심만 옮기고 카메라는 제자리라, 멀리 있는 소품은 F 를 눌러도 여전히 손톱만
       합니다. M 은 지금 보는 방향 그대로 다가가(또는 물러나) 그것이 화면에 꽉 차게 섭니다.
       Ctrl·Alt 가 붙은 M 은 안 건드립니다.

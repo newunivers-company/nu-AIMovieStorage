@@ -27,7 +27,8 @@ import type { Cut, ProjectDraft, Scene } from "@/lib/projectTypes";
 /**
  * **한 번에 뽑기** — 작품 하나를 **순서대로** 끝까지 뽑습니다.
  *
- *
+ * 캐릭터 그림부터 씬 영상까지를 한 줄로 이어 돌리고, 나온 것은 폴더와 앱 양쪽에
+ * 정리해 둡니다. 마그니픽으로 뽑든 이 컴퓨터로 뽑든 지나는 순서는 같습니다.
  *
  * # 순서가 곧 품질입니다
  *
@@ -149,9 +150,8 @@ export function enginesOf(draft: ProjectDraft): { image: BatchEngine; video: Bat
 /**
  * 시트를 뽑아야 하는 인물 — 프롬프트는 있는데 그림이 아직 없는 사람.
  *
- * `redo` 면 **이미 그림이 있어도** 셉니다. 모델을 바꿔 통째로 다시 뽑는 자리(「그림만 다시 뽑기」)가
- * 그것입니다 — 
- * 옛 그림은 지우지 않습니다. 번호가 올라가 나란히 쌓이고, 대표는 카드에서 고릅니다.
+ * `redo` 면 **이미 그림이 있어도** 셉니다. 모델을 바꿔 그림·영상만 통째로 다시 뽑는
+ * 자리(「그림만 다시 뽑기」)가 그것입니다. 옛 그림은 지우지 않습니다. 번호가 올라가 나란히 쌓이고, 대표는 카드에서 고릅니다.
  */
 export function charactersToGenerate(draft: ProjectDraft, redo = false) {
   return draft.characters.filter(
@@ -165,8 +165,8 @@ export function charactersToGenerate(draft: ProjectDraft, redo = false) {
  * 프롬프트가 적혔고 **아직 그림이 없는** 컷.
  *
  * 「빈 컷」 을 거르는 까닭은 프롬프트 없이 보내면 생성기가 아무거나 그리기 때문이고,
- * 「그림 있는 컷」 을 거르는 까닭은 사용자 2026-09-17 의 폴더 때문입니다 — `컷1_로컬_001`
- * 부터 `_007` 까지 같은 컷이 일곱 벌 쌓여 있었습니다. 「시작」 을 누를 때마다 이미 뽑은
+ * 「그림 있는 컷」 을 거르는 까닭은 실제로 쌓인 폴더 때문입니다 — `컷1_로컬_001`
+ * 부터 `_007` 까지 같은 컷이 일곱 벌 있었습니다. 「시작」 을 누를 때마다 이미 뽑은
  * 컷을 또 뽑았던 것입니다. 한 컷을 일부러 다시 뽑고 싶으면 그 **컷 카드의 «로컬 그림»**
  * 으로 뽑습니다 — 여기는 «아직 없는 것을 채우는» 자리입니다.
  */
@@ -330,7 +330,7 @@ const asPrimary = (filePath: string, name: string) => ({
 
 /*
   아래 셋의 갱신 함수는 **다시 돌려도 됩니다.** 닫힌 작품에 쓰다 다른 창에 지면 `writeProject`
-  가 되읽은 판 위에 같은 함수를 다시 돌립니다(2026-09-21). `asPrimary` 가 안에서 만드는 그림 id
+  가 되읽은 판 위에 같은 함수를 다시 돌립니다. `asPrimary` 가 안에서 만드는 그림 id
   는 시도마다 달라지지만 그 id 를 밖에서 읽는 곳이 없고, 거절된 판은 어디에도 남지 않습니다.
 */
 function attachSheet(projectId: string, characterId: string, filePath: string, name: string) {
@@ -388,7 +388,7 @@ function attachVideo(projectId: string, sceneId: string, filePath: string, name:
  * 뽑기는 됐는데 카드·장면에 못 붙였을 때의 말 — 까닭은 `writeProject` 가 준 것을 그대로, 파일이
  * 사라진 게 아니라는 것을 함께. 말하는 곳은 **여기(작업 서랍) 하나**입니다 — 예전에는 `writeProject`
  * 도 토스트를 띄워 같은 말이 두 번 보였고, 까닭은 여기서 «다른 창이 먼저 저장했다» 로 단정해
- * 파일 쓰기 실패일 때 틀렸습니다(2026-09-22 검토).
+ * 파일 쓰기 실패일 때 틀렸습니다.
  */
 const notAttached = (where: string, filePath: string, why: string) =>
   new Error(`뽑기는 했는데 ${where}에 못 붙였습니다 — ${why} 파일은 폴더에 있습니다: ${filePath}`);
@@ -417,7 +417,7 @@ async function localImage(
     **로컬 그림 엔진은 레퍼런스를 못 뭅니다.** 넷(Qwen-Image·Z-Image·Krea 2·Anima) 다
     워커에 `image` 를 읽는 자리가 없습니다. 마그니픽으로 뽑을 때는 인물 시트가 올라가는데
     로컬은 글만 가므로, 같은 컷이라도 **컷마다 얼굴이 달라집니다.** 작업 줄에 적어 두어야
-    를 여기서 찾습니다(2026-09-18 점검).
+    «왜 인물이 안 맞지» 의 까닭을 여기서 찾습니다.
   */
   report({ step: "이 컴퓨터가 뽑는 중 · 이 엔진은 글만 받습니다(인물 시트 못 실음)" });
   const chosen = lorasToRun(engine, loras);
@@ -746,7 +746,7 @@ registerTaskRunner(SCENE_BOARD_TASK, async (raw, report, task) => {
 /**
  * **씬 영상의 첫 프레임은 «첫 컷 그림» 입니다.**
  *
- * 2026-09-18 실측에서 잡힌 것입니다. 여태 스토리보드 시트를 첫 프레임으로 줬는데,
+ * 실측에서 잡힌 것입니다. 여태 스토리보드 시트를 첫 프레임으로 줬는데,
  * 생성기는 그것을 «칸 순서표» 로 읽지 않고 **그림 한 장으로** 읽습니다. 그래서 뽑힌 영상의
  * 첫 2초가 「컷 2 · 천 사이로 들어서는 단이 / 길이 5.0초 / 카메라 고정」 이라는 한국어 표가
  * 화면에 찍힌 채 움직이는 장면이었습니다. 게다가 시트는 가로로 긴 판이라 첫 프레임이 모양을
@@ -768,7 +768,7 @@ function firstFrameOf(scene: Scene): string | undefined {
  * 씬 영상과 함께 올릴 것들 — 스토리보드 시트와 **이 장면에 나오는 인물 시트**.
  *
  * 여태 `references: []` 였습니다. 그래서 자동으로 뽑은 씬 영상은 인물이 누구인지 모른 채
- * 글만 보고 그렸습니다().
+ * 글만 보고 그렸습니다.
  * 컷 단위 「영상 생성기로 보내기」 는 이미 시트를 싣고 있었는데 자동 쪽만 빠져 있었습니다.
  */
 function sceneVideoRefs(draft: ProjectDraft | null, scene: Scene): string[] {
@@ -800,8 +800,6 @@ registerTaskRunner(SCENE_VIDEO_TASK, async (raw, report, task) => {
 
   /*
     ── 러닝타임은 **씬이 정합니다** ──────────────────────────────────────
-    
-
     컷 길이의 합이 그 씬의 길이입니다. 예전에는 여기서 10초로 못 박아 잘랐는데, 그러면
     20초를 받는 모델을 골라도 10초짜리가 나옵니다. MCP 쪽은 이제 **모델에게 물어** 맞춥니다
     (`fitDuration`) — 모자란 것보다 넘치는 쪽을 고릅니다. 컷이 잘리면 이야기가 끊깁니다.

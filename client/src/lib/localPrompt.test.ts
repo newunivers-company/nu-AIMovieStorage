@@ -37,7 +37,7 @@ describe("tuneForLocal — @태그 걷어내기", () => {
 });
 
 /*
-  
+  레퍼런스 구성과 전혀 딴판인 그림이 나오고, 전신 칸 셋도 채워지지 않은 적이 있습니다.
   텍스트 인코더가 읽는 길이를 넘기면 **맨 뒤의 칸 배치 지시**가 날아갑니다 — 값을 치르기 전에 알아야 합니다.
 */
 describe("tuneForLocal — 토큰 예산과 칸 수", () => {
@@ -53,6 +53,29 @@ describe("tuneForLocal — 토큰 예산과 칸 수", () => {
     expect(tuneForLocal("qwenimage", { en: "x" }).budget).toBeGreaterThan(
       tuneForLocal("krea2", { en: "x" }).budget,
     );
+  });
+
+  /*
+    2026-09-22 실측에서 나온 규칙입니다. Qwen-Image 에 「full body … head to toe in frame」 으로
+    칸 넉 장을 뽑았더니 **넉 장 모두 허벅지에서 잘리고** 발이 한 번도 안 나왔습니다.
+    무엇이 프레임 안에 있어야 하는지 사물로 짚어 주자 머리부터 신발까지 들어왔습니다.
+  */
+  it("전신을 시키면 «신발까지 프레임 안에» 를 덧댄다 — 그림 엔진만", () => {
+    const tuned = tuneForLocal("qwenimage", { en: "full body shot of a guard, grey backdrop" });
+    expect(tuned.prompt).toContain("down to the shoes");
+    expect(tuned.prompt).toContain("both feet fully visible");
+
+    // 이미 짚어 두었으면 두 번 적지 않습니다.
+    const already = tuneForLocal("qwenimage", { en: "full body, both feet and boots visible" });
+    expect(already.prompt).toBe("full body, both feet and boots visible");
+
+    // 전신이라는 말이 없으면 건드리지 않습니다.
+    const portrait = tuneForLocal("qwenimage", { en: "a close-up portrait" });
+    expect(portrait.prompt).toBe("a close-up portrait");
+
+    // 영상 엔진은 그대로 — 전신이 뜻하는 바가 다릅니다.
+    const video = tuneForLocal("wanvideo", { en: "full body shot of a guard walking" });
+    expect(video.prompt).toBe("full body shot of a guard walking");
   });
 
   it("칸 수를 세어 시트 프롬프트를 가린다", () => {

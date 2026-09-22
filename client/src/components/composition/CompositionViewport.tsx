@@ -197,7 +197,7 @@ export interface CompositionViewportProps {
   onObjectTransform: (id: string, patch: Partial<ObjectComposition>) => void;
   onGlbTransform: (id: string, patch: Partial<GlbTrack>) => void;
   /**
-   * **방을 화면에서 옮겼을 때**. Shift 로 잡은 방만 옵니다.
+   * **방을 화면에서 옮겼을 때**. Shift 로 잡은 방만 옵니다 — Shift 없이 끌면 인물·소품이 잡힙니다.
    * 크기는 기즈모의 배율이라, 받는 쪽이 방 치수에 곱해 넣습니다.
    */
   onRoomTransform?: (
@@ -278,8 +278,8 @@ interface ViewportScene {
   /**
     «방» — 밑면이 y=0 인 유한 큐브 안쪽에 여섯 면을 붙입니다.
 
-    갈래가 하나뿐입니다. 파노라마 구·HDRI 구·«배경 고정/함께»·돔·3D 세트는 2026-09-11 에
-    걷어냈습니다.
+    갈래가 하나뿐입니다. 파노라마 구·HDRI 구·«배경 고정/함께»·돔·3D 세트는 걷어냈습니다 —
+    고를 것은 «방을 세워 배경을 넣을지, 구도만 잡을지» 둘뿐이라 갈래가 늘수록 서로만 어긋났습니다.
   */
   background: {
     /** 방들을 담는 자리. 배경이 바뀌어도 이 그룹은 그대로 삽니다. */
@@ -377,7 +377,7 @@ const EMPTY_GIZMO: ViewportScene["gizmo"] = {
  * ## «배경도 함께» 는 옮기지 않고 «눌러서» 만듭니다
  *
  * 배경은 무한히 먼 각도 그림이라, 카메라를 빼면 인물만 작아지고 배경은 그대로입니다
- * (). 배경막을 월드 어딘가에 못 박아
+ * (카메라를 물려 봐야 어긋남이 그대로 되풀이됩니다). 배경막을 월드 어딘가에 못 박아
  * 봐야 소용이 없습니다 — 반지름 60 짜리 배경막을 원점에 세우고 4m→8m 로 물러나면
  * 인물은 1/2 이 되는데 배경은 (60+4)/(60+8) = 0.94 배, 즉 **드리프트의 6% 밖에**
  * 못 잡습니다(반지름을 4m 로 줄여도 0.67 배로 절반뿐). 정확히 맞추려면 배경막이
@@ -496,9 +496,9 @@ function placeBackgroundRig(
 
     규칙은 `orderBackgroundRooms` 에 있습니다 — **겹친 방은 감싸는 방 먼저**, 같은 겹이면
     먼 방 먼저. 가운데 거리만 보던 시절에는 방 안에 방을 넣으면 순서가 프레임마다 뒤집혀
-    벽이 깜박였습니다().
+    벽이 깜박였습니다 — 겹쳐 둔 두 방이 프레임마다 서로 앞뒤를 바꿔 가며 보였습니다.
 
-    가리기를 켠 면이 있는 껍질도 **같은 순서**에 섭니다(`setBackgroundOcclusion` 의 9/15 절) —
+    가리기를 켠 면이 있는 껍질도 **같은 순서**에 섭니다(`setBackgroundOcclusion` 의 해당 절) —
     그 면이 깊이를 써서 뒤엣것을 가리고, 나머지 면은 순서대로 칠해집니다.
   */
   if (camera && background.rooms.length > 1) {
@@ -514,8 +514,8 @@ function placeBackgroundRig(
 
   /*
     ── 투시 — 방 밖에서 안의 인물을 가리는 벽만 걷습니다 ────────────────
-     규칙과 9/14 «가리기» 와의
-    관계는 `applyWallCutaway` 에 적어 두었습니다.
+    방 밖에서 보면 앞벽이 안에 선 인물을 통째로 덮어 하나도 안 보였습니다. 규칙과
+    «가리기» 와의 관계는 `applyWallCutaway` 에 적어 두었습니다.
   */
   if (camera) {
     const subjects = background.subjects?.() ?? [];
@@ -579,7 +579,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     **매 렌더마다 다시 채워야 합니다.** 예전에는 `useRef(...)` 로 마운트 때
     한 번만 잡고 끝이라, 슬라이더를 움직여도 값이 그대로였습니다 — 전경
-    확대가 아예 안 먹었습니다. (지시 182·189)
+    확대가 아예 안 먹었습니다.
   */
   const zoomRef = useRef(composition.foregroundZoom);
   zoomRef.current = composition.foregroundZoom;
@@ -595,9 +595,10 @@ export default function CompositionViewport(props: CompositionViewportProps) {
   */
   /*
     ── 무빙의 출발점 ────────────────────────────────────────────────────
-    
+    무빙은 «저장한 구도에서 출발해 앵커를 도는 것» 입니다. 저장 구도와 상관없이 앵커만
+    기준으로 돌면, 구도를 잡아 저장하고 거기에 카메라 모션을 주는 일 자체가 뜻이 없어집니다.
 
-    맞습니다. 출발점을 «지금 화면» 으로 두었더니, 구도를 저장해 놓고 각도를 살피려고
+    출발점을 «지금 화면» 으로 두었더니, 구도를 저장해 놓고 각도를 살피려고
     화면을 한 번 돌리는 순간 무빙의 출발점까지 따라 움직였습니다 — 저장한 구도가 아무
     뜻이 없었던 것입니다.
 
@@ -664,7 +665,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     : null;
   const selectedGlbId = selected.startsWith("glb:") ? selected.slice(4) : null;
   /**
-   * 잡은 **방**. 
+   * 잡은 **방**. 방도 마우스로 잡아 단축키로 옮기고 돌리고 키울 수 있어야 하는데, 그냥 끌면
+   * 같은 자리에 있는 인물·소품이 먼저 잡힙니다. 그래서 Shift 를 누르고 끌 때만 방이 잡힙니다.
    */
   const selectedRoomId = selected.startsWith("room:") ? selected.slice(5) : null;
 
@@ -1139,7 +1141,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     };
     /*
       ── 끌면서 **수치를 봅니다** ──────────────────────────────────────
-      
+      마우스로 잡아 돌리고 옮기고 늘리는 동안, 몇 도 돌렸고 얼마나 옮겼는지가 그 자리에서 보여야 합니다 —
+      숫자를 못 보면 눈대중으로만 맞추게 됩니다.
 
       끌기 시작한 자리를 기억해 두고, 움직일 때마다 **그때부터 얼마나** 를 적습니다(«+1.20 m», «−35°», «×1.24»).
       절대값이 아니라 변화량인 까닭: 손이 기억하는 것은 «얼마나 돌렸나» 이지 «지금 각도가 몇 도인가» 가 아닙니다.
@@ -1168,7 +1171,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     /**
      * 수치는 **잡고 있는 손잡이 옆**에 뜹니다.
      *
-     * 화면 맨 위에 두었더니 손은 기즈모를 잡고 눈은 위를 보는 꼴이었습니다. 끄는 동안 포인터가 곧 그 축 손잡이라,
+     * 화면 맨 위에 두었더니 손은 기즈모를 잡고 눈은 위를 보는 꼴이라 시선이 갈라졌습니다 — 숫자는 지금
+     * 돌리고 있는 축에 붙어 있어야 합니다. 끄는 동안 포인터가 곧 그 축 손잡이라,
      * 포인터를 따라다니게 하면 «축에 붙은» 것이 됩니다. 화면 밖으로 나가지 않게 가장자리에서 안으로 접습니다.
      */
     let pointerAt: { x: number; y: number } | null = null;
@@ -1216,7 +1220,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
       const axis = transform.axis ?? "";
       const mode = transform.mode;
       /*
-        **지금 값**만 적습니다(, 「이동이랑 비율도 마찬가지」).
+        **지금 값**만 적습니다 — 회전도 이동도 비율도 똑같이, 지금 화면에서 몇인지를 적습니다.
 
         처음에는 «이번에 얼마나 움직였나»(변화량)를 적었는데, 그러면 끌 때마다 0 에서 다시 시작해 「이 인물이 지금 몇 도인가」 를
         알 수 없었습니다. 화면에 보이는 것이 곧 숫자여야 합니다 — 오른쪽 패널의 값과도 같은 값입니다.
@@ -1289,7 +1293,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 처음 자리 ────────────────────────────────────────────────────────
-      
+      G 키는 카메라를 처음 자리로 되돌립니다.
 
       창을 열었을 때의 카메라를 그대로 적어 둡니다. 걷다가 길을 잃었을 때 돌아올 자리가
       필요한데, «맨 처음 보던 그림» 이 가장 헷갈리지 않는 기준입니다.
@@ -1305,6 +1309,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     /**
      * G 가 돌아갈 자리 — **활성 구도가 있으면 그 구도**, 없으면 창을 열었을 때의 자리.
      *
+     * 구도 하나를 켜 둔 채 G 를 누르면 그 카메라가 비추던 구도로 가야 합니다 —
      * 구도를 세워 두었으면 «처음» 의 뜻이 그쪽으로 옮겨갑니다.
      * 화각은 배율이 아니라 도(度)로 저장돼 있어, 지금 기준 화각에 대한 배율로 바꿔 넣습니다.
      */
@@ -1330,7 +1335,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
       상태에 적힌 자리가 아니라 씬의 자리라야 동선 트랙으로 걸어가는 사람을 따라갑니다.
 
       «어느 클립의 앵커를 쓸지» 는 세 갈래입니다(`anchorSourceOf`).
-        · 클립에 `anchorFromId` 가 있으면 **그 클립**의 앵커 설정 — 
+        · 클립에 `anchorFromId` 가 있으면 **그 클립**의 앵커 설정 — 앞 클립에서 잡아 둔
+          앵커를 뒤 클립이 이어받을지 말지를 클립마다 고를 수 있어야 해서입니다
         · 앵커 잠금(`lockAnchors`)이면 첫 클립 — 전부 한 사람을 돌 때
         · 아무것도 없으면 자기 것
     */
@@ -1361,8 +1367,9 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 저장한 구도로 갈아타기 ───────────────────────────────────────────
-      클립에 «출발 카메라»(`cameraShotId`)가 걸려 있으면 그 시각에 컷이 바뀝니다.
-      
+      클립에 «출발 카메라»(`cameraShotId`)가 걸려 있으면 그 시각에 컷이 바뀝니다 —
+      한 타임라인 안에서 카메라 1 로 무빙을 주다 카메라 2 의 구도로 갈아타고 이어 갈 수
+      있어야 하기 때문입니다.
     */
     const resolveShot = (shotId: string) => {
       const shot = cameraShotsOf(handlersRef.current.composition).find(
@@ -1378,7 +1385,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 앵커 표시를 따라 움직이기 ────────────────────────────────────────
-      
+      따라가기를 켠 앵커인데도 십자가 한자리에 못 박혀 보이던 문제입니다.
 
       표시용 십자는 만들 때 `move.anchor` 자리에 세우고 끝이었습니다. 따라가기를 켜면
       **계산은** 대상을 따라갔지만(`resolveAnchor`) **보이는 십자는** 처음 자리에 그대로
@@ -1399,7 +1406,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 눈금을 옮기면 그 시각의 카메라를 보여 줍니다 ─────────────────────
-      
+      출발점이 구도 1 의 카메라면 무빙도 거기서 시작해야 하는데, 그렇게 보이지 않았습니다.
 
       계산은 맞았습니다(실측: 구도 1에서 앵커로 정확히 2.5m). 문제는 **멈춰 있을 때는
       카메라를 아예 안 건드렸다**는 것입니다 — 눈금을 옮겨도 화면이 그대로라, 저장한
@@ -1444,7 +1451,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
       인물·소품 트랙을 그 시각의 값으로 맞춥니다 — **멈춰 있을 때도** 그렇게 합니다.
 
       처음에는 재생 중에만 적용했습니다. 그런데 그러면 키 사이를 오가며 값을 고칠 수가
-      없습니다 — 2초 키로 가 봐야 물체가 그 자리에 없으니까요().
+      없습니다 — 2초 키로 가 봐야 물체가 그 자리에 없으니까요. 키가 찍힌 시각으로 옮겨 가서
+      그 키에 이동값·회전값을 더 얹으려면, 멈춰 있을 때도 화면이 그 시각의 값이어야 합니다.
 
       기즈모로 옮긴 값이 되돌려지지 않는 까닭: 트랙이 있는 대상은 값을 만지는 순간
       **그 시각에 키가 찍힙니다**(`CompositionPlanner` 의 자동 키). 그래서 트랙이 다시
@@ -1455,7 +1463,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
         **기즈모를 끄는 동안에는 손대지 않습니다.**
 
         트랙이 매 프레임 값을 덮어쓰는데, 끄는 중에는 아직 키가 찍히기 전이라 옛 값으로
-        되돌아갑니다 — 화면에서는 «물체가 안 움직이는» 것으로 보입니다().
+        되돌아갑니다 — 화면에서는 «잡아 끌어도 물체가 안 움직이는» 것으로 보였습니다.
         손을 떼면 그 값이 상태로 들어가고 자동 키가 찍힌 뒤 다시 트랙이 맡습니다.
       */
       applyTimedVisibility(time);
@@ -1483,7 +1491,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 자세 트랙 — 관절마다의 회전 ─────────────────────────────────────
-      
+      자리·회전처럼 **자세도** 키를 찍습니다 — 관절마다 회전값이 한 트랙에 들어갑니다.
 
       같은 시각·같은 트랙이면 **다시 걸지 않습니다.** 이 함수는 멈춰 있을 때도 매 프레임
       도는데, 손가락 하나 돌릴 때마다 뼈대 전체의 행렬을 다시 계산해서 다섯 사람이면
@@ -1516,8 +1524,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 레이어 막대 — 막대 안에서만 화면에 있습니다 ──────────────────
-      , 「카메라처럼
-      타임라인에 채워 넣고… 올삐가 나타나는 시작점 끝점으로 직관적으로 보이잖아」.
+      1초까지 없던 인물이 2초에 나타날 수 있어야 합니다. 카메라처럼 타임라인에 막대로
+      채워 두면 «언제 나타나 언제 사라지는지» 가 시작점·끝점으로 한눈에 보입니다.
 
       막대가 **있었던** 대상만 기억해 둡니다. 막대를 지우면 그 대상은 원래대로(보임) 돌려
       놓아야 하는데, 막대가 사라진 뒤에는 누구를 돌려놔야 할지 알 길이 없어서입니다.
@@ -1546,7 +1554,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
     /*
       ── 시간대별 «가릴 면» ───────────────────────────────────────────
-      
+      방의 «가릴 면» 도 시간대별로 켜고 끌 수 있어야 합니다 — 2초부터는 앞벽을 치워
+      인물이 다가오는 것을 보여 주는 식입니다.
 
       안쪽 껍질의 가림을 **여기서 매 프레임** 정합니다(예전에는 체크박스가 바뀔 때 한 번).
       같은 값이면 재질을 안 건드립니다 — `needsUpdate` 를 매 프레임 걸면 셰이더를 다시 짜느라
@@ -1568,7 +1577,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
         );
       });
       /*
-        소품의 «투시» 도 같은 자리에서 정합니다().
+        소품의 «투시» 도 벽과 마찬가지로 타임라인에 올라가므로 같은 자리에서 정합니다.
         값이 그대로면 재질을 안 건드립니다 — `setObjectSeeThrough` 가 먼저 견줍니다.
       */
       current.objects.forEach((item) => {
@@ -1632,7 +1641,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
       ── 돌리기·집기 ────────────────────────────────────────────────────
       회전 중심을 잡는 세 가지 길(드래그 시작 · 더블클릭 · F)과 화면에서 집기는
       `viewport/orbit.ts` 한 곳에 모았습니다. 여기 있던 함수 열세 개가 이 이펙트를
-      1300줄로 만들던 가장 큰 덩어리였습니다(2026-09-14 정리).
+      1300줄로 만들던 가장 큰 덩어리였습니다.
 
       이벤트 등록·해제는 **여기 그대로** 둡니다 — 리스너 붙는 순서가 조작감에 영향을
       주는데, 그 순서까지 옮기면 정리하는 김에 바뀌어 버립니다.
@@ -1800,7 +1809,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     /*
       «구도 캡처» 와 «배경 플레이트» — 같은 카메라, 두 장.
 
-       등장방형 파노라마는 **저장 형식**이지 한 컷의
+      360도 파노라마를 그대로 레퍼런스로 주었더니 그 왜곡이 결과물에 그대로 남고, 배경도
+      제멋대로 다시 해석됐습니다. 등장방형 파노라마는 **저장 형식**이지 한 컷의
       그림이 아닙니다. 생성기에 원본을 그대로 주면 그 왜곡을 따라 그리고, 화각이 안 맞으니
       제 나름대로 다시 해석합니다.
 
@@ -1818,7 +1828,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
         예전에는 배경 플레이트에서만 뺐습니다. 그런데 구도 그림에 남은 이름표를
         생성기가 «그림 속 글자» 로 알아듣고 그대로 그려 넣습니다 — 컷마다 다른
-        낙서가 생기고, 지우려면 손을 대야 합니다().
+        낙서가 생기고, 지우려면 손을 대야 합니다. 구도 캡처도 이름이 지워진 채로
+        올라가야 합니다.
 
         이름을 지우면 「저 마네킹이 누구인가」 가 사라지는데, 그건 그림이 아니라
         **프롬프트**로 넘깁니다 — 마네킹의 식별 색을 글로 적어 보냅니다
@@ -2025,8 +2036,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     if (previewingRef.current) return;
     /*
       ── 무빙을 짜는 중에는 화면을 안 돌립니다 ──────────────────────────
-      , 「난 내가 잡은 구도인 이미지 1 에서 달리가 시작했으면
-      좋겠다는 거고」.
+      카메라 모션의 앵커를 인물·소품에 걸려고 그 물체를 고르면 화면이 그쪽으로 옮겨 가고,
+      옮겨 간 자리에서 모션이 시작됐습니다. 무빙은 잡아 둔 구도에서 출발해야 합니다.
 
       중심 옮기기는 **시선점을 그 몸으로** 보내는 일이라 카메라가 그쪽으로 고개를
       돌립니다 — 애써 잡아 둔 구도가 한순간에 무너집니다. 앵커를 붙이려고 인물을
@@ -2063,7 +2074,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
   /*
     ── 전경 확대 ────────────────────────────────────────────────────────
     그룹을 통째로 키웁니다. 그러면 **인물 사이 거리도 같이 늘어나서**, 배율이 크면
-    둘이 화면 밖으로 흩어집니다().
+    둘이 화면 밖으로 흩어집니다 — 배율은 10~20배까지 가야 쓸모가 있습니다.
     그래서 가로·세로(x·z)는 전경의 한가운데를 붙들어 제자리에서 커지게 하고,
     높이(y)는 건드리지 않습니다 — y 까지 보정하면 발이 바닥을 뚫고 내려갑니다.
 
@@ -2159,8 +2170,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
     여섯 면은 «눈높이에서 본 여섯 방향» 이라 상자 안쪽에 그대로 붙입니다. 면이 빈 자리는
     어두운 색으로 두어 «아직 안 넣었다» 가 보이게 합니다.
 
-    , 「큐브의 안쪽 면이랑 바깥쪽 면에
-    적용되는 걸 다르게 적용될 수 있게」. 방마다 틀 하나에 껍질 둘(안쪽 벽지·바깥쪽 외벽)을
+    한 구도에 방이 두세 개 설 수 있고, 안쪽 면과 바깥쪽 면에 다른 그림이 걸립니다.
+    그래서 방마다 틀 하나에 껍질 둘(안쪽 벽지·바깥쪽 외벽)을
     세웁니다. 바깥면을 안 붙인 방은 껍질을 아예 안 만듭니다 — 지금까지처럼 밖에서 보면
     방이 투명해서 안이 훤히 보입니다.
   */
@@ -2203,7 +2214,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
           `inner` 를 기준으로 돌아서, 없애면 그 계산이 전부 갈래를 타야 합니다. 바깥 껍질은 돔과 뜻이 겹쳐 세우지 않습니다.
         */
         /*
-          **돔으로 고른 실외는 그림이 없어도 돔입니다.** 여태 파노라마가 걸려야만 돔이 서고, 그전에는 상자가 서 있었습니다.
+          **돔으로 고른 실외는 그림이 없어도 돔입니다.** 예전에는 파노라마가 걸려야만 돔이 서고,
+          그전까지는 돔으로 골라 두어도 육면체 상자가 서 있었습니다.
           고른 모양과 보이는 모양이 다르면 크기를 가늠할 수 없어, 그림이 없으면 안내선만 세웁니다.
         */
         const domeLike = room.outdoor === true && room.outdoorShape !== "box";
@@ -2417,7 +2429,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
         /*
           몸 색은 `compositionColors` 가 정한 표에서 꺼내 옵니다 — 화면·왼쪽 목록·프롬프트 대조표가
           **같은 표**를 봐야 «저 파란 사람» 이 통합니다. 예전에는 셋이 각자 순번을 세다가 어긋났고,
-          성별 팔레트가 넷뿐이라 다섯 번째 사람부터 앞사람과 같은 색이 됐습니다(2026-09-17).
+          성별 팔레트가 넷뿐이라 다섯 번째 사람부터 앞사람과 같은 색이 됐습니다.
         */
         const bodyColor = bodyColors.get(placement.characterId) || "#9aa4b8";
 
@@ -2606,7 +2618,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
         group0.scale.set(item.scale.x, item.scale.y, item.scale.z);
         /*
           ── 관절에 붙이기 ─────────────────────────────────────────────
-          
+          소품의 기준점을 인물의 한 부위에 걸어 자세와 함께 움직이게 합니다 — 손에 쥔
+          검은 그 손을 따라다녀야 합니다.
 
           three 의 씬 그래프가 그대로 답입니다 — 관절의 **자식**으로 넣으면 손이
           움직일 때 행렬이 저절로 따라옵니다. 손 위치를 매 프레임 베껴 쓰는 길도
@@ -2616,8 +2629,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
           인물이 들어오면 이 이펙트가 다시 돌아 제자리를 찾습니다.
         */
         /*
-          묶음째 붙였으면 **묶음의 설정**이 이깁니다. 덩어리 안의 소품이
-          하나씩 다른 데 붙으면 모양이 흩어집니다.
+          묶음째 붙였으면 **묶음의 설정**이 이깁니다 — 묶은 덩어리는 모양을 지킨 채로
+          관절에 붙어야 하는데, 안의 소품이 하나씩 제각기 붙으면 모양이 흩어집니다.
         */
         // 겹쳐 묶었으면 **맨 바깥** 묶음의 설정이 이깁니다 — 보이는 덩어리가 그것입니다.
         const group = item.groupId
@@ -2699,7 +2712,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
         } else if (item.kind === "wall") {
           /*
             ── 배경 벽 ────────────────────────────────────────────────
-             여섯 면을 다 갖춘 방 대신 **보이는 쪽만** 세우는 길입니다.
+            소품으로 벽 한 장을 세우고 크기를 맞춘 뒤 뽑아 둔 그림을 그 벽에 띄웁니다.
+            여섯 면을 다 갖춘 방 대신 **보이는 쪽만** 세우는 길입니다.
 
             판은 **한 변 1 m 짜리**로 만들고 크기는 소품의 scale 이 정합니다(가로 4 · 높이 2.6 이면 4×2.6 m 벽).
             그래야 오른쪽 패널의 숫자와 화면의 미터가 그대로 같습니다.
@@ -2765,7 +2779,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
         /*
           ── 투시 ────────────────────────────────────────────────────
-           방 면의 «뒤를 가릴 면» 과 같은 뜻을 소품에도 둡니다.
+          소품도 투시될지 말지를 고를 수 있어야 합니다 — 방 벽만 비치고 소품은 안 비치면 앞을
+          가린 소품 뒤가 영영 안 보입니다. 방 면의 «뒤를 가릴 면» 과 같은 뜻을 소품에도 둡니다.
 
           `depthWrite` 를 꺼야 뒤에 선 인물이 비칩니다 — 투명도만 낮추면 깊이 버퍼가 여전히 뒤를 가립니다.
           재생 중에는 타임라인이 매 프레임 다시 정합니다(`applyTimedOcclusion`).
@@ -2914,7 +2929,8 @@ export default function CompositionViewport(props: CompositionViewportProps) {
 
   /*
     ── 클립을 손볼 때는 «출발 구도» 로 되돌립니다 ───────────────────────
-    
+    출발 구도를 잡아 둔 뒤 달리를 넣고 앵커를 인물 머리에 맞추면, 그 고르는 동작만으로
+    화면이 딴 구도로 넘어가 버렸습니다. 무빙은 잡아 둔 그 구도에서 출발해야 합니다.
 
     무빙을 손보는 동안(앵커를 옮기고, 이동량을 고치고, 클립을 갈아 끼우고) 화면이 딴
     데를 보고 있으면 «무엇을 고치는 중인지» 가 안 보입니다. 그래서 **첫 클립이 시작하기
@@ -3031,7 +3047,7 @@ export default function CompositionViewport(props: CompositionViewportProps) {
             **관절은 회전만 합니다.** IK 이동은 걷어냈습니다.
 
             손을 끌면 팔꿈치가 따라오는데 그 양이 커서 원하는 자리에 못 세웠고,
-            되돌리기도 어려웠습니다. 로 정한 방향입니다. (지시 10)
+            되돌리기도 어려웠습니다. 관절 회전만으로도 자세는 충분히 잡힙니다.
           */
           transform.attach(bone);
           transform.setMode("rotate");

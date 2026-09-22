@@ -24,12 +24,11 @@ and preparing model-specific prompts. Keep each cut's prompts, references and ge
 
 ## Installation
 
-**The previously published build has been removed while an updated build is being prepared.**
-There is currently no packaged download. You can [build from source](#build-from-source), or check
-the [Releases page](https://github.com/raonolje/AIMovieStorage/releases) for the next published build.
-Prebuilt packages do not require Node, pnpm or Rust; those tools are only needed to [build from source](#build-from-source).
+Download the latest build from the [Releases page](https://github.com/raonolje/AIMovieStorage/releases)
+and open its **Assets** section. Prebuilt packages do not require Node, pnpm or Rust; those tools are only
+needed to [build from source](#build-from-source).
 
-When a release is published, open its **Assets** section and choose:
+Choose one:
 
 | Package | How to use it |
 | --- | --- |
@@ -90,7 +89,19 @@ camera, key the movement on a timeline. From that scene you get:
 
 - **Shot size, angle, lens and each character's position in frame** as numbers that go straight into the prompt
 - A **reference video** to feed video models — camera movement and blocking delivered as footage, not adjectives
-- The room's **six-face unfold** to render outside; bring it back and it is cut and hung on the walls automatically
+- The room's **six-face unfold** to render outside; bring it back and it is cut and hung on the walls automatically.
+  Local models do not draw a cross-shaped unfold reliably, so the panorama route is the one that works there:
+  render a 360° equirectangular view, and the app cuts the six faces from it
+
+### A tutorial you actually follow
+
+Press **Tutorial** and the app builds a small practice project — a character with reference sheets,
+a location with a 360° panorama already cut into six faces, scenes and cuts — so every step has
+something real to point at. The guide then walks the screen itself: it opens the window or tab a step
+lives in, scrolls the control into view, lights only that control, and will not move on until you have
+actually done it (drawn the box, typed the name). While it runs, other controls are held so a stray
+click cannot derail the walkthrough. Each page also has its own shorter walkthroughs for when you are
+stuck mid-work.
 
 ### One screenplay to a whole project
 
@@ -206,12 +217,9 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ## 설치 안내
 
-**기존 배포본을 내리고 수정된 빌드를 준비하고 있습니다.**
-현재 내려받을 수 있는 설치본·무설치본은 없습니다. [소스에서 실행](#소스에서-실행)하거나,
-[Releases](https://github.com/raonolje/AIMovieStorage/releases)에서 다음 배포본을 확인해 주세요.
-배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다. 이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
-
-새 Release가 게시되면 **Assets**에서 원하는 형식을 선택합니다.
+[Releases](https://github.com/raonolje/AIMovieStorage/releases)에서 최신 배포본을 내려받고
+**Assets**를 펼쳐 원하는 형식을 고르세요. 배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다 —
+이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
 
 | 파일 | 실행 방법 |
 | --- | --- |
@@ -268,7 +276,17 @@ AIMovieStorage 는 그 일관성을 지키는 **작업대**입니다 — 인물�
 
 - **샷 크기·앵글·렌즈·인물의 화면 자리**가 숫자로 나와 프롬프트에 그대로 들어갑니다
 - **레퍼런스 영상**을 뽑아 영상 모델에 물립니다 — 카메라 무빙과 동선을 글이 아니라 영상으로 전합니다
-- 방의 **여섯 면 전개도**를 생성기로 뽑아 되가져오면 자동으로 잘려 벽에 붙습니다
+- 방의 **여섯 면 전개도**를 생성기로 뽑아 되가져오면 자동으로 잘려 벽에 붙습니다.
+  로컬 모델은 십자 전개도를 잘 못 그려서, 360° 파노라마를 뽑고 그것을 여섯 면으로 자르는 길이 실제로 됩니다
+
+### 진짜로 따라 하는 튜토리얼
+
+**「튜토리얼」** 을 누르면 연습용 예시 작품을 하나 만들어 둡니다 — 기준 시트가 붙은 인물,
+360° 파노라마를 여섯 면으로 잘라 둔 장소, 씬과 컷까지. 그래서 걸음마다 가리킬 것이 실제로 있습니다.
+안내 창은 설명만 하지 않고 화면을 직접 엽니다 — 그 걸음이 사는 창·탭을 열어 주고, 자리를 화면 안으로
+끌어오고, **그 자리만** 밝히고, 시킨 것을 실제로 해야(상자를 그려야, 이름을 적어야) 넘어갑니다.
+도는 동안에는 다른 단추가 눌리지 않아 한 번 잘못 눌러 어긋나는 일이 없습니다.
+작업하다 막혔을 때 보라고 페이지마다 짧은 갈래도 따로 있습니다.
 
 ### 시나리오 한 편에서 작품 한 벌로
 

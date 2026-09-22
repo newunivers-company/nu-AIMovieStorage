@@ -27,6 +27,9 @@
  *
  * # 판(edition) — 비공개 / 공개
  *
+ * 업스케일·모션캡처 모델 가운데 상업적으로 쓸 수 없는 것이 있어, 남에게 주는 판에서는
+ * 빼고 묶어야 합니다. 내부용 판은 그대로 둡니다.
+ *
  * - `private`(기본) — 지금까지와 똑같습니다. 아무것도 안 바꿉니다.
  * - `public` — 저장소 뿌리 `edition.json` 의 제외 엔진을 번들에서 뺍니다. 세 군데가 같이 움직입니다.
  * 1. `VITE_EDITION=public` → 화면 목록에서 빠짐 (`client/src/lib/edition.ts`)
@@ -39,7 +42,7 @@
  * 는 RFC 7396 병합이라 배열은 통째로 바뀝니다). 어느 파일이 빠지는지는 `--dry-run` 이
  * 빌드 없이 보여 줍니다 — 실제 빌드는 10분이 넘어서, 덧씌움을 확인할 길이 그것뿐입니다.
  *
- * 같은 덧씌움이 `productName` 에 «(공개판)» 을 붙입니다. NSIS 설치 파일 이름이
+ * 같은 덧씌움이 `productName` 에 «-Public» 을 붙입니다. NSIS 설치 파일 이름이
  * `<productName>_<version>_<arch>-setup.exe` 라서, 안 붙이면 두 판의 설치 파일이 이름 한 글자
  * 안 다릅니다 — 비공개판을 Releases 에 올리는 사고를 파일 이름으로는 못 알아챕니다.
  *
@@ -185,12 +188,16 @@ function tauriExtraArgs() {
   const conf = JSON.parse(readFileSync(path.join(tauriDir, "tauri.conf.json"), "utf8"));
   const { kept, dropped } = publicBundleResources(conf);
   /*
-    productName 에 «(공개판)» 을 붙입니다 — 설치 파일 이름·설치 폴더·시작 메뉴가 전부 여기서 나와,
+    productName 에 «-Public» 을 붙입니다 — 설치 파일 이름·설치 폴더·시작 메뉴가 전부 여기서 나와,
     어느 판을 받았고 어느 판이 깔려 있는지 이름만으로 보입니다. `identifier` 는 **그대로** 둡니다:
-    앱 데이터 폴더(설정·받아 둔 엔진 가중치)가 그 이름이라, 바꾸면 사용자의 컴퓨터에서 두 판이
+    앱 데이터 폴더(설정·받아 둔 엔진 가중치)가 그 이름이라, 바꾸면 한 컴퓨터에서 두 판이
     엔진을 두 벌 받게 됩니다.
+
+    **이름은 전부 영문입니다.** 설치 폴더가 한글이면 파이썬 워커·CUDA 라이브러리가 경로를 못 읽는
+    일이 생기고, 받는 사람이 한국어 윈도우를 쓴다는 보장도 없습니다. 화면에 뜨는 글은 그대로
+    한국어(다국어)이고, 폴더와 파일 이름만 영문으로 둡니다.
   */
-  const productName = `${conf.productName} (공개판)`;
+  const productName = `${conf.productName}-Public`;
   const overlay = { productName, bundle: { resources: kept } };
   /* Tauri NSIS 번들러의 이름 규칙(`<productName>_<version>_<arch>-setup.exe`). release.yml 의 글롭
      `bundle/nsis/*.exe` 는 그대로 맞습니다. */
@@ -404,8 +411,7 @@ function packPortable(childEnv) {
 
   const outDir = path.join(releaseDir, "bundle", "portable");
   mkdirSync(outDir, { recursive: true });
-  const productName = JSON.parse(readFileSync(path.join(tauriDir, "tauri.conf.json"), "utf8")).productName;
-  const zipName = `${productName}_portable.zip`;
+  const zipName = `${exe.replace(/\.exe$/, "")}_portable.zip`;
   const zipPath = path.join(outDir, zipName);
   rmSync(zipPath, { force: true });
   // 윈도에 기본으로 있는 것만 씁니다 — 빌드 기계에 압축 도구를 더 깔게 하지 않으려고요.

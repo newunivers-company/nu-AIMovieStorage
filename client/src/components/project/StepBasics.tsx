@@ -1,3 +1,4 @@
+import ProjectCoverPanel from "@/components/project/ProjectCoverPanel";
 import { useState } from "react";
 import { Plus, Sparkles, Wand2 } from "lucide-react";
 import AutoTextarea from "@/components/AutoTextarea";
@@ -102,7 +103,7 @@ export default function StepBasics({
   return (
     <div className="space-y-4">
       {/*
-        「AI 로 일괄 생성」. 
+        「AI 로 일괄 생성」.
 
         새 프로젝트에서 가장 먼저 누를 단추라 맨 위에 둡니다. 비어 있을 때는 안내와
         함께 크게, 이미 뭔가 적어 두었으면 줄 하나로 접습니다.
@@ -125,6 +126,8 @@ export default function StepBasics({
             onClick={() => setBootstrapOpen(true)}
             disabled={!apiReady}
             title={apiReady ? undefined : "설정에서 API 키를 먼저 넣어 주세요"}
+            // 창 안의 자리들은 창이 떠야 생깁니다 — 튜토리얼이 이 단추를 가리켜 «먼저 누르세요» 합니다.
+            data-tour-open="bootstrap-scenario bootstrap-mode bootstrap-run"
             className="mt-1 flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-semibold text-white gradient-primary"
             style={{ opacity: apiReady ? 1 : 0.4 }}
           >
@@ -143,6 +146,7 @@ export default function StepBasics({
           disabled={!apiReady}
           title={apiReady ? undefined : "설정에서 API 키를 먼저 넣어 주세요"}
           data-tour="basics-bootstrap"
+          data-tour-open="bootstrap-scenario bootstrap-mode bootstrap-run"
           className="flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold"
           style={{
             background: "oklch(0.62 0.22 290 / 14%)",
@@ -342,6 +346,14 @@ export default function StepBasics({
             ))}
           </div>
         </div>
+      </Panel>
+
+      {/*
+        **작품 대표 그림** — 보드 카드에 뜨는 한 장. 정하지 않으면 작품 안의 그림에서
+        저절로 고릅니다 — 한 장도 안 걸리면 보드에서 어느 작품인지 구별이 안 됩니다.
+      */}
+      <Panel title="대표 그림" tour="basics-cover">
+        <ProjectCoverPanel draft={draft} onChange={onChange} />
       </Panel>
 
       {/* 고른 것이 프롬프트에 어떻게 들어가는지 그 자리에서 보여 줍니다.

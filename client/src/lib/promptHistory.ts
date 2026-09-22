@@ -135,7 +135,7 @@ export function describeRunConditions(parts: {
 }) {
   return [
     parts.extra,
-    // 「칸 4개」 가 아니라 «조감도, 방향 표시» 처럼. 그래야 지난 판을 골라 쓸 수 있습니다. (지시 343)
+    // «칸 4개» 가 아니라 «조감도, 방향 표시» 처럼. 그래야 지난 판을 골라 쓸 수 있습니다.
     parts.aspects,
     parts.referenceCount ? `레퍼런스 ${parts.referenceCount}장` : "",
     parts.panelCount && !parts.aspects ? `칸 ${parts.panelCount}개` : "",
@@ -162,8 +162,8 @@ export type SavedPromptEntry = PromptHistoryEntry;
  * 프롬프트는 쌓이는데 분석은 쌓이지 않았습니다. 재분석을 누르거나 요청문으로
  * 받은 답을 붙여넣으면 앞의 분석이 **그 자리에서 덮여 사라졌습니다.** 분석도
  * 그림 넉 장을 올려 돈을 내고 받는 것이고, 그 위에 손으로 고친 문장까지
- * 얹혀 있습니다. 
- * (2026-09-08). 그래서 프롬프트와 같은 방식으로, 받을 때마다 남깁니다.
+ * 얹혀 있습니다. 오류로 지워졌을 때 되살릴 자리가 있어야 합니다 —
+ * 그래서 프롬프트와 같은 방식으로, 받을 때마다 남깁니다.
  */
 export interface SavedAnalysisEntry {
   id: string;

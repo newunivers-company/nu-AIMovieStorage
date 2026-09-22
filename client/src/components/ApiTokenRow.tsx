@@ -7,10 +7,10 @@ import { openExternal } from "@/lib/openExternal";
 /**
  * **바깥 서비스의 키·토큰 한 줄** — 저장·끝 네 글자 보기·지우기.
  *
- * 허깅페이스 토큰 줄(`LocalEnginesPanel`)이 먼저 있었고, 2026-09-22 에 Civitai API 키가
- * 필요해지면서 같은 모양을 두 번 적을 뻔했습니다.
- * 규칙 1 — 한 벌로 두고 서비스 이름만 바꿔 씁니다. 값은 `llm.rs` 의 키 저장소(설정 폴더 파일)에
- * 들어가고 화면에는 끝 네 글자만 보입니다.
+ * 허깅페이스 토큰 줄(`LocalEnginesPanel`)이 먼저 있었고, 로라를 받으려면 Civitai API 키도
+ * 필요해지면서 같은 모양을 두 번 적을 뻔했습니다. 규칙 1 — 한 벌로 두고 서비스 이름만
+ * 바꿔 씁니다. 값은 `llm.rs` 의 키 저장소(설정 폴더 파일)에 들어가고 화면에는 끝 네 글자만
+ * 보입니다 — 키 전체를 되비추면 어깨너머로 새기 때문입니다.
  */
 export default function ApiTokenRow({
   provider,
@@ -28,7 +28,7 @@ export default function ApiTokenRow({
   placeholder: string;
   /** 값이 이 글자로 시작해야 하면(허깅페이스 `hf_`). 아니면 잘못 붙인 것이라 막습니다. */
   prefix?: string;
-  /** 키를 만드는 곳 — 「어디서 받나」 를 묻지 않게 바로 여는 단추. */
+  /** 키를 만드는 곳 — 발급 주소를 찾아 헤매지 않게 바로 여는 단추. */
   link?: { label: string; url: string };
   /** 저장·지우기 뒤에 할 일(예: 떠 있는 워커를 내려 새 토큰을 물게). */
   onChanged?: () => Promise<void> | void;

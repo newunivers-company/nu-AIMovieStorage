@@ -4,8 +4,11 @@ import type { CompositionMusic } from "@/lib/composition";
 /**
  * **노래 레이어** — 타임라인 맨 윗줄.
  *
+ * 뮤직비디오는 노래가 먼저 정해지고 화면이 거기에 맞습니다 — 그래서 구도잡기 타임라인에
+ * 노래를 바로 올립니다.
+ *
  * 편집 프로그램처럼 맨 윗줄입니다 — 노래가 시간표이고 나머지가 그 위에서 움직이니까요.
- * 2026-09-18 에 `MoveTimeline.tsx` 에서 떼어 냈습니다. 바깥에 기대는 것이 다섯뿐입니다.
+ * 뒤에 `MoveTimeline.tsx` 에서 떼어 냈습니다. 바깥에 기대는 것이 다섯뿐입니다.
  */
 export default function TimelineMusicRow({
   music,
@@ -49,7 +52,8 @@ export default function TimelineMusicRow({
         <div className="relative h-9 flex-1" style={{ background: "oklch(1 0 0 / 3%)", borderRadius: 3 }}>
           {/*
             ── 파형 ────────────────────────────────────────────────
-            
+            올린 노래가 어디서 시작해 어디서 끝나는지 눈에 보여야 합니다 — 편집
+            프로그램처럼 레이어 막대 위에 파형을 깝니다.
 
             구간을 안 나눠 두면 이 줄이 **텅 비어** 있었습니다 — 노래를 올렸는지조차
             알 수 없었습니다. 파형은 구간 칸 **뒤에** 깔립니다(칸이 덮으면 안 되니까).

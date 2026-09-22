@@ -16,6 +16,10 @@ import { confirmDialog } from "@/components/ConfirmDialog";
 /**
  * 3D 화면 **왼쪽**에 붙는 «저장해 둔 카메라» 목록.
  *
+ * 지금 카메라를 그대로 한 줄로 세워 두고, 그 줄을 누르면 그 시점으로 곧바로 돌아갑니다.
+ * 이름을 고칠 수 있어야 쓸모가 생깁니다 — «클로즈업샷» 처럼 무엇을 잡아 둔 구도인지가
+ * 이름에 적혀야 여러 대를 세워 두고도 고를 수 있습니다.
+ *
  * # 카메라 무빙과 무엇이 다른가
  *
  * 무빙(`cameraMoves`)은 «시간에 따라 움직이는 한 대» 이고, 이쪽은 «세워 둔 여러 대» 입니다.
@@ -78,6 +82,13 @@ export function PlannerShotBar({
             });
           }}
           data-tour="planner-shot-save"
+          /*
+            저장한 구도가 하나도 없으면 무빙 아이콘을 눌러도 «카메라를 먼저 세우세요» 로 막힙니다 —
+            그래서 클립이 안 생기고, 클립이 없으면 «이동량»·«길이»·«속도 그래프» 칸도 안 그려집니다.
+            이 단추가 그 줄의 **첫 문**입니다 — 속도 그래프를 보여 주려면 키가 먼저 있어야 하므로,
+            안내 창이 여기부터 눌러 나갑니다.
+          */
+          data-tour-open="bottom-clip-amount bottom-clip-length bottom-easing bottom-free-key"
           title="지금 카메라를 새 구도로 저장합니다"
           className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold"
           style={{
@@ -89,8 +100,14 @@ export function PlannerShotBar({
         </button>
       </div>
 
+      {/*
+        같은 자리에 둘 중 하나만 섭니다 — 구도가 없으면 안내 글, 있으면 목록. 둘 다 같은 이름을
+        달아야 «저장한 구도가 없는 화면» 에서도 튜토리얼이 가리킬 자리를 찾습니다.
+        이름 칸은 두 번 눌러야 생겨 못 잡으므로 감싸는 목록에 답니다.
+      */}
       {shots.length === 0 ? (
         <p
+          data-tour="planner-shot-list"
           className="mt-1.5 text-[9px] leading-relaxed"
           style={{ color: "oklch(0.45 0.01 265)" }}
         >
@@ -98,7 +115,10 @@ export function PlannerShotBar({
           눌러서 그 구도로 바로 돌아올 수 있고, <b>G</b> 는 활성 구도로 갑니다.
         </p>
       ) : (
-        <div className="composition-scroll mt-1.5 max-h-[11rem] space-y-1 overflow-y-auto pr-0.5">
+        <div
+          data-tour="planner-shot-list"
+          className="composition-scroll mt-1.5 max-h-[11rem] space-y-1 overflow-y-auto pr-0.5"
+        >
           {shots.map((shot) => {
             const on = shot.id === activeId;
             const isEditing = editing?.id === shot.id;
@@ -154,9 +174,8 @@ export function PlannerShotBar({
                   onClick={() => {
                     setState((current) => saveCameraShotIn(current, shot.id));
                     /*
-                      
                       덮어쓰기는 화면이 하나도 안 바뀌는 편집이라(카메라가 이미 그
-                      자리에 있으니까) 눌렀는지 아닌지를 알 길이 없었습니다.
+                      자리에 있으니까) 알림이 없으면 눌렸는지 아닌지를 알 길이 없습니다.
                     */
                     toast.success(
                       `«${shot.name}» 을 지금 구도로 저장했습니다`,

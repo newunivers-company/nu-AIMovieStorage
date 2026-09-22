@@ -48,7 +48,7 @@ export default function MagnificInboxPanel({
   patch: (updater: (current: ProjectDraft) => Partial<ProjectDraft>) => void;
   projectName: string;
   /**
-   * 탭별로 나눠 보기().
+   * 탭별로 나눠 보기 — 후보함 하나에 인물·장소·씬 구성이 섞여 쌓이면 찾을 수가 없습니다.
    * 추정한 주인의 갈래로 가릅니다. 영상은 컷에만 가고, 에셋은 캐릭터·배경 페이지 양쪽에 있으니
    * 두 탭에서 보이며, 주인을 모르는 것은 어느 탭에서든 보이되 «누구 것?» 목록은 그 탭 갈래만 줍니다.
    * 안 주면(작업실·확인 단계) 전부 보입니다.
@@ -246,6 +246,8 @@ export default function MagnificInboxPanel({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
+          /* 접혀 있으면 후보 타일도 «크게 보기» 도 없습니다 — 안내 창이 먼저 여기를 펴 줍니다. */
+          data-tour-switch="shelf-inbox-zoom"
           className="flex items-center gap-1.5 text-xs font-semibold text-white"
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -301,6 +303,7 @@ export default function MagnificInboxPanel({
                         event.stopPropagation();
                         setViewing(file);
                       }}
+                      data-tour="shelf-inbox-zoom"
                       title="크게 보기"
                       className="absolute right-1 top-1 z-10 rounded-full p-1"
                       style={{ background: "oklch(0 0 0 / 72%)", color: "white" }}
@@ -494,8 +497,8 @@ function attach(
     };
   }
   /*
-    장면 자리 — 씬 영상 하나. 컷이 아니라 장면에 붙습니다.
-    
+    장면 자리 — 씬 영상 하나. 컷이 아니라 장면에 붙습니다. 확인 단계에서 영상으로 뽑은 것은
+    어느 컷의 것도 아니라, 컷에 붙이면 갈 자리가 없습니다.
   */
   if (target.kind === "scene") {
     return {

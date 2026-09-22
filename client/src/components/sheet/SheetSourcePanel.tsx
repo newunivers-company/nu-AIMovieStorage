@@ -14,15 +14,15 @@ import {
  * 시트 창 왼쪽의 «넣을 그림» 목록.
  *
  * 그룹(원본 → 변형 → 다른 원본 → 보유 에셋 → 공용 에셋)마다 머리줄을 두고 접을 수 있습니다.
- * 에셋까지 한
- * 목록에 섞어 두면 어느 것이 인물 그림이고 어느 것이 소품인지 알 수 없어 그룹으로
- * 나누고 타일에 «보유»/«공용» 배지를 붙입니다.
+ * 시트에는 인물 그림만이 아니라 에셋도 들어갑니다. 한 목록에 섞어 두면 어느 것이 인물
+ * 그림이고 어느 것이 소품인지 알 수 없어 그룹으로 나누고 타일에 «보유»/«공용» 배지를 붙입니다.
  *
- * 타일은 **누르면** 시트에 놓이고(계단식 자리), **끌어서** 배치 상자 위에 놓으면
- * 그 칸의 그림이 바뀝니다. 
+ * 타일은 **누르면** 시트에 놓이고(계단식 자리), **끌어서** 배치 상자 위에 놓으면 그 칸의
+ * 그림이 바뀝니다 — 이미 놓인 칸을 빼고 다시 놓는 걸음을 없앱니다.
  *
  * 가위(오른쪽 아래 — `ImageActions` 의 자리 규칙)는 시트 창 안에서 그 그림을
- * 자르기·지우기 창으로 엽니다. 
+ * 자르기·지우기 창으로 엽니다. 시트를 만들다 말고 창을 닫고 편집하러 나가면
+ * 배치해 둔 것이 흩어집니다.
  *
  * 6면 세트는 낱장 여섯으로 늘어놓지 않고 세트 카드 한 장(선반과 같은 카드)으로 둡니다.
  * 시트에는 낱장을 놓아야 하므로 카드의 **셀 하나** 를 누르거나 끌면 그 면만 놓입니다.
@@ -57,14 +57,13 @@ export default function SheetSourcePanel({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   /*
-    타일 밑에 보여 줄 그림의 뽑힌 px 크기. 시트 칸이 이 크기 그대로 들어가므로
-     원본 크기를 알아야 4000 시트에 몇 장
-    들어가는지 가늠할 수 있습니다. 한 번 읽은 것은 id 로 캐시하고, 읽는 중인 것은 ref 로
+    타일 밑에 보여 줄 그림의 뽑힌 px 크기. 시트 칸에는 그림이 **뽑힌 크기 그대로** 들어가므로,
+    원본 크기를 알아야 4000 시트에 몇 장 들어가는지 가늠할 수 있습니다. 한 번 읽은 것은 id 로 캐시하고, 읽는 중인 것은 ref 로
     막습니다 — 목록이 다시 그려질 때마다 같은 파일을 또 읽지 않게.
 
     못 읽은 것(null)도 캐시합니다. 파일이 지워졌거나 blob thumb 이 앱 재시작으로 죽은 그림은
     실패를 안 남기면 칸에 놓거나 뺄 때마다(id 목록이 바뀔 때마다) 또 열어 또 실패하고, 타일은
-    영원히 «읽는 중» 으로 보입니다(검토 2026-09-08).
+    영원히 «읽는 중» 으로 보입니다.
   */
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number } | null>>({});
   const probing = useRef(new Set<string>());
@@ -126,6 +125,7 @@ export default function SheetSourcePanel({
               className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] font-semibold hover:bg-white/5"
               style={{ color: "oklch(0.60 0.01 265)" }}
               title={closed ? "펼치기" : "접기"}
+              data-tour="sheet-source-groups"
             >
               {closed ? <ChevronRight className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
               <span className="min-w-0 flex-1 truncate">{bucket.title}</span>
@@ -138,18 +138,20 @@ export default function SheetSourcePanel({
                   return (
                     <>
                       {sets.map((set) => (
-                        <FaceSetCard
-                          key={set.id}
-                          set={set}
-                          cellHeight={28}
-                          title={`${set.label} — 면 하나를 누르면 그 면이 시트에 놓입니다. 칸 위로 끌어다 놓아도 됩니다`}
-                          onFaceClick={(_face, entry) => onAdd(entry.image)}
-                          onFaceDragStart={(entry, event) => {
-                            event.dataTransfer.setData(SHEET_SOURCE_MIME, entry.image.id);
-                            event.dataTransfer.effectAllowed = "copy";
-                          }}
-                          caption={<span style={{ color: "oklch(0.72 0.14 290)" }}>{set.label}</span>}
-                        />
+                        // FaceSetCard 는 모르는 속성을 넘겨받지 않아, 튜토리얼이 가리킬 자리를 감싸개로 둡니다.
+                        <div key={set.id} data-tour="sheet-face-set">
+                          <FaceSetCard
+                            set={set}
+                            cellHeight={28}
+                            title={`${set.label} — 면 하나를 누르면 그 면이 시트에 놓입니다. 칸 위로 끌어다 놓아도 됩니다`}
+                            onFaceClick={(_face, entry) => onAdd(entry.image)}
+                            onFaceDragStart={(entry, event) => {
+                              event.dataTransfer.setData(SHEET_SOURCE_MIME, entry.image.id);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            caption={<span style={{ color: "oklch(0.72 0.14 290)" }}>{set.label}</span>}
+                          />
+                        </div>
                       ))}
                       {singles.map((source) => (
                   <div
@@ -168,6 +170,7 @@ export default function SheetSourcePanel({
                         event.dataTransfer.effectAllowed = "copy";
                       }}
                       className="block w-full cursor-grab active:cursor-grabbing"
+                      data-tour="sheet-source-tile"
                     >
                       <div className="relative aspect-square w-full" style={{ background: "oklch(0.10 0.006 265)" }}>
                         <img
@@ -216,6 +219,7 @@ export default function SheetSourcePanel({
                         }}
                         aria-label={`${source.name} 편집 — 자르기·지우기`}
                         title="편집 — 자르기·지우기 (결과가 이 인물의 생성 이미지로 들어갑니다)"
+                        data-tour="sheet-source-crop"
                         // 이름 띠와 그 밑 크기 줄 위에 앉힙니다. bottom-4 면 크기 줄에 걸칩니다.
                         className="absolute bottom-8 right-1 z-10 rounded-full p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         style={{ background: "oklch(0 0 0 / 72%)", color: "white" }}

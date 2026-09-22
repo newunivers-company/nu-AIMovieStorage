@@ -74,7 +74,7 @@ export default function LocalGenerateButton({
   const [status, setStatus] = useState("");
   /*
     ── 이번에 쓸 로라 ────────────────────────────────────────────────────
-    
+    받아 둔 로라 가운데 이번에 얹을 것만 골라 씁니다.
 
     **엔진마다 따로** 기억합니다. 엔진을 바꾸면 고른 것이 그대로 남아 있으면 안 됩니다 —
     Wan 로라를 LTX 에 먹이면 로딩이 통째로 실패합니다.
@@ -83,6 +83,8 @@ export default function LocalGenerateButton({
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   /**
    * 모캡에서 구운 **동작 기준**. 영상에서만 씁니다.
+   *
+   * 모캡 영상을 쓰려면 로컬 모델에도 컨트롤넷이 붙어 있어야 동작이 그대로 갑니다.
    */
   const [pose, setPose] = useState<PoseFrameSet | null>(null);
 
@@ -111,7 +113,7 @@ export default function LocalGenerateButton({
       /*
         **그림 @태그를 가리키는 프롬프트는 로컬에서 뜻대로 안 됩니다.**
 
-        2026-09-18 실측: 장소 카드에서 «전개도» 를 Qwen-Image 로 뽑아 봤더니, 프롬프트가
+        실측입니다 — 장소 카드에서 «전개도» 를 Qwen-Image 로 뽑아 봤더니, 프롬프트가
         「틀 그림 @ref_방 1_001 의 칸에 맞춰 그려라」 인데 그 틀이 엔진에 안 가서 **방 사진
         한 장**이 나왔습니다(회색 칸 여섯 개를 벽에 걸린 액자로 그렸습니다). 40분과 60 GB 를
         쓰고 못 쓸 그림을 받는 셈이라, 시작 전에 말해 줍니다.
@@ -125,14 +127,16 @@ export default function LocalGenerateButton({
         });
 
       /*
-        **품질 수식어를 알려 줍니다.** 요즘 모델은 «극히 매력적인 이미지» 로 추가 미세조정해
+        **품질 수식어를 알려 줍니다.** 우리가 노리는 것은 실제 영화와 구분되지 않는 그림입니다.
+        요즘 모델은 «극히 매력적인 이미지» 로 추가 미세조정해
         나와서 가만두면 광고 사진이 됩니다. 거기에 「8k」·「masterpiece」 를 또 얹으면 바로
         그 편향을 더 밉니다. 지우지는 않습니다 — 일부러 넣었을 수 있으니 알려만 줍니다.
       */
       /*
         **프롬프트가 한도를 넘으면 뒤쪽이 조용히 잘립니다.**
 
-         텍스트 인코더가 읽는 길이는 정해져 있는데(`localTokenBudget`)
+        시킨 칸(전신 세 장·소품·피부)이 통째로 빠진 그림이 나온 적이 있습니다.
+        텍스트 인코더가 읽는 길이는 정해져 있는데(`localTokenBudget`)
         우리 프롬프트는 상황·환경·인물·구도·빛을 다 적어 길고, **칸 배치 지시가 맨 뒤**에 있습니다.
         넘치면 정확히 그 부분이 날아가 «시킨 것과 전혀 다른 그림» 이 됩니다. 값을 치르기 전에 말합니다.
       */
@@ -145,8 +149,8 @@ export default function LocalGenerateButton({
       /*
         **한 장에 여러 칸을 그리는 일은 로컬 모델이 못합니다.**
 
-        2026-09-22 실측: 9칸 시트를 시키면 실루엣이 뭉개진 그림이 나옵니다. 세 칸 안팎이면 같은 인물로
-        또렷하게 나옵니다(같은 날 «필리핀계 대원» 이 그랬습니다) — 칸이 늘수록 칸 하나에 주어지는 픽셀이
+        실측입니다 — 9칸 시트를 시키면 실루엣이 뭉개진 그림이 나옵니다. 세 칸 안팎이면 같은 인물로
+        또렷하게 나옵니다 — 칸이 늘수록 칸 하나에 주어지는 픽셀이
         줄고, 정체성을 여러 칸에 걸쳐 지키는 것은 나노 바나나 프로 급이 하는 일입니다.
       */
       if (kind === "image" && tuned.panels > 3)
@@ -166,8 +170,8 @@ export default function LocalGenerateButton({
       /*
         **로라의 «불러오는 말» 을 프롬프트 앞에 붙입니다.**
 
-        화면에는 「프롬프트에 넣어야 먹습니다」 라고 적어 두고 정작 보낼 때 버리고
-        있었습니다(2026-09-18 점검). 로라를 켜도 그 말이 한 글자도 안 갔습니다.
+        화면에는 «프롬프트에 넣어야 먹습니다» 라고 적어 두고 정작 보낼 때 버리고
+        있었습니다. 로라를 켜도 그 말이 한 글자도 안 갔습니다.
       */
       const chosenLoras = lorasToRun(engine.id, picked[engine.id], loraFiles);
       const withTriggers = withLoraTriggers(tuned.prompt, chosenLoras);
@@ -208,7 +212,7 @@ export default function LocalGenerateButton({
       /*
         **버린 레퍼런스는 말해 줍니다.**
 
-        사용자 2026-09-18 점검: 로컬 그림 엔진(Qwen-Image·Z-Image·Krea 2·Anima)은 넷 다
+        점검에서 드러난 것입니다. 로컬 그림 엔진(Qwen-Image·Z-Image·Krea 2·Anima)은 넷 다
         글자만 받습니다 — 워커에 `image` 를 읽는 자리가 아예 없습니다. 그런데 화면은 인물
         시트를 골라 둔 채로 «만들었습니다» 만 띄웠습니다. 그래서 컷마다 얼굴이 달라지는데도
         까닭을 알 수가 없었습니다. 말없이 버리지 않습니다.
@@ -242,10 +246,13 @@ export default function LocalGenerateButton({
 
   /*
     **세로가 아니라 가로로 흐릅니다.** 예전엔 «모델+단추 / 로라 / 자세» 를 세로로 쌓아
-    (flex-col) 컷 카드의 머리줄 오른쪽에서 두세 줄이 단추 아래로 매달렸습니다(). 머리줄의 다른 단추들처럼 한 줄에 서고, 좁으면 통째로 줄바꿈합니다.
+    (flex-col) 컷 카드의 머리줄 오른쪽에서 두세 줄이 단추 아래로 매달려 줄이 뒤죽박죽이었습니다.
+    머리줄의 다른 단추들처럼 한 줄에 서고, 좁으면 통째로 줄바꿈합니다.
   */
   return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
+    // 모델 고르는 칸과 «로컬로 뽑기» 를 한 자리로 봅니다 — 튜토리얼이 둘을 함께 가리킵니다.
+    // «로컬로 뽑기» 는 «구성» 과 다른 길이라 단추도 따로 섭니다(한때 같은 걸음에 묶여 있었습니다).
+    <div data-tour="card-local-generate" className="flex flex-wrap items-center justify-end gap-1.5">
       <div className="flex items-center gap-1">
       {/*
         엔진이 둘 이상일 때만 고르는 칸을 냅니다. 하나뿐인데 드롭다운을 두면

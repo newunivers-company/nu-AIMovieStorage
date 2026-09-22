@@ -211,3 +211,16 @@
 @media (prefers-reduced-motion: reduce) {
   .tutorial-pulse { animation: none; }
 }
+
+/*
+  튜토리얼이 가리키는 동안은 **보이게** 합니다.
+
+  
+  그림 위의 단추(가위·복사·폴더 열기)는 평소 `opacity: 0` 으로 숨어 있다가 마우스를 올려야 뜹니다.
+  자리는 DOM 에 있어 튜토리얼이 찾기는 하는데, 밝혀 놓은 자리에 아무것도 안 보였습니다.
+  표시는 안내 창이 붙였다 뗍니다(`TutorialOverlay` 의 `data-tutorial-lit`).
+*/
+[data-tutorial-lit] {
+  opacity: 1 !important;
+  visibility: visible !important;
+}

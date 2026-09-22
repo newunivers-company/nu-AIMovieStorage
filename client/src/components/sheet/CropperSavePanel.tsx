@@ -58,6 +58,7 @@ export default function CropperSavePanel({
       <div
         className="space-y-2 pt-2"
         style={{ borderTop: "1px solid oklch(1 0 0 / 8%)" }}
+        data-tour="cropper-upscale"
       >
         <p
           className="flex items-center gap-1.5 text-[10px] font-semibold"
@@ -188,6 +189,7 @@ export default function CropperSavePanel({
               type="button"
               onClick={() => void upscaleSourceNow()}
               disabled={!sourcePath || Boolean(upscaler.busy) || saving}
+              data-tour="cropper-upscale-now"
               title={
                 sourcePath
                   ? "지금 보고 있는 그림을 그대로 키워 원본 옆에 새 파일로 둡니다. 취소할 수 없습니다."

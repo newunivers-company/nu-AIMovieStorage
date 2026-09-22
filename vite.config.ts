@@ -22,7 +22,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 /**
  * **pdf.js 의 CMap 과 표준 글꼴 표를 앱과 함께 둡니다** (`/pdfjs/…`).
  *
- * 사용자의 시나리오는 **한국어 PDF** 입니다. 한글 PDF 는 대개 `UniKS-UCS2-H` 같은
+ * 이 앱이 읽는 시나리오는 대개 **한국어 PDF** 입니다. 한글 PDF 는 대개 `UniKS-UCS2-H` 같은
  * «미리 정해진 CMap» 으로 글자를 가리키는데, 그 표가 없으면 pdf.js 가 글리프 번호를
  * 글자로 못 바꿔 **빈 글이나 깨진 글자**가 나옵니다. 표준 글꼴 표(`standard_fonts`)도
  * 같은 이유로 필요합니다 — 글꼴이 안 박힌 PDF 에서 글자 매김이 그것에 기댑니다.
@@ -70,7 +70,7 @@ export default defineConfig({
   /*
     시험은 **우리 소스만** 돕니다. `scratch/` 에 헤드리스 크롬 프로필이 떨어지면(.gitignore 참조) 그 안의
     확장 프로그램 `*.spec.js` 여든 개를 vitest 가 주워 `jest is not defined` 로 전부 실패했습니다
-    (2026-09-22 실측). 저장소 밖 파일이 우리 시험을 빨갛게 만들면 안 됩니다.
+    저장소 밖 파일이 우리 시험을 빨갛게 만들면 안 됩니다.
   */
   test: { include: ["client/src/**/*.test.ts"] },
   plugins: [react(), tailwindcss(), pdfjsAssets()],

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EDITOR_DIALOG } from "@/lib/layout";
+import { HOLDS_ENTITY_CARD } from "@/lib/useTutorialPanel";
+import { TUTORIAL_CARD_EVENT, type TutorialCardWant } from "@/lib/tutorialStore";
 import { PackageOpen, Plus, Trash2, User } from "lucide-react";
 import CharacterProfilePanel from "@/components/CharacterProfilePanel";
 import GeneratedImageShelf from "@/components/project/GeneratedImageShelf";
@@ -85,6 +87,39 @@ export default function StepCharacters({
     setOpenId(created.id);
   };
 
+  /*
+    ── 튜토리얼이 카드 창을 열고 닫습니다 ─────────────────────────────────
+    캐릭터 튜토리얼의 걸음은 카드 창 «안»(레퍼런스·분석·프롬프트·가위)과 그 아래 «패널»
+    (시트 제작·변형) 두 층에 걸쳐 있습니다. 어느 쪽이 필요한지는 안내 창이 앵커 이름으로
+    판단해(`cardWantFor`) 부탁만 보내고, 실제로 여닫는 것은 상태를 쥔 여기서 합니다.
+
+    첫 인물을 여는 까닭 — 튜토리얼은 «아무 카드나 하나» 면 됩니다. 이미 열려 있으면 그대로 둡니다
+    (열린 것을 닫았다 다시 열면 사람이 적던 글이 날아갑니다).
+  */
+  useEffect(() => {
+    const onWant = (event: Event) => {
+      const want = (event as CustomEvent<TutorialCardWant>).detail;
+      if (want === "closed") {
+        setEditing(null);
+        return;
+      }
+      if (editing) return;
+      const first = draft.characters[0];
+      if (first) {
+        setEditing({ entityId: first.id, kind: "root" });
+        return;
+      }
+      // 하나도 없으면 빈 카드를 하나 만들어 엽니다 — 튜토리얼은 처음 쓰는 사람이 보는 것이라
+      // 인물이 없는 상태가 오히려 흔한데, 없는 화면을 가리키며 설명할 수는 없습니다.
+      const created = newCharacter();
+      onChange((current) => ({ characters: [...current.characters, created] }));
+      setOpenId(created.id);
+      setEditing({ entityId: created.id, kind: "root" });
+    };
+    window.addEventListener(TUTORIAL_CARD_EVENT, onWant);
+    return () => window.removeEventListener(TUTORIAL_CARD_EVENT, onWant);
+  }, [draft.characters, editing, setEditing, onChange]);
+
   /** 시트 창을 연 인물. `sheetId` 가 있으면 그 시트를 고치는 중(다시 굽기) */
   const [sheetFor, setSheetFor] = useState<{
     ownerId: string;
@@ -136,7 +171,7 @@ export default function StepCharacters({
       )}
 
       {/* 인물마다 패널 하나. 넓으면 나란히 놓입니다. */}
-      {/* 4열 (xl 기준) — 인물이 늘어도 한눈에 훑을 수 있게 좁고 길게 놓습니다. (08/21 확정) */}
+      {/* 4열 (xl 기준) — 인물이 늘어도 한눈에 훑을 수 있게 좁고 길게 놓습니다. */}
       <div className={LINEAGE_GRID}>
         {draft.characters.map((character, index) => (
           <EntityLineagePanel
@@ -162,7 +197,8 @@ export default function StepCharacters({
             }
             onRemove={() => void lineage.remove(character)}
             /*
-              다른 원본 — 「냥이의 어린 시절, 냥이의 노인 버전」. 파일은 이 인물 폴더 안에
+              다른 원본 — 같은 인물의 어린 시절·노인 모습처럼 정체성은 같은데 생김새가 다른 판입니다.
+              파일은 이 인물 폴더 안에
               «인물_이름_번호» 로(규칙 5). 원본 편집 창은 이 탭의 원본 카드(`CharacterCard`) 그대로 —
               어린 시절도 인물이라 역할·키·프로필 칸이 똑같이 필요합니다. 배경 탭도 같은 상자(규칙 1).
             */
@@ -215,7 +251,8 @@ export default function StepCharacters({
               },
             }}
             /*
-              보유 애셋은 패널 안 미니 계보로. 관리 창은 없앴습니다.
+              보유 애셋은 패널 안 미니 계보로. 창을 하나 더 띄우면 인물 카드를 덮어, 누구의 에셋인지를
+              보면서 고칠 수가 없어 관리 창은 없앴습니다.
               파일은 이 인물 폴더 안에 «인물_에셋_번호» 로 들어가므로(규칙 5), 인물(과 변형)의
               파일 목록을 넘겨 에셋 카드가 폴더를 읽을 때 인물 파일을 제 것으로 줍지 않게 합니다.
             */
@@ -276,7 +313,8 @@ export default function StepCharacters({
 
       {/*
         ── 다른 작품에서 끌어오기 ──────────────────────────────────────
-        
+        시리즈물은 작품이 달라도 인물이 같습니다. 같은 인물을 작품마다 처음부터 다시 등록하면
+        시트도 프롬프트도 어긋나기 시작합니다.
 
         **복사**입니다. 카드도 그림도 이 작품 폴더로 새로 들어옵니다 — 한 카드를 두
         작품이 가리키면 규칙 3(화면에서 지우면 원본도 지움)이 무너집니다.
@@ -325,6 +363,7 @@ export default function StepCharacters({
           onOpenChange={(next: boolean) => !next && setEditing(null)}
         >
           <DialogContent
+            tutorialHolds={HOLDS_ENTITY_CARD}
             className={EDITOR_DIALOG}
             style={{ background: "oklch(0.13 0.009 265)" }}
           >
@@ -399,7 +438,7 @@ export default function StepCharacters({
               /*
               보유 에셋·다른 원본(과 그 변형)의 파일과 접두. 다른 원본 «겨울» 의 접두 `냥이_겨울` 은 이 변형
               «겨울» 과 같아서, 안 넘기면 변형 창이 그 파일을 제 것으로 줍고(X 로 지움) 이름 바꾸기가 그 파일까지
-              끌고 갑니다(검토 2026-09-08). 제 파일과 형제 변형은 창이 따로 세니 여기서는 뺍니다.
+              끌고 갑니다. 제 파일과 형제 변형은 창이 따로 세니 여기서는 뺍니다.
             */
               claimedPaths={() =>
                 ownerClaimedPaths(openCharacter, {
@@ -433,8 +472,8 @@ export default function StepCharacters({
           projectName={projectName}
           sharedAssets={draft.sharedAssets}
           profile={sheetOwner.profile}
-          // 표 줄은 `profileLines` 한 곳에서. 여기서 따로 만들면 프로필 칸이 빠집니다
-          // .
+          // 표 줄은 `profileLines` 한 곳에서. 여기서 따로 만들면 시트의 프로필 글상자에
+          // 이름 한 줄만 찍히고 나머지 칸이 통째로 빠집니다.
           basics={sheetProfileBasics(sheetOwner.profile, {
             name: sheetOwner.name,
             role: sheetOwner.role,
@@ -442,7 +481,8 @@ export default function StepCharacters({
             gender: sheetOwner.gender,
           })}
           patchOwner={(updater) => patchCharacter(sheetOwner.id, updater)}
-          // 배치도는 프로젝트 공용 — 다른 인물의 시트에서도 고를 수 있습니다.
+          // 배치도는 프로젝트 공용 — 다른 인물의 시트에서도 고를 수 있습니다. 한 번 짠 배치를
+          // 인물마다 다시 짜면 같은 작품의 시트가 제각각이 됩니다.
           layouts={draft.sheetLayouts || []}
           patchProject={(updater) =>
             onChange((current) => ({
@@ -625,12 +665,13 @@ export function CharacterCard({
           className="space-y-3 border-t px-3 pb-3 pt-3"
           style={{ borderColor: "oklch(1 0 0 / 8%)" }}
         >
-          {/* 2열 — 짝이 되는 것끼리 나란히. (08/20 확정) */}
+          {/* 2열 — 짝이 되는 것끼리 나란히. */}
           <PromptCardBody
             kind="character"
             // 성격·말투·습관. 그림으로는 알 수 없는 것이라 따로 둡니다.
             // 6000×6000 시트의 빈 자리에 찍혀서, 영상 모델이 이 인물을 연기할 때 읽습니다.
-            // 「배치상 이미지 분석 위가 낫다」 — 분석·프롬프트보다 앞에 둡니다.
+            // 분석·프롬프트보다 앞에 둡니다 — 성격을 먼저 적어야 그 아래 분석과 프롬프트가
+            // 그 인물을 두고 쓰는 글이 됩니다.
             beforeAnalysis={
               <CharacterProfilePanel
                 profile={character.profile}
@@ -744,7 +785,7 @@ export function CharacterCard({
             /*
               다른 원본은 제 폴더가 없습니다. `cropSave` 없이는 `SheetPanelCropper` 가 이름(«어린시절»)으로
               폴더를 파 잘라낸 칸·표시가 `character/어린시절/` 로 가고, 그 파일은 주인 폴더 읽기·이름 바꾸기·
-              주인 지우기가 전부 못 봅니다(규칙 5·3 위반, 검토 2026-09-08). 생성 이미지 선반과 같은 폴더·접두로.
+              주인 지우기가 전부 못 봅니다(규칙 5·3 위반). 생성 이미지 선반과 같은 폴더·접두로.
               주인 인물은 지금대로(카드 이름 = 폴더 이름).
             */
             cropSave={

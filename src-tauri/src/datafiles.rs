@@ -173,6 +173,14 @@ pub fn delete_data_file(base_directory: String, relative_path: String) -> Res<()
     }
 }
 
+/// 하위 폴더 하나와 그 안의 파일 경로들. `list_sub_folders` 가 돌려줍니다.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubFolder {
+    pub name: String,
+    pub files: Vec<String>,
+}
+
 /// 저장 폴더 안의 프로젝트를 전부 찾습니다.
 ///
 /// `<저장폴더>/<프로젝트>/project.json` 을 한 겹씩 뒤집니다.
@@ -205,6 +213,67 @@ pub fn list_project_data(base_directory: String, file_name: String) -> Res<Vec<D
             });
         }
     }
+    Ok(out)
+}
+
+/// 저장 폴더 안 어느 폴더의 **하위 폴더와 그 안의 파일**을 훑습니다.
+///
+/// BGM 이 이것을 씁니다. 영상 프로젝트는 폴더마다 `project.json` 이 있어 그것만 읽으면
+/// 되살아나는데, BGM 은 기록이 브라우저 저장소에만 있어 **폴더에 곡이 있어도 화면이
+/// 비어 있었습니다.** 곡 폴더(`BGM/곡/<프로젝트>/…`)를 훑어 무엇이 있는지 알아야
+/// 되살릴 수 있습니다.
+///
+/// 한 겹만 봅니다(`<relative_path>/<하위 폴더>/<파일>`). 더 깊게 파면 6면·파노라마처럼
+/// 안에 또 폴더를 둔 갈래에서 쓸데없이 많이 읽습니다.
+#[tauri::command]
+pub fn list_sub_folders(
+    base_directory: String,
+    relative_path: String,
+    extensions: Vec<String>,
+) -> Res<Vec<SubFolder>> {
+    let root = data_path(&base_directory, &relative_path)?;
+    if !root.exists() {
+        return Ok(vec![]);
+    }
+    let wanted: Vec<String> = extensions
+        .iter()
+        .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
+        .collect();
+
+    let mut out = vec![];
+    for entry in fs::read_dir(&root)
+        .map_err(|e| err("폴더를 읽지 못했습니다", e))?
+        .flatten()
+    {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let mut files = vec![];
+        if let Ok(inner) = fs::read_dir(&dir) {
+            for item in inner.flatten() {
+                let path = item.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let ok = wanted.is_empty()
+                    || path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| wanted.contains(&e.to_ascii_lowercase()))
+                        .unwrap_or(false);
+                if ok {
+                    files.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+        files.sort();
+        out.push(SubFolder {
+            name: dir.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            files,
+        });
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
 }
 

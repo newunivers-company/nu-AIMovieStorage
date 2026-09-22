@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { CopyPlus, Plus, X } from "lucide-react";
 import { EDITOR_DIALOG } from "@/lib/layout";
+import { HOLDS_ENTITY_CARD } from "@/lib/useTutorialPanel";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import LineageTree, { LINEAGE_ROOT, lineageNodes } from "@/components/project/LineageTree";
 import VariationDialog from "@/components/project/VariationDialog";
@@ -75,6 +76,10 @@ export interface AlternateLineageProps<T extends AlternateEntity> {
 
 /**
  * 「다른 원본」 상자 — 인물·장소 패널 안의 **또 하나의 미니 계보 목록**.
+ *
+ * 한 인물에게도 원본이 여럿 필요할 때가 있습니다 — «냥이의 어린 시절», «냥이의 노인 판».
+ * 변형으로는 안 됩니다(변형은 같은 사람의 다른 차림이라 정체성 기준을 물려받습니다).
+ * 그래서 에셋 상자가 하던 대로, 인물 카드 안에서 원본을 더 만들 수 있게 했습니다.
  *
  * 모양은 「보유 애셋」 상자(`OwnedAssetLineage`)와 같습니다 — 원본마다 이름 줄(이름 칸 + X)
  * 밑에 작은 계보(원본 → 변형), 끝에 «캐릭터 생성» 단추. 계보 조작은 같은 `useEntityLineage`
@@ -161,6 +166,7 @@ export default function AlternateLineage<T extends AlternateEntity>({
 
   return (
     <div
+      data-tour="lineage-alternates"
       className="mt-3 rounded-lg p-3"
       style={{ background: "oklch(0.12 0.008 265)", border: `1px solid ${accent.replace(")", " / 22%)")}` }}
     >
@@ -185,7 +191,7 @@ export default function AlternateLineage<T extends AlternateEntity>({
           {items.map((item, index) => (
             <div key={item.id}>
               {/* 이름 줄. 「보유 애셋」 상자와 같은 모양 — 원본을 지우는 길은 이 X 뿐입니다. */}
-              <div className="mb-1.5 flex items-center gap-1.5">
+              <div data-tour="lineage-alternate-name" className="mb-1.5 flex items-center gap-1.5">
                 <input
                   value={item.name}
                   onChange={(event) => patchEntity(item.id, () => ({ name: event.target.value }))}
@@ -343,9 +349,9 @@ function AlternateRootDialog<T extends AlternateEntity>({
       /*
         **아무것도 안 적고 닫으면 그 원본은 지웁니다.**
 
-        사용자 2026-09-18 점검에서, 「캐릭터 생성」 을 누를 때마다 빈 «이름 없는 원본» 이
-        하나씩 쌓이는 것이 드러났습니다. 창을 열어 보기만 해도 남습니다. 목록이 빈 카드로
-        길어지면 어느 것이 진짜인지 알 수 없어집니다.
+        «캐릭터 생성» 을 누를 때마다 빈 «이름 없는 원본» 이 하나씩 쌓였습니다 — 창을
+        열어 보기만 해도 남습니다. 목록이 빈 카드로 길어지면 어느 것이 진짜인지
+        알 수 없어집니다.
 
         **적은 것이 하나라도 있으면 지우지 않습니다** — 지우는 쪽이 늘 더 위험합니다.
       */
@@ -366,7 +372,16 @@ function AlternateRootDialog<T extends AlternateEntity>({
 
   return (
     <Dialog open onOpenChange={(next: boolean) => !next && void finish()}>
-      <DialogContent className={EDITOR_DIALOG} style={{ background: "oklch(0.13 0.009 265)" }}>
+      {/*
+        `tutorialHolds` 에 제 앵커를 같이 적습니다. 안 적으면 이 창을 가리키는 걸음에 이르는
+        순간 창이 «내가 품은 자리가 아니네» 하며 스스로 닫혀, 밝힐 것이 사라집니다.
+      */}
+      <DialogContent
+        data-tour="lineage-alternate-editor"
+        tutorialHolds={`${HOLDS_ENTITY_CARD} lineage-alternate-editor`}
+        className={EDITOR_DIALOG}
+        style={{ background: "oklch(0.13 0.009 265)" }}
+      >
         {/* 이름이 비면 「이름 없는 원본 원본」 이 되지 않게 — 스크린리더가 읽는 제목입니다. */}
         <DialogTitle className="sr-only">{item.name ? `${item.name} 원본` : "이름 없는 원본"}</DialogTitle>
         <DialogDescription className="sr-only">같은 인물·장소의 다른 모습을 만듭니다</DialogDescription>

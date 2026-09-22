@@ -13,8 +13,11 @@ import {
   Maximize2,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
+import { ensureTutorialSample } from "@/lib/tutorialSample";
 import { LOCALES, setLocale, useLocale, useT } from "@/lib/i18n";
 import { resetTutorials, setTutorialsEnabled, useTutorial } from "@/lib/tutorialStore";
 import { TUTORIALS } from "@/tutorials";
@@ -129,6 +132,9 @@ export default function SettingsPage() {
   const locale = useLocale();
   const tutorials = useTutorial();
   const [baseDirectory, setBaseDirectory] = useState("");
+  const [, navigate] = useLocation();
+  /** 예시 작품은 그림 넉 장을 복사하므로 잠깐 걸립니다. 그 사이 두 번 눌리면 두 번 만듭니다. */
+  const [makingSample, setMakingSample] = useState(false);
   const [presetFolder, setPresetFolderValue] = useState("");
   const [promptFolder, setPromptFolder] = useState("");
   const [taskModels, setTaskModels] = useState(getTaskModels());
@@ -486,7 +492,7 @@ export default function SettingsPage() {
 
         {/*
           ── 언어 · 튜토리얼 ──────────────────────────────────────────
-          
+          말은 한국어·영어·일본어·중국어 넷, 기본은 한국어입니다. 튜토리얼도 여기서 켜고 끕니다.
 
           두 칸을 한 상자(`settings-language`)로 묶는 까닭 — 튜토리얼 걸음 «언어 · 튜토리얼» 이
           둘을 한 번에 가리킵니다. 앵커는 표(ANCHORS.md)와 자료가 서로를 세므로 하나만 둡니다.
@@ -563,10 +569,39 @@ export default function SettingsPage() {
                 <RotateCcw className="h-3 w-3" />
                 {t("처음부터 다시 보기")}
               </button>
+              {/*
+                튜토리얼 걸음 여럿은 «내용이 있어야» 생기는 자리를 가리킵니다 — 뽑은 그림이 없으면
+                가위가 없습니다. 그래서 전부 채워진 작품 하나를 만들어 둡니다.
+              */}
+              <button
+                type="button"
+                disabled={makingSample}
+                onClick={() => {
+                  setMakingSample(true);
+                  void ensureTutorialSample()
+                    .then((id) => {
+                      toast.success(t("예시 작품을 만들었습니다. 여기서 튜토리얼을 따라가 보세요."));
+                      navigate(`/project/${id}`);
+                    })
+                    .catch(() => toast.error(t("예시 작품을 만들지 못했습니다. 기본 저장 폴더를 먼저 정하세요.")))
+                    .finally(() => setMakingSample(false));
+                }}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                style={{ background: "oklch(0.62 0.22 290 / 16%)", color: "oklch(0.86 0.14 290)" }}
+              >
+                <Sparkles className="h-3 w-3" />
+                {makingSample ? t("만드는 중…") : t("연습용 예시 작품 만들기")}
+              </button>
               <span className="text-[10px]" style={{ color: "oklch(0.48 0.01 265)" }}>
                 {t("본 것 {seen} · 전체 {total}", { seen: seenCount, total: TUTORIALS.length })}
               </span>
             </div>
+
+            <p className="text-[10px] leading-relaxed" style={{ color: "oklch(0.45 0.01 265)" }}>
+              {t(
+                "예시 작품에는 인물·장소·장면·컷과 뽑아 둔 그림·캐릭터 시트가 미리 들어 있습니다. 갓 설치한 상태에서는 가리킬 것이 없어 튜토리얼이 헛돌기 때문입니다. 보통 작품과 똑같아서 마음대로 고치거나 지워도 됩니다.",
+              )}
+            </p>
 
             <ul className="space-y-1 text-[10px] leading-relaxed" style={{ color: "oklch(0.50 0.01 265)" }}>
               <li>
@@ -773,7 +808,7 @@ export default function SettingsPage() {
         */}
         {/*
           로라 서랍 — 로컬 모델 바로 아래에 두려 했으나, 로라는 «어떤 결로 뽑는가» 라
-          엔진 설치보다 자주 만집니다. 위에 둡니다.
+          엔진 설치보다 자주 만집니다. 그래서 위에 둡니다.
         */}
         <Section icon={Layers} tint="oklch(0.78 0.16 320)" title={t("로라 (엔진별로 찾고 받기)")} anchor="settings-lora">
           <LoraLibraryPanel />
@@ -823,8 +858,8 @@ export default function SettingsPage() {
               «업스케일» 단추가 쓰는 긴 변. 파노라마 탭은 거기서 고른 면 크기를 따릅니다
             </span>
             {/*
-              사용자 2026-09-09: 목표를 고를 때 «그 엔진이 원본에서 그 크기를 진짜로 만드는지» 를
-              알려 줘야 합니다. 여기서는 어떤 그림에 쓸지 모르니 배율로만 말합니다 — 그림별
+              목표를 고를 때 «그 엔진이 원본에서 그 크기를 진짜로 만드는지» 를 알려 줘야 합니다 —
+              닿지 못하는 크기를 골라 두면 뽑고 나서야 압니다. 여기서는 어떤 그림에 쓸지 모르니 배율로만 말합니다 — 그림별
               숫자는 이미지 편집 창의 업스케일 칸이 원본을 재서 알려 줍니다(타일의 ▾ 메뉴는
               업스케일이 편집 창으로 들어가면서 없어졌습니다).
             */}
@@ -1074,7 +1109,7 @@ export default function SettingsPage() {
           </p>
 
           {/*
-            동시 요청 —  4단계는 카드마다 요청 하나라 하나씩 받으면
+            동시 요청 — 4단계는 카드마다 요청 하나라 하나씩 받으면
             123장에 한 시간이 넘습니다. 답은 카드 id 로 찾아가므로 동시에 받아도 섞이지 않고, 한도(429)에
             걸리면 그 일만 잠시 쉬었다 다시 섭니다. 세 왕복(1/3→2/3→3/3)은 한 일이라 그 안에서는 차례대로.
           */}

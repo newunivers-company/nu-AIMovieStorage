@@ -1,6 +1,7 @@
 //! 앱의 **판** — 비공개(private) / 공개(public).
 //!
-//! 
+//! 공개판으로 묶을 때는 상업 이용이 안 되는 모델(업스케일·모션 캡처)을 빼고, 비공개판에는
+//! 그대로 둡니다. 판을 둘로 나눈 까닭이 이것뿐입니다.
 //!
 //! # 왜 Rust 에서도 막나
 //!
@@ -27,7 +28,7 @@ use serde::Deserialize;
 /// 저장소 뿌리의 `edition.json`. 파일이 없으면 컴파일이 안 됩니다 — 그게 맞습니다.
 const EDITION_JSON: &str = include_str!("../../edition.json");
 
-/// 이 빌드의 판 이름. 빌드 스크립트가 안 심었으면(개발·사용자의 빌드) 비공개판.
+/// 이 빌드의 판 이름. 빌드 스크립트가 안 심었으면(개발 빌드) 비공개판.
 pub const EDITION: &str = match option_env!("FRAMEFORGE_EDITION") {
     Some(value) => value,
     None => "private",

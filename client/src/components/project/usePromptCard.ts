@@ -99,7 +99,7 @@ export interface PromptCardOptions<T extends PromptWorkflowState<ReferenceImage,
   /**
    * 변형 카드면 "variation". 폴더를 다시 읽을 때 **자기 접두(`냥이_겨울_`) 파일만** 줍습니다.
    * 변형은 부모 폴더를 같이 쓰므로, 안 가리면 부모의 `ref_냥이_001` 이 «목록에 없는 파일» 로 보여
-   * 열 때마다 다시 붙습니다 — 사용자가 뺀 레퍼런스가 계속 되살아나던 원인(2026-09-08).
+   * 열 때마다 다시 붙습니다 — 손으로 뺀 레퍼런스가 계속 되살아나던 원인입니다.
    */
   scope?: "root" | "variation";
   /** 같은 폴더를 쓰는 다른 카드(부모·형제 변형·보유 에셋)가 이미 쓰는 파일. 폴더를 읽을 때 건너뜁니다. */
@@ -141,7 +141,8 @@ export function usePromptCard<
   /*
     분석과 프롬프트 작성은 **따로** 잠급니다.
 
-    하나로 잠갔더니 «분석 중» 이면 «프롬프트 작성» 을 못 눌렀습니다. 
+    하나로 잠갔더니 «분석 중» 이면 «프롬프트 작성» 을 못 눌렀습니다 — API 요청은 여럿이
+    동시에 돌 수 있어야 합니다.
     답은 각자 patch(갱신 함수)로 제 칸에 붙으니 동시에 돌아도 서로 덮지 않습니다.
   */
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -186,11 +187,12 @@ export function usePromptCard<
 
     폴더가 원본이니 화살표가 양쪽으로 가야 합니다. 화면에서 넣은 것은 폴더로
     가고 있었는데, 그 반대가 없었습니다. 그래서 탐색기에서 직접 넣은 파일과
-    시트에서 잘라낸 칸이 목록에 안 떴고, 사용자은 «레퍼런스가 계속 초기화된다»
-    고 느꼈습니다 — 실은 폴더에 멀쩡히 있는데 화면이 못 본 것이었습니다.
+    시트에서 잘라낸 칸이 목록에 안 떠서 «레퍼런스가 계속 초기화된다» 로 보였습니다 —
+    실은 폴더에 멀쩡히 있는데 화면이 못 본 것이었습니다.
 
     카드를 열 때 한 번만 읽습니다. 계속 읽으면 방금 지운 것이 되살아납니다.
-    이미 목록에 있는 자리는 건드리지 않고, **없는 것만 뒤에 붙입니다.*  */
+    이미 목록에 있는 자리는 건드리지 않고, **없는 것만 뒤에 붙입니다.**
+  */
   const scanned = useRef(false);
   useEffect(() => {
     if (scanned.current || !options.projectName.trim()) return;
@@ -212,12 +214,13 @@ export function usePromptCard<
       patch((current) => {
         const have = new Set((current.references || []).map((image) => image.filePath));
         /*
-          같은 그림이 두 개로 불어나던 것. (지시 317)
+          같은 그림이 두 개로 불어나던 것.
 
           저장이 끝나기 전에 창을 닫으면 filePath 를 채우는 두 번째 patch 가
           버려집니다. 그 상태로 다시 열면 폴더 파일이 «목록에 없는 것» 으로
           보여 새로 붙었습니다. 이름이 같고 아직 filePath 가 없는 것이 있으면
-          새로 붙이지 않고 **그 자리에 경로를 채웁니다.*        */
+          새로 붙이지 않고 **그 자리에 경로를 채웁니다.**
+        */
         const orphans = new Map(
           (current.references || [])
             .filter((image) => !image.filePath && image.name)
@@ -346,7 +349,7 @@ export function usePromptCard<
    *
    * 예전에는 ✕ 를 누르는 즉시 파일까지 지웠습니다. 타일이 작고 ✕ 도 작아서
    * 옆 것을 누르려다 잘못 눌리는데, 그러면 되돌릴 방법이 없었습니다.
-   * 「x로 레퍼런스 이미지 지울 때 한번 물어봐야 할 것 같아」 (지시 51)
+   * 그래서 ✕ 는 지우기 전에 한 번 묻습니다.
    */
   const removeReference = async (id: string) => {
     const target = (entity.references || []).find((image) => image.id === id);
@@ -354,7 +357,7 @@ export function usePromptCard<
     // 아니라 부모 것입니다. 목록에서만 빠지고 파일은 그대로 둡니다 — 지우면 원본 인물의
     // 레퍼런스가 사라집니다. 예전 것은 sharedFile 표시가 없어 id 로도 알아봅니다.
     // 같은 폴더를 쓰는 다른 카드(부모·형제 변형·보유 에셋)의 파일도 «이 카드의 파일» 이 아닙니다.
-    // 폴더 다시 읽기가 잘못 붙여 둔 것을 X 로 빼다 부모 파일을 지우면 안 됩니다(2026-09-08).
+    // 폴더 다시 읽기가 잘못 붙여 둔 것을 X 로 빼다 부모 파일을 지우면 안 됩니다.
     const claimedByOthers = Boolean(target?.filePath) && (options.claimedPaths?.().has(target?.filePath || "") ?? false);
     const borrowed =
       Boolean(target?.isParentReference) ||
@@ -389,8 +392,7 @@ export function usePromptCard<
   /**
    * 레퍼런스 한 장을 **다른 파일로 갈아 끼웁니다.** 자리와 태그(@ref_N)는 그대로.
    *
-   * 「변형 레퍼런스 이미지에 들어가 있는 이미지를 다른 걸로 교체를 못하네..
-   * 하나는 픽스야」 (지시 215·217). 빼고 다시 넣으면 순서가 뒤로 가서 태그
+   * 한 자리는 고정해 두고 그림만 갈고 싶을 때가 있습니다. 빼고 다시 넣으면 순서가 뒤로 가서 태그
    * 번호가 바뀝니다. 그러면 「@ref_1 의 헤어로」 라고 적어 둔 글이 딴 그림을
    * 가리킵니다. 그래서 빼지 않고 그 자리에서 바꿉니다.
    *
@@ -445,7 +447,8 @@ export function usePromptCard<
    * 분석 칸을 채우고 「받아 둔 분석」 에 쌓습니다. 둘이 늘 같이 일어나야 합니다.
    *
    * 예전에는 재분석도 붙여넣기도 `analysis` 만 덮어써서, 앞의 분석이 그 자리에서
-   * 사라졌습니다. 손으로 다듬어 둔 문장까지 같이요. (2026-09-08). 프롬프트의 `applyPrompt`
+   * 사라졌습니다. 손으로 다듬어 둔 문장까지 같이요 — 오류로 지워졌을 때 되찾을 길이
+   * 있어야 합니다. 프롬프트의 `applyPrompt`
    * 와 같은 길입니다 — API 로 받든 붙여넣든 여기를 지나야 이력이 한 벌로 남습니다.
    *
    * **텍스트 칸을 손으로 고칠 때는 부르지 않습니다.** 글자마다 한 줄씩 쌓입니다.
@@ -453,7 +456,7 @@ export function usePromptCard<
   const applyAnalysis = (text: string, note?: string, textEn?: string) =>
     patch((current) => {
       // 덮어쓰기 **전** 칸도 남깁니다. 이 기능 전에 받은 분석(이력 없음)이나 손으로 다듬은
-      // 문장은 이력에 없어서, 새 답이 오는 순간 영영 사라졌습니다(검토 2026-09-08).
+      // 문장은 이력에 없어서, 새 답이 오는 순간 영영 사라졌습니다.
       const before = current.analysis?.trim() || "";
       const newest = current.analysisHistory?.[0]?.text.trim() ?? "";
       const kept =
@@ -548,7 +551,7 @@ export function usePromptCard<
       /*
         **영문 한 벌도 받아 둡니다.**
 
-        여태
+        한글 칸과 영문 칸이 서로 맞아야 합니다 — 여태
         한국어 분석문이 **영문 프롬프트에도 그대로** 실렸습니다. 생성기는 그 부분을
         통째로 무시하거나 글자로 그려 넣습니다. 분석을 받을 때 한 번에 둘을 받으면
         요청이 늘지 않으면서 그 구멍이 막힙니다.
@@ -578,7 +581,7 @@ export function usePromptCard<
   //
   // 아래 «프롬프트 작성» 과 정반대의 자리입니다. 저쪽은 **그림이 있을 때** 그것을 보고
   // 시트를 뽑는 것이고, 여기는 **그림이 한 장도 없을 때** 설정만으로 첫 장을 뽑습니다.
-  //
+  // 그림이 없는 카드에는 분석할 것이 없으니, 적어 둔 특징만으로 첫 장을 뽑을 프롬프트를 짓습니다.
 
   /**
    * 어느 이미지 모델 문법으로 쓸지.
@@ -782,7 +785,7 @@ export function usePromptCard<
    *
    * 예전에는 `runPrompt` 와 「LLM 요청문」 단추(`promptRequestData`)가 같은 것을 따로 조립했고,
    * 앵커를 한쪽에만 넣으면 창에 보이는 요청문과 실제로 보낸 것이 달라집니다. 한 함수로 둡니다.
-   * 몸통은 `lib/promptPayloads.sheetRequestPayload` 로 옮겼습니다(2026-09-22) — 「AI 일괄 생성」
+   * 몸통은 `lib/promptPayloads.sheetRequestPayload` 로 옮겼습니다 — 「AI 일괄 생성」
    * 4단계가 화면 없이 같은 재료를 지어야 해서입니다. 여기서는 훅만 아는 것(앵커·틀 태그·레퍼런스)을 모읍니다.
    */
   const promptRequestPayload = (references: ReferenceImage[] = entity.references || []) =>
@@ -803,7 +806,7 @@ export function usePromptCard<
 
   /*
     ── 전개도 틀 그림을 레퍼런스에 자동으로 ────────────────────────────────
-     전개도 칩은 **칸 틀 그림이 있어야** 칸 크기를 지킵니다(글로 적으면 안 지킴 — unfoldPrompt 머리말).
+    전개도 칩은 **칸 틀 그림이 있어야** 칸 크기를 지킵니다(글로 적으면 안 지킴 — unfoldPrompt 머리말).
     처음엔 «틀 그림 넣기» 단추를 따로 뒀는데, 누르는 걸 잊으면 전개도가 제멋대로 나옵니다. 프롬프트를 만드는
     순간(API·규칙 둘 다) 방 크기의 틀이 없으면 넣어 둡니다 — 레퍼런스라 «구성» 으로 보낼 때 저절로 함께 올라갑니다.
 
@@ -835,7 +838,7 @@ export function usePromptCard<
 
     /*
       ── 크기가 바뀌었으면 **그 자리를 갈아 끼웁니다** ─────────────────────────
-      
+      실내 전개도의 칸 비율은 방 크기를 따라가므로, 크기를 고치면 틀 그림도 따라 바뀌어야 합니다.
       예전엔 크기가 바뀌면 새 틀을 **하나 더** 붙였습니다 — 옛 틀도 «구성» 으로 같이 올라가고, 프롬프트 태그는 목록에서
       먼저 나오는 옛 틀을 불렀습니다. 그래서 앱이 지은 틀(꼬리표 «전개도 틀»)은 한 장만 두고 그림을 바꿔 끼웁니다.
       옛 틀 파일은 지웁니다 — 사람이 올린 그림이 아니라 앱이 방 크기로 그린 그림이고, 남기면 폴더를 다시 읽을 때
@@ -895,7 +898,7 @@ export function usePromptCard<
     if (!cube && !spaceFitsChip(PANORAMA_INTERIOR_CHIP_ID, space)) return null;
     const box = cube ? { width: 1, depth: 1, height: 1 } : panoramaBoxOf(space!, true);
     /*
-      꼬리표가 바뀌면 옛 틀을 갈아 끼웁니다. «· 회색» 을 붙인 까닭 — 2026-09-15 에 틀을 색 칸·밝은 회색 칸에서 **바탕과 거의 같은
+      꼬리표가 바뀌면 옛 틀을 갈아 끼웁니다. «· 회색» 을 붙인 까닭 — 틀을 색 칸·밝은 회색 칸에서 **바탕과 거의 같은
       회색 칸**으로 바꿨는데, 꼬리표가 같으면 이미 틀이 있는 카드가 옛 틀을 그대로 올립니다.
     */
     // 실외 틀은 옆 칸에 지평선(아래 절반 조금 어둡게)을 넣은 판 — 꼬리표가 달라 옛 틀이 저절로 갈립니다.
@@ -934,7 +937,7 @@ export function usePromptCard<
 
   const runPrompt = async () => {
     /*
-      이미 프롬프트가 차 있으면 먼저 묻습니다. (지시 110)
+      이미 프롬프트가 차 있으면 먼저 묻습니다.
 
       프롬프트 한 벌을 받는 데 몇 십 초와 요금이 듭니다. 그걸 말없이
       덮어쓰면 방금 손본 문장이 사라집니다. 「받아 둔 프롬프트」 에 쌓이긴
@@ -957,7 +960,7 @@ export function usePromptCard<
     patch(() => ({ promptLoading: true } as Partial<T>));
     /*
       전개도 틀을 **요청을 짓기 전에** 넣고 그 목록으로 짓습니다. 예전엔 넣기만 하고 요청은 옛 목록으로 지어서, 틀이
-      레퍼런스에 들어가도 프롬프트에 그 @태그가 없었습니다().
+      레퍼런스에 들어가도 프롬프트에 그 틀을 가리키는 @태그가 없었습니다.
     */
     const references = await ensureUnfoldTemplate();
     try {
@@ -971,7 +974,7 @@ export function usePromptCard<
         template: options.promptTemplate,
         modelId: entity.promptModel,
         /*
-          **고른 플랫폼을 요청에 실어 보냅니다.** (지시 128)
+          **고른 플랫폼을 요청에 실어 보냅니다.**
 
           마그니픽은 `@파일이름`, 컴피UI 는 `<picture 1>` 로 레퍼런스를
           가리킵니다. 같은 모델이라도 어디에 붙여넣느냐에 따라 문법이

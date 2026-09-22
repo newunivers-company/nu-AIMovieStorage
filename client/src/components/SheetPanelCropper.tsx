@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
+import { sizeLabel } from "@/lib/useImageSize";
+import { HOLDS_CROPPER } from "@/lib/useTutorialPanel";
 import {
   Globe2,
   Grid2x2,
@@ -83,8 +86,8 @@ import { isTypingTarget } from "@/lib/isTypingTarget";
  *
  * # 업스케일도 여기서 합니다
  *
- * 시트 6000px 에서 얼굴 칸을 떠내면
- * 700px 이 되므로, **키우는 자리는 자른 직후**가 가장 자연스럽습니다. 그래서
+ * 업스케일 손잡이를 이미지 편집 안에 둔 까닭 — 자르면 그림이 작아집니다. 시트 6000px 에서
+ * 얼굴 칸을 떠내면 700px 이 되므로, **키우는 자리는 자른 직후**가 가장 자연스럽습니다. 그래서
  *
  * - 미리보기 상태에서 «업스케일해서 저장» 을 켜면 저장한 파일을 그 자리에서 키웁니다.
  * - 편집하지 않고 그림만 키우고 싶으면 «지금 그림 업스케일»(원본 옆에 새 파일).
@@ -147,6 +150,7 @@ export default function SheetPanelCropper({
   /** 저장한 파일을 화면 목록에도 넣습니다. */
   onSaved?: (files: CropperSavedFile[]) => void;
 }) {
+  const t = useT();
   /**
    * 이 창에서 무엇을 하는 중인지.
    *
@@ -341,7 +345,7 @@ export default function SheetPanelCropper({
   // 이름 칸에 글자를 쓰는 중이면 그 칸의 되돌리기가 먼저입니다. 가로채면 안 됩니다.
   useEffect(() => {
     /*
-      **자르기 탭일 때만 듣습니다**(2026-09-18 점검).
+      **자르기 탭일 때만 듣습니다.**
 
       여태 `open` 만 보고 `tool` 을 안 봤습니다. 그래서 «표시» 탭에서는 이 되돌리기와
       `ImageMarkupEditor` 자체의 되돌리기가 **둘 다 살아 있어**, Ctrl+Z 한 번에
@@ -592,6 +596,7 @@ export default function SheetPanelCropper({
   return (
     <Dialog open={open} onOpenChange={requestOpenChange}>
       <DialogContent
+        tutorialHolds={HOLDS_CROPPER}
         className="w-[calc(100vw-2rem)] lg:w-[calc(100vw-8rem)] max-w-none sm:max-w-none max-h-[calc(100vh-2rem)] overflow-y-auto p-0 gap-0 border-0 text-white"
         style={{ background: "oklch(0.15 0.01 265)" }}
       >
@@ -615,8 +620,21 @@ export default function SheetPanelCropper({
             <Scissors className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold">
+            <p className="flex items-center gap-2 text-sm font-semibold">
               시트에서 칸 잘라내기 · 지우기
+              {/*
+                **원본 크기를 적어 둡니다.** 이 창은 그림을 창에 맞춰 줄여 보여 주므로 화면에서
+                보는 크기와 파일 크기가 다릅니다. 자른 칸이 몇 px 로 나올지, 업스케일이 필요한지가
+                여기서 갈립니다.
+              */}
+              {sourceSize && (
+                <span
+                  className="rounded px-1.5 py-0.5 font-mono text-[10px] font-normal"
+                  style={{ background: "oklch(1 0 0 / 7%)", color: "oklch(0.62 0.01 265)" }}
+                >
+                  {sizeLabel(sourceSize)}
+                </span>
+              )}
             </p>
             <p className="text-xs" style={{ color: "oklch(0.50 0.01 265)" }}>
               잘라낸 칸은 «{prefix}_칸 이름_자름», 지운 판은 «…_지움» 으로
@@ -630,25 +648,25 @@ export default function SheetPanelCropper({
           그림의 성질이기 때문입니다. 캐릭터의 «이 소매만», 씬의 «이 구역만» 도
           결국 자리를 짚고 말을 붙이는 같은 동작입니다.
         */}
-        <div className="flex gap-1 px-5">
+        <div className="flex gap-1 px-5" data-tour="cropper-tabs">
           {[
-            { id: "cut" as const, label: "자르기 · 지우기", icon: Scissors },
-            { id: "mark" as const, label: "표시하기", icon: MapPin },
+            { id: "cut" as const, label: "자르기 · 지우기", icon: Scissors, opens: "cropper-surface cropper-undo cropper-box-list cropper-box-row cropper-upscale cropper-upscale-now cropper-footer" },
+            { id: "mark" as const, label: "표시하기", icon: MapPin, opens: "cropper-mark-shapes" },
             /*
               **동선**은 컷 카드의 «이미지 편집» 단추에 있던 것을 여기로 옮긴 것입니다.
-              그림 위에 화살표를 그리는 일은 컷의
-              성질이 아니라 그림의 성질입니다(표시하기와 같은 까닭).
+              그림 위에 화살표를 그리는 일은 컷의 성질이 아니라 그림의 성질이라, 컷에만 두면
+              캐릭터·배경에서는 같은 일을 못 합니다(표시하기와 같은 까닭, 규칙 1).
             */
-            { id: "motion" as const, label: "동선", icon: PenLine },
+            { id: "motion" as const, label: "동선", icon: PenLine, opens: "cropper-motion" },
             ...(wide
-              ? [{ id: "pano" as const, label: "파노라마", icon: Globe2 }]
+              ? [{ id: "pano" as const, label: "파노라마", icon: Globe2, opens: "cropper-pano-howto cropper-pano-fix cropper-pano-faces" }]
               : []),
             /*
               전개도는 «가로로 아주 넓은» 조건을 걸지 않습니다. 실내 십자는 층고가 낮으면
               16:9 언저리라 파노라마 판정(`wide`)에 걸리지 않는데, 그렇다고 탭을 숨기면
               정작 실내에서 못 씁니다.
             */
-            { id: "cross" as const, label: "전개도 6면", icon: Grid2x2 },
+            { id: "cross" as const, label: "전개도 6면", icon: Grid2x2, opens: "cropper-cross-lines cropper-cross-tools" },
           ].map((item) => {
             const on = tool === item.id;
             return (
@@ -656,6 +674,12 @@ export default function SheetPanelCropper({
                 key={item.id}
                 type="button"
                 onClick={() => setTool(item.id)}
+                /*
+                  탭은 그 자리에서 보는 것만 바뀝니다 — 튜토리얼이 대신 눌러 그 탭으로 넘어갑니다.
+                  사람이 탭을 옮기면 안내 걸음은 그대로라 가리키던 자리를 잃습니다 —
+                  걸음마다 제 탭으로 저절로 가야 자리를 안 잃습니다.
+                */
+                data-tour-switch={item.opens}
                 className="flex items-center gap-1.5 rounded-t-md px-3 py-2 text-[11px] font-semibold"
                 style={{
                   background: on ? "oklch(1 0 0 / 8%)" : "transparent",
@@ -788,9 +812,31 @@ export default function SheetPanelCropper({
 
         {tool === "cut" && (
           <div
-            className="flex flex-wrap items-center justify-end gap-2 px-5 py-4"
-            style={{ borderTop: "1px solid oklch(1 0 0 / 8%)" }}
+            /*
+              **바닥에 붙입니다.**
+
+              이 띠는 스크롤을 쥔 `DialogContent` 의 직계 자식이라 본문과 **같이 흘러 내려갑니다.**
+              시트처럼 세로가 긴 그림에서는 «저장» 이 창 밖으로 밀려, 끝까지 굴려야 보였습니다.
+              안내 창이 여기를 가리킬 때도 화면 맨 아래 모서리에 겨우 걸쳐 빈 띠처럼 보였고요.
+              스크롤 컨테이너가 바로 위라 `sticky bottom-0` 이 그대로 먹습니다 — 배경을 창과 같은
+              색으로 채워야 뒤엣것이 비쳐 보이지 않습니다.
+            */
+            className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 px-5 py-4"
+            style={{
+              borderTop: "1px solid oklch(1 0 0 / 8%)",
+              background: "oklch(0.15 0.01 265)",
+            }}
+            data-tour="cropper-footer"
           >
+            {/*
+              상자가 없으면 «미리보기 새로 고침» 과 «저장» 이 흐릿하게만 떠 «고장인가» 로 읽힙니다.
+              지우기 이름 칸(`mr-auto`)이 없을 때만 그 자리에 한 줄 적어 둡니다 — 둘은 배타입니다.
+            */}
+            {boxes.length === 0 && (
+              <p className="mr-auto text-[11px]" style={{ color: "oklch(0.50 0.01 265)" }}>
+                {t("그림 위에 상자를 끌어 그리면 미리보기와 저장이 켜집니다.")}
+              </p>
+            )}
             {/*
             저장·업스케일이 도는 중에는 닫히지 않게 막습니다. 닫으면 부모가 이 창을 없애
             진행 표시가 통째로 사라지고, 몇 분 걸리는 일이 화면 밖에서 돕니다.

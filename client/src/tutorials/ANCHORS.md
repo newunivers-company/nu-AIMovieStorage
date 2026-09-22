@@ -58,6 +58,7 @@
 | `basics-genre` | `StepBasics.tsx` | «장르» 칩 Panel (L248) |
 | `basics-style` | `StepBasics.tsx` | «비주얼 스타일» 칩 Panel (L256) |
 | `basics-era` | `StepBasics.tsx` | `<Panel title="시대 배경">` (L263) |
+| `basics-cover` | `StepBasics.tsx` | «대표 그림» Panel — `<Panel title="대표 그림" tour="basics-cover">`. 안의 내용은 `ProjectCoverPanel.tsx` 입니다 |
 | `basics-preview` | `StepBasics.tsx` | `<Panel title="프롬프트에 이렇게 들어갑니다">` (L346) |
 | `bootstrap-scenario` | `ProjectBootstrapDialog.tsx` | «시나리오 · 설정 · 기획안» textarea (L257) |
 | `bootstrap-mode` | `ProjectBootstrapDialog.tsx` | «어떻게 넣을까요» 블록 — «이미 있는 것에 덧붙이기 / 비우고 새로» (L381) |
@@ -79,6 +80,7 @@
 | `card-prompt-write` | `PromptCardBody.tsx` | «프롬프트 작성» 단추 (L780) |
 | `card-first-reference` | `PromptCardBody.tsx` | «첫 레퍼런스 프롬프트» 접이식 머리 (L1266) |
 | `card-compose` | `PromptResultPanels.tsx` | 프롬프트 칸의 «구성» 단추 (L169) — 한글 칸 것에 달면 첫 번째로 잡힘 |
+| `card-local-generate` | `LocalGenerateButton.tsx` | 모델 고르는 칸과 «로컬로 뽑기» 를 싸는 줄 (L256) — «구성»(마그니픽)과 **다른 단추**입니다 |
 | `card-generated-images` | `GeneratedImageShelf.tsx` | «생성 결과 이미지» 선반 뿌리 (L277 제목이 든 상자) |
 | `card-image-crop` | `ImageActions.tsx` | 가위 `ActionButton corner="crop"` — `label="… 에서 칸 잘라내기"` (L135) |
 
@@ -255,3 +257,77 @@
 | `mocap-cleanup` | `MotionCaptureDialog.tsx` | «2 · 다듬기» 블록 (L1012) — 분석이 끝난 뒤에만 뜸 |
 | `mocap-match` | `MotionCaptureDialog.tsx` | «3 · 번호 ↔ 캐릭터 (N명)» 블록 (L1068) — 분석이 끝난 뒤에만 뜸 |
 | `mocap-apply` | `MotionCaptureDialog.tsx` | «타임라인에 넣기» 단추 (L1158) |
+
+## 창 안의 자리 — 2026-09-22 에 한 번에 채운 것
+
+기능 점검에서 «설명이 없다» 고 나온 자리들입니다. 창마다 갈래를 하나씩 두었습니다
+(`page-image-editor` · `page-sheet` · `page-lineage` · `page-shelf`, 구도잡기는 `planner-*` 다섯).
+
+| 앵커 | 파일 | 요소 |
+| --- | --- | --- |
+| `sheet-close` | `SheetComposerDialog.tsx` | 머리줄 오른쪽 «닫기» X 단추 — aria-label="닫기" 인 button (X 아이콘) (L620) |
+| `sheet-layouts` | `SheetComposerDialog.tsx` | «배치도 (프로젝트 공용 · N)» 제목부터 «새 배치도» 단추까지를 싸는 div.mt-2.space-y-1 (L652) |
+| `sheet-size-fields` | `SheetComposerDialog.tsx` | «뽑을 규격 (px)» 의 «가로»·«세로» NumberInput 두 개를 싸는 div.grid.grid-cols-2 (onBlur 로 기준 판을 버리는 그 div) (L755) |
+| `sheet-selected` | `SheetComposerDialog.tsx` | «고른 칸» 제목이 든 div.mt-2.space-y-1 (selectedPlacement 가 있을 때만 그려집니다) (L806) |
+| `sheet-profile-font` | `SheetComposerDialog.tsx` | «프로필 글자» 블록 — div.mt-2.rounded-md.p-2.5 (fontTarget 이 있을 때만 그려집니다) (L880) |
+| `sheet-board` | `SheetComposerDialog.tsx` | 가운데 흰 캔버스 — ref={boardRef} 인 div (background "#ffffff") (L925) |
+| `sheet-slot` | `SheetComposerDialog.tsx` | 칸 하나의 뿌리 div — key={placement.id}, className="group absolute cursor-move" (첫 칸만 잡혀도 됩니다) (L967) |
+| `sheet-slot-label` | `SheetComposerDialog.tsx` | 칸 이름표와 인라인 입력칸을 싸는 div — className에 "absolute left-0 max-w-full" 이 든 것 (상자 밖 위) (L1041) |
+| `sheet-slot-remove` | `SheetComposerDialog.tsx` | 칸 왼쪽 아래 «빼기» 단추 — aria-label="빼기" 인 button (X 아이콘) (L1086) |
+| `sheet-actions` | `SheetComposerDialog.tsx` | 보드 아래 단추 줄 — «되돌리기»·«다시 하기»·«… 시트 제작» 을 싸는 div.flex.shrink-0.flex-wrap (L1165) |
+| `sheet-source-groups` | `SheetSourcePanel.tsx` | 그룹 머리 단추 — title="접기"/"펼치기", «원본»·«변형 · …»·«보유 에셋» 글자와 오른쪽 개수가 든 줄. 그룹마다 있으니 전부 달아도 됩니다(첫 번째가 잡힙니다) (L131) |
+| `sheet-face-set` | `SheetSourcePanel.tsx` | 6면 세트 카드 — title="{세트 이름} — 면 하나를 누르면 그 면이 시트에 놓입니다…" 를 넘기는 <FaceSetCard> 호출. 부품이라 싸는 div 를 하나 두거나, 카드 뿌리(FaceSetCard.tsx:118 의 div.group.relative.shr (L145) |
+| `sheet-source-tile` | `SheetSourcePanel.tsx` | 그림 타일 단추 — title="{그림 이름} — 누르면 시트에 놓입니다. 배치된 칸 위로 끌어다 놓으면 그 칸의 그림이 바뀝니다" (className="block w-full cursor-grab active:cursor-grabbing") (L176) |
+| `sheet-source-crop` | `SheetSourcePanel.tsx` | 타일의 가위 단추 — aria-label="{그림 이름} 편집 — 자르기·지우기" (Scissors, group-hover 로 뜸) (L225) |
+| `cropper-tabs` | `SheetPanelCropper.tsx` | 탭 다섯(«자르기 · 지우기» · «표시하기» · «동선» · «파노라마» · «전개도 6면»)을 싸는 div.flex.gap-1.px-5 — 탭 단추마다 data-tour-open 으로 그 탭에서만 생기는 앵커를 적어 둘 자리이기도 합니다 (L635) |
+| `cropper-footer` | `SheetPanelCropper.tsx` | 자르기 탭 아래 띠 div — «닫기» · «지움 뒤에 붙일 말(선택)» · «미리보기 새로 고침» · 저장 단추 (L796) |
+| `cropper-surface` | `CropperSurface.tsx` | CropperSurface 뿌리 div — 그리기 면(cursor-crosshair)과 바로 아래 «자르기»/«지우기» 모드 줄, 면 오른쪽 위의 «원본»/«미리보기» 토글까지 한 덩이 (L55) |
+| `cropper-undo` | `CropperSurface.tsx` | «되돌리기 Ctrl+Z» 단추(Undo2) — 옆의 «다시 하기 Ctrl+Shift+Z»(L199)는 같은 줄 (L190) |
+| `cropper-box-list` | `CropperBoxList.tsx` | 빈 상태 «아직 그린 자리가 없습니다» 상자(L58)와 상자 한 줄(L70) 둘 다에 — 같은 조건에서 하나만 그려집니다 (L63) |
+| `cropper-box-row` | `CropperBoxList.tsx` | 저장될 자리 한 줄 — **상자를 하나라도 그려야** 생깁니다. 빈 상태에는 안 붙으므로 걸음의 `until` 이 «그렸는가» 를 이것으로 셉니다 |
+| `cropper-upscale` | `CropperSavePanel.tsx` | «업스케일» 판 뿌리 div — «업스케일해서 저장» 체크 · «엔진» 선택 · 2K/4K/6K/8K 네 단추 (L61) |
+| `cropper-upscale-now` | `CropperSavePanel.tsx` | «지금 그림 업스케일 — 새 파일로» 단추(ArrowUpFromLine) (L192) |
+| `cropper-mark-shapes` | `ImageMarkupEditor.tsx` | 표시하기 탭 도구줄 div.flex.flex-wrap — 앵커 지점 · 사각형 · 원 · 자유선 네 단추와 안내 문구 (L252) |
+| `cropper-motion` | `MotionLines.tsx` | 동선 탭 도구줄 div.flex.flex-wrap — 갈래 select · «구경만 하기»/«자유선»/«직선» · 되돌리기 · «굵기» · «동선 그림 저장» (L272) |
+| `cropper-pano-howto` | `PanoramaWorkbench.tsx` | «6면 배경 만드는 법» HowToPanel 을 싸는 div.space-y-2 — HowToPanel 자체는 display:contents 라 속성을 못 받습니다 (L334) |
+| `cropper-pano-fix` | `PanoramaWorkbench.tsx` | «이미 등장방형 파노라마 (세로 180도 — 손대지 않음)» 체크 label — 바로 아래 «세로 화각» · «세로 모형» · «지평선 위치» · «이음매 잇기» · «하늘·바닥 채우기» 가 이어집니다 (L341) |
+| `cropper-pano-faces` | `PanoramaWorkbench.tsx` | «보정한 파노라마 저장» 과 «여섯 면 만들기» 두 단추를 싸는 div.space-y-1.5.pt-1 — «여섯 면 크기» 와 «작으면 업스케일» 은 바로 위(L423) (L466) |
+| `cropper-cross-lines` | `CrossUnfoldWorkbench.tsx` | 전개도 그림 판 div(ref=frameRef) — 보라 세로선 셋 · 하늘색 가로선 넷 · 돋보기 노란 네모가 얹히는 면 (L312) |
+| `cropper-cross-tools` | `CrossUnfoldWorkbench.tsx` | 전개도 탭 오른쪽 칸 div.space-y-2.5 — 배율 줄(축소·100%·확대) · 돋보기 캔버스 · «자리 다시 찾기» · «천장·바닥 뒤집기» · «여섯 면으로 저장» (L413) |
+| `lineage-card` | `LineageTree.tsx` | 계보 카드 뿌리 div — onDragOver·onDrop 이 달린 `group relative overflow-hidden rounded-xl` (안에 그림 단추와 «이 카드에서 변형» 이 들어 있음). 카드마다 달아도 되고 첫 카드가 잡힙니다 (L276) |
+| `lineage-variation-remove` | `LineageTree.tsx` | 변형 카드에만 뜨는 X — aria-label="{변형 이름} 지우기" (마우스를 올려야 보이는 오른쪽 위 단추) (L394) |
+| `lineage-sheet-tile` | `EntityLineagePanel.tsx` | 시트 타일 상자 div.group.relative.aspect-square — 안에 크게 보기 그림 · 복사 · 마그니픽으로 · 폴더 열기 · 편집 연필 · 지우기 X 가 모두 들어 있습니다 (L265) |
+| `lineage-sheet-name` | `EntityLineagePanel.tsx` | placeholder="이 판의 이름" 입력칸 (시트 타일 바로 아래) (L369) |
+| `lineage-alternates` | `AlternateLineage.tsx` | «다른 원본» 상자 뿌리 div.mt-3.rounded-lg.p-3 — 머리줄(L171)·원본 목록·끝의 «캐릭터 생성» 단추를 다 감싸는 것 (L169) |
+| `lineage-alternate-name` | `AlternateLineage.tsx` | 원본 이름 줄 div.mb-1.5.flex — placeholder="원본 이름 (예: 어린 시절)" 입력칸과 그 옆 X 를 함께 감싸는 줄 (L194) |
+| `lineage-alternate-editor` | `AlternateLineage.tsx` | AlternateRootDialog 의 DialogContent (className={EDITOR_DIALOG}). 같은 자리에 tutorialHolds={`${HOLDS_ENTITY_CARD} lineage-alternate-editor`} 도 함께 달아야 합니다 — (L380) |
+| `variation-model` | `VariationDialog.tsx` | title="이 변형 프롬프트를 어느 이미지 모델 문법으로 뽑을지" select. 함께: VariationDialog.tsx:577 의 DialogContent 에 tutorialHolds={HOLDS_VARIATION}(= HOLDS_ENTITY_CARD + " va (L666) |
+| `variation-parent-images` | `VariationDialog.tsx` | «… 생성 이미지·레퍼런스 — 클릭해 레퍼런스에 추가» 줄을 감싸는 div.rounded-lg.p-2.5 (타일 스트립 전체). HOLDS_VARIATION 목록에도 같이 적을 것 (L683) |
+| `shelf-face-set` | `FaceSetCard.tsx` | 6면 세트 카드 뿌리 — `<div className="group relative shrink-0">` (`title={label}` 이 붙은 바깥 상자, L118-123). 안쪽 3×2 격자가 아니라 이 바깥 상자에 달아야 오른쪽 위 X 와 세트 업스케일 단추까지 함 (L121) |
+| `shelf-upscale` | `UpscaleButton.tsx` | «업스케일» 본 단추와 «▾» 를 싸는 `<div ref={anchorRef} className={`${position} …`}>` (L197-200). 메뉴(목표 크기 · 엔진 줄)는 `document.body` 로 포털되어 이 앵커 밖에 뜨므로, 밝힐 자리는 두 단 (L201) |
+| `shelf-lightbox-nav` | `ImageLightbox.tsx` | 크게 보기 창 오른쪽의 «다음 (→)» 단추 — `aria-label="다음 (→)"` / `title="다음 (→)"` (ChevronRight, L121-130). 왼쪽의 «이전 (←)»(L111)에는 달지 마세요 — 같은 이름을 둘에 달면 띄우는 쪽이 먼저 나오는 (L126) |
+| `shelf-inbox-zoom` | `MagnificInboxPanel.tsx` | 후보 타일 오른쪽 위의 «크게 보기» 단추 — `title="크게 보기"` (ExpandIcon, L298-309). 그림 후보에만 그려지므로(`file.kind === "image"`) 타일마다 달아도 됩니다. (L304) |
+| `shelf-import-search` | `MagnificImportDialog.tsx` | «마그니픽에서 가져오기» 창 머리줄의 `placeholder="프롬프트로 찾기"` 입력칸 (L147-158). 바로 옆 «찾기» 단추(L159)와 × 닫기(L169)는 같은 줄이라 함께 밝혀집니다. (L151) |
+| `shelf-import-grid` | `MagnificImportDialog.tsx` | 가져오기 창의 결과 타일 격자 — `<div className="grid grid-cols-4 gap-2">` (L196). 타일 하나하나(L198 의 `onClick={() => void take(item)}`)가 아니라 격자 전체에 답니다. (L198) |
+| `shelf-video-big` | `CutVideoShelf.tsx` | 영상 큰 화면 아래 줄 — `<div className="flex items-center gap-2">` (L297), 이름 · «대표로 정하기 / 대표에서 내리기»(L315) · «닫기»(L319) 가 든 줄. `{big && (` 안쪽입니다 — 같은 classNam (L297) |
+| `bottom-start-shot` | `MoveTimeline.tsx` | «출발: {구도 이름}» 단추 — Crosshair 아이콘이 붙은 하늘색 배지, onClick 은 onSeek(0). baseShot 이 있을 때만 섭니다(저장한 카메라가 없으면 아예 안 보입니다). 바로 오른쪽의 «0.00s / 5.0s» 시각 표시(L1202)는 같 (L1135) |
+| `bottom-key-band` | `MoveTimeline.tsx` | «키 N개 잡음 · 풀기» 배지 단추 — onClick 은 setKeyBand([]). keyBand.length > 0 일 때만 섭니다. 바로 왼쪽이 같은 줄의 «끝 뒤 N개» 배지(L1688)라 한 걸음에서 둘을 같이 가리킵니다. (L1703) |
+| `bottom-ruler` | `MoveTimeline.tsx` | 눈금자 — ref={trackRef} 인 div. 누르면 onSeek, 누른 채 끌면 스크럽. 재생선(빨간 세로선)과 오각형 머리(L1572)는 pointer-events-none 이라 앵커를 걸 수 없어, 시각을 옮기는 «진짜 손잡이» 인 이 눈금자에 답니다. (L1718) |
+| `bottom-free-key` | `MoveTimeline.tsx` | 떠 있는 «자유 경로 · N초 키» 값 판의 뿌리 div({freeKeyEdit && ( 바로 아래) — 안에 «카메라 자리(m)» · «바라보는 곳(m)» 숫자칸과 오른쪽 위 «닫기»(X, L969). 자유 경로 키를 눌러야 생기는 판이라, 키 점을 여는 문으로 삼아 (L954) |
+| `timeline-mocap` | `TimelinePanel.tsx` | «영상에서 모션 가져오기» PanelSection 의 머리줄 — L161-165 의 <PanelSection title="영상에서 모션 가져오기" open={openSections.motionCapture ?? true} onToggle={…}> 에 tour="time (L162) |
+| `planner-shot-list` | `ShotBar.tsx` | «저장한 카메라» 의 구도 줄 목록 — 이름 단추 · 저장 아이콘 · × 가 한 줄씩 서는 div.composition-scroll.mt-1.5.max-h-[11rem] (L106). 구도가 하나도 없을 때만 그려지는 «아직 없습니다. 구도를 잡고 «지금 구도 저장»  (L104) |
+| `layout-group-section` | `LayoutPanel.tsx` | 고른 덩어리의 «덩어리» PanelSection — 색·이름·바꿔 그릴 것·묶음 에셋이 든 카드를 싸는 <section>. 지금 tour 를 안 넘겨 data-tour 가 없습니다 (L840) |
+| `layout-pose-section` | `LayoutPanel.tsx` | 고른 인물의 «포즈» PanelSection — 내 프리셋·관절 세부 조정·손 모양을 싸는 <section>. 지금 tour 를 안 넘겨 data-tour 가 없습니다 (L1254) |
+| `layout-group-asset` | `ObjectGroupPanel.tsx` | «이 덩어리의 에셋 만들기 — 시트를 뽑아 바로 잇습니다» / «…» 열기 — 시트 뽑기 단추 (onCreateAsset 이 있을 때만 뜸) (L266) |
+| `env-room-section` | `EnvironmentPanel.tsx` | «방» PanelSection 머리줄 — `<PanelSection title="방" open onToggle={() => undefined}>` 에 tour="env-room-section" 를 넘깁니다(PanelSection 이 뿌리 <section> 에 data- (L186) |
+| `env-gallery-search` | `BackgroundGallery.tsx` | 배경 라이브러리 머리줄의 `placeholder="이름 검색..."` 입력칸. 바로 오른쪽이 `title="닫기"` X(L68)라 말풍선 하나가 둘을 같이 가립니다 — 닫기에는 따로 앵커를 두지 않습니다. (L62) |
+| `env-gallery-sources` | `BackgroundGallery.tsx` | «전개도 원본 · 배경 그림» 제목과 그 아래 그리드를 싸는 `div.mt-6` — `{(sources ?? []).filter(...).length > 0 && (` 안쪽 첫 div. 원본이 한 장도 없으면 그려지지 않으므로 그때는 가운데 카드로 물러납니다. (L129) |
+| `env-place-remove` | `StepBackgrounds.tsx` | BackgroundCard 머리줄의 휴지통 `<button aria-label="지우기">`(aria-label 은 L628). 구도잡기에서는 RoomPlaceDialog 가 이 카드를 창으로 띄웁니다 — 같은 단추가 씬 탭 장소 목록·장소 라이브러리 창에도 그대로 서 (L628) |
+| `env-room-borrow` | `BorrowCardsDialog.tsx` | «다른 작품에서 방 끌어오기» 창의 방 줄 `<button>` — `rooms.map` 안, ✓ 와 «이름 · 작품 · 소품 N개 · 걸린 면 N장» 이 든 줄. kind === "room" 일 때만 그려지므로 구도잡기에서만 뜹니다. 줄마다 달아도 되고, 띄우는 쪽이  (L229) |
+| `mocap-sources` | `MotionCaptureDialog.tsx` | 왼쪽 «영상 N개» 열의 감싸개 <div className="space-y-1.5"> — 영상 줄들과 «영상 추가» 단추(mocap-add-video)를 품습니다 (L722) |
+| `mocap-preview` | `MotionCaptureDialog.tsx` | 가운데 미리보기 열의 감싸개 <div className="min-w-0 space-y-2"> — video + 뼈대 캔버스 + «재생 / 멈춤» + 재생 위치 막대 + 시간 표시 (L826) |
+| `mocap-close` | `MotionCaptureDialog.tsx` | 머리줄 오른쪽 끝 × 단추 (onClick={onClose}, X 아이콘만 든 button) (L700) |
+| `cut-special-background` | `CutCard.tsx` | 컷 머리줄 «특수 배경» 단추 — 도면·동선·사람 크기 기준을 뽑는 장소 카드를 엽니다 |
+| `layout-mannequins` | `LayoutPanel.tsx` | «+ 남성형» «+ 여성형» 두 단추를 싸는 2열 grid |
+| `image-actions` | `ImageActions.tsx` | 그림 모서리 아이콘 묶음(복사 · 빼기 · 폴더 열기 · 마그니픽 · 가위 · 정체성 기준)을 싸는 `div.pointer-events-auto.contents` |
+| `cropper-mark-made` | `ImageMarkupEditor.tsx` | 표시를 하나라도 찍어야 생기는 줄(이름 칸 · «표시한 그림 저장» · «복사» · «마지막 표시 취소») — 걸음의 `until` 이 이것이 생기기를 기다립니다 |

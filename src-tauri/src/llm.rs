@@ -1,4 +1,4 @@
-//! **API 키와 LLM 호출** — 2026-09-18 에 `lib.rs` 에서 떼어 냈습니다.
+//! **API 키와 LLM 호출** — `lib.rs` 에서 떼어 냈습니다.
 //!
 //! 브라우저에서 직접 부르면 API 키가 개발자 도구에 그대로 보이고, 제공사 서버가 CORS 로
 //! 막습니다. 키는 앱 설정 폴더에 두고 호출도 여기서 합니다.
@@ -59,7 +59,7 @@ pub fn get_api_key_status(provider: String) -> Res<ApiKeyStatus> {
         Ok(key) => {
             let key = key.trim();
             /*
-              **글자 단위로 자릅니다.** 2026-09-18 점검: `key[key.len() - 4..]` 는
+              **글자 단위로 자릅니다.** `key[key.len() - 4..]` 는
               **바이트** 슬라이싱이라, 끝이 멀티바이트인 키(사람이 실수로 한글을 붙여넣은
               경우 포함)에서 글자 경계가 아니면 **패닉**합니다. 설정 화면을 여는 것만으로
               앱이 죽습니다.
@@ -141,7 +141,7 @@ pub fn llm_cancels() -> &'static std::sync::Mutex<std::collections::HashMap<Stri
 /**
  * **이번 요청에 쓴 양.** 제공사가 답에 함께 실어 줍니다.
  *
- * 2026-09-19 에 붙였습니다. 여태 얼마를 쓰는지 **아무 데도 안 남았습니다** — 어디가 비싼지
+ * 여태 얼마를 쓰는지 **아무 데도 안 남았습니다** — 어디가 비싼지
  * 알려면 파일 크기를 세어 짐작하는 수밖에 없었습니다. 측정이 없으면 줄일 곳도 못 고릅니다.
  *
  * 캐시 두 칸을 따로 둡니다. 캐시는 **쓸 때 1.25배, 읽을 때 0.1배** 라 셈이 전혀 달라서,
@@ -169,7 +169,7 @@ pub struct LlmUsage {
  * - **OpenAI**: `input_tokens` 가 **전체**이고, 그중 캐시로 먹은 몫이
  * `input_tokens_details.cached_tokens` 에 **겹쳐서** 들어 있습니다.
  *
- * 2026-09-21 사용자의 화면에서 잡혔습니다 — 캐시를 5,823 읽은 요청과 하나도 안 읽은 요청의
+ * 실제 화면에서 잡혔습니다 — 캐시를 5,823 읽은 요청과 하나도 안 읽은 요청의
  * 추정 요금이 **똑같이 $0.041** 이었습니다. OpenAI 것을 그대로 더해서, 캐시로 싸게 먹은
  * 몫을 **정가로 한 번 + 캐시값으로 한 번** 두 번 세고 있었습니다. 싸진 것이 화면에 안
  * 나타나니 「캐시가 먹는데도 값이 그대로」 로 보입니다.
@@ -233,8 +233,6 @@ fn fingerprint_of(text: &str) -> String {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /*
-  
-
   여태는 답을 기다리는 HTTP 연결 하나가 전부였습니다. 앱이 닫히면 연결이 끊기고, 제공사는
   답을 끝까지 만들어 **요금은 그대로** 청구하는데 우리는 받을 길이 없었습니다. 그래서 작업 줄은
   «처음부터 다시» 보냈고 — 630초짜리 2단계면 그 시간과 값을 통째로 두 번 냈습니다.
@@ -266,7 +264,7 @@ pub fn background_step(status: Option<&str>) -> BackgroundStep {
           `incomplete` 도 **끝난 것**으로 읽습니다. 답이 `max_output_tokens` 에 걸리면 이 상태로
           끝나는데, 받은 데까지의 `output` 은 들어 있습니다. 화면 쪽 `parseJsonResponse` 가 잘린 JSON
           에서 받은 데까지 건지는 것이 이 답을 전제로 합니다 — 여기서 오류로 돌리면 인물 열 명 중 아홉이
-          멀쩡히 적힌 답을 통째로 버립니다(2026-09-18 에 실제로 겪은 모양).
+          멀쩡히 적힌 답을 통째로 버립니다 — 실제로 겪은 모양입니다.
         */
         Some("completed") | Some("incomplete") => BackgroundStep::Done,
         Some("failed") | Some("cancelled") => BackgroundStep::Failed,
@@ -279,7 +277,7 @@ pub fn background_step(status: Option<&str>) -> BackgroundStep {
 
 /// **묻기(GET) 한 번의 HTTP 상태 → 다음 할 일.** 순수 함수 — 아래 시험이 이걸 봅니다.
 ///
-/// 2026-09-22 검토: 예전에는 GET 한 번이 429 나 5xx 로 튕기면 요청 전체를 실패로 돌렸습니다 — 몇 분째 만들던
+/// 예전에는 GET 한 번이 429 나 5xx 로 튕기면 요청 전체를 실패로 돌렸습니다 — 몇 분째 만들던
 /// 답을 «지금 몰렸다» 한 번에 통째로 버리고, 서버는 답을 끝까지 만들어 요금은 그대로 나가는 모양입니다.
 /// 못 물은 것은 못 물은 것일 뿐입니다. 끝은 시간 제한(`deadline`)이 냅니다.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -308,7 +306,7 @@ pub fn poll_step(status: Option<u16>) -> PollStep {
 
 /// 몇 초마다 물을까. 더 잦으면 요청만 늘고, 더 뜸하면 짧은 답이 괜히 늦습니다.
 const POLL_SECS: u64 = 2;
-/// 첫 물음은 보내자마자 — 짧은 답(키 확인·한 줄 답)은 2초를 다 기다릴 것 없이 그 자리에서 끝납니다(2026-09-22 검토).
+/// 첫 물음은 보내자마자 — 짧은 답(키 확인·한 줄 답)은 2초를 다 기다릴 것 없이 그 자리에서 끝납니다.
 const FIRST_POLL_MS: u64 = 250;
 /// 못 물었을 때 물러서는 상한. 몰린 서버를 더 두드리면 더 튕깁니다.
 const POLL_BACKOFF_MAX_SECS: u64 = 30;
@@ -329,7 +327,7 @@ pub fn poll_delay(polls: u32, misses: u32) -> std::time::Duration {
 /// 400 본문이 **«이 인자를 모른다»** 인가 — `background`·`prompt_cache_key` 를 한 번만 배우고 끄는 자리가 같이 씁니다. 순수 함수.
 ///
 /// 예전에는 본문에 그 낱말이 들어 있기만 하면 잡았습니다(`text.contains`). 그러면 「background 그림이 너무 큽니다」 같은
-/// 엉뚱한 400 한 번에 배경 모드가 영영 꺼져 그 뒤로는 이어 받기가 안 됩니다(2026-09-22 검토). OpenAI 는 모르는 인자를
+/// 엉뚱한 400 한 번에 배경 모드가 영영 꺼져 그 뒤로는 이어 받기가 안 됩니다. OpenAI 는 모르는 인자를
 /// `error.param` 에 적어 주고, 말도 「Unknown parameter: 'background'」 꼴이라 그 모양만 봅니다.
 pub fn rejects_parameter(body: &str, name: &str) -> bool {
     let Ok(json) = serde_json::from_str::<serde_json::Value>(body) else {
@@ -362,7 +360,7 @@ enum Background {
     /// 보내는 중 — 응답 id 가 아직 없습니다.
     Sending,
     /// id 가 생기기 **전에** «중지» 가 왔습니다. 보내는 POST 는 끊지 않고 두었다가(끊으면 id 를 영영 몰라 서버가 답을
-    /// 끝까지 만들고 요금을 매깁니다 — 2026-09-22 검토) id 가 생기는 순간 그 자리에서 끊습니다(`background_started`).
+    /// 끝까지 만들고 요금을 매깁니다) id 가 생기는 순간 그 자리에서 끊습니다(`background_started`).
     CancelRequested,
     /// 응답 id 가 생겼습니다 — 끊으려면 이 id 로 `POST …/cancel`.
     Started(String),
@@ -509,8 +507,8 @@ pub async fn llm_cancel_response(response_id: String) -> Res<()> {
 /// «중지» 손잡이를 달고 돌립니다 — `call_llm` 과 `llm_resume` 이 **같은 것**을 씁니다.
 ///
 /// 요청이 제공사 서버에 닿는 순간 요금은 발생합니다. 그래도 «중지» 는 있어야 합니다 —
-/// 여러 개를 한꺼번에 돌리다 3분 타임아웃까지 빙글빙글 도는 단추를 사용자가 끌 수 없었습니다
-/// (2026-09-08). 뮤텍스 가드는 await 를 넘기지 않습니다(비동기 명령은 Send 여야 함).
+/// 여러 개를 한꺼번에 돌리다 3분 타임아웃까지 빙글빙글 도는 단추를 끌 길이 없었습니다.
+/// 뮤텍스 가드는 await 를 넘기지 않습니다(비동기 명령은 Send 여야 함).
 async fn with_cancel<F>(request_id: Option<String>, work: F) -> Res<String>
 where
     F: std::future::Future<Output = Res<String>>,
@@ -590,7 +588,7 @@ pub async fn call_llm_inner(app: &tauri::AppHandle, request: LlmRequest) -> Res<
         "low" => 1024,
         "medium" => 4096,
         "high" => 12000,
-        // 아주 깊이. 요청한 단계입니다.
+        // 아주 깊이. 필요할 때만 올려 쓰는 단계입니다 —
         // 요금이 크게 오르므로 기본값으로 두지 않습니다.
         "xhigh" => 24000,
         _ => 1024,
@@ -700,8 +698,6 @@ pub async fn call_llm_inner(app: &tauri::AppHandle, request: LlmRequest) -> Res<
         });
         /*
           ── OpenAI 쪽 캐시 ────────────────────────────────────────────────
-          
-
           OpenAI 에는 `cache_control` **이라는 것이 없습니다.** 표를 달아 «여기까지 캐시» 를
           지정하는 길이 없고, 앞부분이 같으면 **알아서** 잡습니다(1,024 토큰 이상). 그래서
           Claude 쪽에만 표가 붙은 것이지, OpenAI 를 빼먹은 것이 아닙니다.
@@ -751,7 +747,7 @@ pub async fn call_llm_inner(app: &tauri::AppHandle, request: LlmRequest) -> Res<
     /*
       배경 모드로 가는 OpenAI 요청은 **«중지» 가 못 끊는 자리(spawn)에서 보냅니다.**
 
-      2026-09-22 검토: 보내는 도중에 «중지» 를 누르면 `with_cancel` 의 select! 가 이 future 를 버립니다. 그러면 POST 는
+      보내는 도중에 «중지» 를 누르면 `with_cancel` 의 select! 가 이 future 를 버립니다. 그러면 POST 는
       이미 서버에 닿았는데 응답 id 는 영영 모릅니다 — 서버는 답을 끝까지 만들고 요금을 매기는데 우리는 끊을 길이 없습니다.
       떼어 낸 일은 끝까지 가서 id 가 생기면 «중지» 깃발(`Background::CancelRequested`)을 보고 그 자리에서 끊습니다.
       Claude 와 배경 모드 아닌 요청은 답이 POST 안에 통째로 오므로 예전처럼 연결을 놓는 것이 끊는 길입니다.
@@ -1066,7 +1062,7 @@ mod background_tests {
         assert_eq!(background_step(Some("something_new")), BackgroundStep::Failed);
     }
 
-    /// 묻기 한 번의 HTTP 상태 → 다음 할 일. 여기가 틀리면 429 한 번에 몇 분째 만들던 답을 버리거나(2026-09-22 검토),
+    /// 묻기 한 번의 HTTP 상태 → 다음 할 일. 여기가 틀리면 429 한 번에 몇 분째 만들던 답을 버리거나,
     /// 없는 답을 시간이 다 될 때까지 기다립니다.
     #[test]
     fn poll_status_maps_to_step() {

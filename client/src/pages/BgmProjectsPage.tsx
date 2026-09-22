@@ -1,3 +1,4 @@
+import { restoreBgmProjectsFromDisk } from "@/lib/bgmRestore";
 import { useEffect, useState } from "react";
 import { Loader2, Music, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,7 +43,7 @@ import {
  *
  * 「LLM 요청문」 창에 뜨는 글과 API 로 보내는 글이 한 글자도 달라선 안 됩니다(`promptRequest` 규칙).
  * 두 군데에 손으로 적어 두었더니 한쪽에만 보컬·구조 태그를 빠뜨려, 모델이 보컬을 모르는 채
- * 「가사 없음, instrumental」 로 답하는 일이 있었습니다().
+ * «가사 없음, instrumental» 로 답해 가사 칸이 늘 비는 일이 있었습니다.
  */
 function bgmRequestData(track: BgmTrack) {
   return {
@@ -60,7 +61,7 @@ function bgmRequestData(track: BgmTrack) {
     instrumental: track.instrumental,
     /*
       참·거짓만 보내면 모델이 «알아서» 연주곡으로 답합니다. 사람이 끈 스위치를 모델이
-      되켜는 셈이라(),
+      되켜는 셈이라 «연주곡 아님» 스위치가 아무 뜻이 없어집니다. 그래서
       **한국어 지시문으로** 함께 보냅니다. 값이 아니라 말이어야 지켜집니다.
     */
     지시: track.instrumental
@@ -171,9 +172,29 @@ export default function BgmProjectsPage() {
   const [newName, setNewName] = useState("");
 
   useEffect(() => {
+    /*
+      **폴더를 한 번 훑어 되살립니다.**
+
+      BGM 기록은 브라우저 저장소에만 있었습니다. 그래서 `BGM/곡/<프로젝트>/` 에 곡이 멀쩡히
+      있어도 화면은 「프로젝트가 없습니다」 였습니다 — 앱을 다시 깔거나 저장소가 비면 그렇게 되고,
+      «폴더가 진실» 이라는 이 앱의 규칙과도 어긋납니다.
+
+      먼저 기록을 그대로 띄우고(폴더 읽기를 기다리느라 화면이 비어 있지 않게), 읽어 온 뒤에
+      빠진 것만 채웁니다. 사람이 적어 둔 프롬프트는 덮지 않습니다.
+    */
     const loaded = loadBgmProjects();
     setProjects(loaded);
     setSelectedId(loaded[0]?.id ?? null);
+
+    let alive = true;
+    void restoreBgmProjectsFromDisk().then((filled) => {
+      if (!alive || filled === loaded) return;
+      setProjects(filled);
+      setSelectedId((current) => current ?? filled[0]?.id ?? null);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const persist = (next: BgmProject[]) => {
@@ -252,8 +273,7 @@ export default function BgmProjectsPage() {
    *
    * 체크박스와 보컬 태그 «연주곡» 이 따로 놀아서, 체크는 꺼 두고 보컬은 고르지 않은 상태가
    * 흔했습니다. 그러면 LLM 에는 «연주곡 아님» 과 «보컬 없음» 이 같이 가서, 모델이 알아서
-   * 연주곡으로 답했습니다().
-   * 스위치는 하나여야 합니다.
+   * 연주곡으로 답했습니다 — 사람이 끈 스위치가 아무 뜻이 없어집니다. 스위치는 하나여야 합니다.
    */
   const setInstrumental = (on: boolean) => {
     if (!track) return;
@@ -295,8 +315,6 @@ export default function BgmProjectsPage() {
 
   /*
     ── 수노용 프롬프트를 **API 로** ──────────────────────────────────────
-    
-
     여태 이 화면에는 손으로 복사해 붙여넣는 「LLM 요청문」 뿐이라, 곡마다 창을 열고
     붙여넣고 답을 다시 옮겨야 했습니다. 캐릭터·컷 카드에는 이미 API 단추가 있습니다
     (공통 규칙 1 — 한쪽에만 있는 기능을 만들지 않습니다).
@@ -327,11 +345,12 @@ export default function BgmProjectsPage() {
       /*
         받은 것을 **스타일 두 칸**과 **가사 두 칸**에 넣습니다.
 
-        여태 ko/en 두 칸만 꺼내 쓰는 바람에 단추 이름은 「스타일 · 가사 뽑기」 인데 가사 칸은
-        늘 비어 있었습니다(). 가사는 **온 것만**
-        덮어씁니다 — 모델이 빠뜨렸을 때 손으로 적어 둔 가사를 지우면 안 됩니다.
+        여태 ko/en 두 칸만 꺼내 쓰는 바람에 단추 이름은 «스타일 · 가사 뽑기» 인데 가사 칸은
+        늘 비어 있었습니다. 가사는 **온 것만** 덮어씁니다 — 모델이 빠뜨렸을 때 손으로 적어 둔
+        가사를 지우면 안 됩니다.
 
-        그리고 이력에 남깁니다 — 
+        그리고 이력에 남깁니다 — 다른 프롬프트 카드와 같은 규칙이라, 여기만 빠지면 뽑아 둔
+        스타일을 되돌릴 길이 없습니다.
       */
       const entry: SavedPromptEntry = {
         id: `${Date.now()}`,
@@ -359,8 +378,7 @@ export default function BgmProjectsPage() {
       /*
         사람이 끈 스위치를 모델이 되켰는지 봅니다.
 
-        「가사 없는 연주곡」 이 꺼져 있는데 연주곡으로 답해 오는 일이 있었습니다
-        ().
+        «가사 없는 연주곡» 이 꺼져 있는데 연주곡으로 답해 오는 일이 있었습니다.
         요청문에서 못을 박았지만 모델이 늘 지키리라 믿을 수는 없으니, 어긋나면 **보이게** 합니다.
         조용히 넘어가면 스타일 칸에 «no vocals» 가 박힌 채로 생성기까지 갑니다.
       */
@@ -385,23 +403,21 @@ export default function BgmProjectsPage() {
 
   /*
     ── 로컬 음악 모델로 **바로 뽑기** ────────────────────────────────────
-    
+    컴피UI 없이 앱 안의 음악 엔진으로 파일까지 뽑습니다.
 
     프롬프트는 **영문 칸**을 보냅니다. 음악 모델의 태그 어휘가 영어라, 한글을 그대로
     넣으면 장르·악기를 못 알아듣고 밋밋한 곡이 나옵니다.
   */
   useLocalEngines(); // 설치 상태를 구독해야 «바로 뽑기» 단추가 제때 살아납니다.
   /*
-    **고른 도구의 엔진**으로 뽑습니다. 예전에는 설치된 음악 엔진 중 첫 번째를 말없이 썼습니다. 수노를 고른 상태면 로컬 칸은 비어 있습니다.
+    **고른 도구의 엔진**으로 뽑습니다 — 예전에는 설치된 음악 엔진 중 첫 번째를 말없이 썼습니다. 수노를 고른 상태면 로컬 칸은 비어 있습니다.
   */
   const wantedEngine = track ? localEngineOfTool(track.targetTool) : null;
   const musicEngine =
     availableLocalEngines("music").find((engine) => engine.id === wantedEngine) ?? null;
   /*
     ── 곡 뽑기는 **작업 줄**에서 ──────────────────────────────────────────
-    
-
-    여기서 `await` 로 돌고 있었습니다. 그래서 이 화면을 벗어나면 진행을 물을 데가 없고,
+    여기서 `await` 로 돌고 있어서 곡 뽑기가 작업 줄에 뜨지 않았습니다. 그래서 이 화면을 벗어나면 진행을 물을 데가 없고,
     앱이 꺼지면 남은 일이 사라졌습니다. 곡 하나에 몇 분씩 걸리는 일이라 그림·영상과 같은
     줄에 섭니다(`lib/bgmRun.ts`). 여기서는 **세우고, 그 줄을 들여다보기만** 합니다.
   */
@@ -584,6 +600,7 @@ export default function BgmProjectsPage() {
               >
                 <button
                   data-tour="bgm-track-add"
+                  data-tour-switch="bgm-chips bgm-tempo-length bgm-tool bgm-instrumental bgm-write bgm-style-panels bgm-history bgm-local-generate bgm-tracks-list"
                   onClick={() => {
                     const created = createBgmTrack();
                     persist(
@@ -731,8 +748,8 @@ export default function BgmProjectsPage() {
                   onToggle={(value) => toggleTag("instruments", value)}
                 />
                 {/*
-                   보컬·시대·프로덕션·구조까지 —
-                  여기서 고른 낱말이 그대로 스타일 문장과 가사 틀이 됩니다.
+                  보컬·시대·프로덕션·구조까지 — 여기서 고른 낱말이 그대로 스타일 문장과
+                  가사 틀이 됩니다. 칸이 모자라면 그만큼을 사람이 영어로 적어 넣어야 합니다.
                 */}
                 <TagRow
                   label="보컬"
@@ -992,7 +1009,8 @@ export default function BgmProjectsPage() {
 
                 {/*
                   ── 곡 스타일과 가사 ───────────────────────────────────
-                  , 「마그니픽으로 프롬프트 복사하는 버튼은 여기는 필요 없어」.
+                  음악은 그림처럼 «프롬프트 한 덩이» 를 넣는 것이 아니라 **스타일과 가사**를 따로 넣습니다.
+                  마그니픽으로 보내는 단추도 여기서는 갈 데가 없어 뺐습니다.
 
                   Suno v6 은 *Style*(1,000자)·*Lyrics*(5,000자) 두 칸을 받고, 로컬 모델도 스타일 서술 + 가사입니다.
                   그래서 화면도 그 두 칸이고, 네거티브 칸은 없앴습니다 — 대신 아래 «제외할 스타일» 이 그 자리입니다.
@@ -1088,8 +1106,8 @@ export default function BgmProjectsPage() {
 
                 {/*
                   ── 로컬 모델로 바로 뽑기 ────────────────────────────────
-                   수노는 밖에서 뽑아 오는 길이라 프롬프트까지,
-                  로컬은 여기서 파일까지 나옵니다.
+                  수노는 밖에서 뽑아 오는 길이라 프롬프트까지,
+                  로컬 엔진은 앱이 품고 있어 여기서 파일까지 나옵니다.
                 */}
                 <section
                   className="space-y-2 rounded-lg p-3"

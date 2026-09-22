@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -97,7 +97,7 @@ describe("튜토리얼 자료", () => {
   it("한 바퀴는 25걸음 이상이고 걸음마다 «해 볼 것» 이 있습니다", () => {
     expect(FULL_TUTORIAL.kind).toBe("full");
     expect(FULL_TUTORIAL.steps.length).toBeGreaterThanOrEqual(25);
-    expect(FULL_TUTORIAL.steps.length).toBeLessThanOrEqual(40);
+    expect(FULL_TUTORIAL.steps.length).toBeLessThanOrEqual(80);
     for (const step of FULL_TUTORIAL.steps) expect(step.action, step.id).toBeDefined();
     // 설정 → 새 작품 → 캐릭터 → 씬(구도잡기) → 확인 순서를 지납니다.
     const order = FULL_TUTORIAL.steps.map((step) => step.page).filter(Boolean);
@@ -110,15 +110,21 @@ describe("튜토리얼 자료", () => {
   });
 
   it("페이지별 튜토리얼은 화면마다 하나, 구도잡기는 여러 갈래", () => {
+    /*
+      예전에는 «화면마다 하나» 였습니다. 그러면 한 화면이 품은 기능 대부분이 안내에서 빠집니다.
+      그래서 한 화면에서 여는 창마다 갈래를 하나씩 두었습니다 — 캐릭터 화면만
+      해도 계보·시트 합성·생성 결과 선반·이미지 편집이 저마다 열 몇 걸음입니다. 그래서 «화면마다
+      하나» 가 아니라 «화면이 하나라도 갈래를 가진다» 를 셉니다.
+    */
     const pagesCovered = PAGE_TUTORIALS.map((tutorial) => tutorial.page);
-    expect(new Set(pagesCovered).size).toBe(PAGE_TUTORIALS.length);
+    expect(new Set(pagesCovered).size).toBeGreaterThanOrEqual(6);
     for (const page of PAGES.filter((item) => item !== "planner")) {
       expect(tutorialsFor(page).length, page).toBeGreaterThanOrEqual(1);
     }
     expect(tutorialsFor("planner").length).toBeGreaterThanOrEqual(5);
     for (const tutorial of [...PAGE_TUTORIALS, ...PLANNER_TUTORIALS]) {
       expect(tutorial.steps.length, tutorial.id).toBeGreaterThanOrEqual(5);
-      expect(tutorial.steps.length, tutorial.id).toBeLessThanOrEqual(14);
+      expect(tutorial.steps.length, tutorial.id).toBeLessThanOrEqual(16);
       expect(tutorial.page, tutorial.id).toBeDefined();
     }
     for (const tutorial of PLANNER_TUTORIALS) {
@@ -129,9 +135,221 @@ describe("튜토리얼 자료", () => {
     for (const page of PAGES) expect(tutorialsFor(page).some((tutorial) => tutorial.kind === "full")).toBe(false);
   });
 
+  /*
+    **접이식이 «내가 열면 이것들이 생긴다» 고 적은 목록**도 표와 맞아야 합니다.
+
+    접힌 판은 속을 아예 안 그려서 튜토리얼이 찾을 길이 없습니다. 그래서 여는 단추에
+    `data-tour-open="앵커 앵커 …"` 를 달아 두고 안내 창이 눌러 줍니다. 그 목록에 오타가 하나
+    있으면 그 걸음 하나만 조용히 안 열립니다 — 읽어서는 못 찾는 종류라 여기서 셉니다.
+  */
+  /*
+    **여는 문과 닫는 창이 짝이 맞아야 합니다.**
+
+    같은 고침이 자꾸 되풀이됐고, 그 모양이 늘 같았습니다 — 창을 여는
+    쪽만 고치고 닫는 쪽을 빠뜨리거나, 그 반대이거나. 한 짝이 빠지면 그 걸음 하나만 조용히 어긋나
+    읽어서는 못 찾습니다.
+
+    그래서 규칙을 셉니다: **문이 «열면 생긴다» 고 적은 이름은, 어느 창이든 «내가 품었다» 고도
+    적어야 합니다.** 그래야 걸음이 그 창 밖으로 나갈 때 창이 스스로 물러납니다.
+  */
+  it("여는 문이 부르는 이름은 품은 창의 목록에도 있습니다", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = join(here, "..");
+
+    const documented = documentedAnchors();
+    const opens = new Set<string>();
+    /** `{HOLDS_PLANNER}` 처럼 이름으로 부른 것 — 아래에서 그 상수의 내용을 펴 넣습니다. */
+    const constants = new Set<string>();
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entry.name)) continue;
+        const text = readFileSync(full, "utf8");
+        /*
+          여는 쪽은 두 가지입니다 — `data-tour-open`(창: 밝혀 놓고 사람이 누릅니다)과
+          `data-tour-switch`(탭·접이식: 튜토리얼이 대신 누릅니다). 둘 다 «이 자리에 닿는 길» 이므로
+          짝을 셀 때는 함께 봅니다.
+
+          값이 `{HOLDS_PLANNER}` 처럼 **상수 이름**일 때도 잡습니다. 글자를 그대로 적은 것만 세다가
+          구도잡기가 통째로 빠져, 그 갈래만 창이 저절로 안 열렸습니다.
+        */
+        for (const hit of text.matchAll(/(?:data-tour-(?:open|switch)|opens)=(?:"([^"]*)"|\{([^}]*)\})/g)) {
+          const raw = hit[1] ?? hit[2] ?? "";
+          for (const name of raw.split(/[\s"'`]+/)) {
+            // 표에 있는 이름만 앵커로 셉니다 — `opens={…}` 처럼 prop 이름이 섞여 들어왔습니다.
+            if (documented.has(name)) opens.add(name);
+            // 상수 이름이면 그 상수가 품은 이름을 전부 더합니다.
+            else if (/^(HOLDS_[A-Z_]+|TAB_OPENS)/.test(name)) constants.add(name.replace(/\[.*$/, ""));
+          }
+        }
+      }
+    };
+    walk(root);
+
+    // 창들이 «내가 품었다» 고 적어 둔 것 — 상수 한 파일에 모여 있습니다.
+    const panels = readFileSync(join(root, "lib/tutorialPanels.ts"), "utf8");
+    const held = new Set<string>();
+    /*
+      상수 본문에서 앵커 이름을 긁습니다. 겹따옴표뿐 아니라 **백틱**도 보고, 상수가 다른 상수를
+      `${HOLDS_ENTITY_CARD}` 처럼 품고 있으면 **끝까지 따라 들어갑니다**. 한 겹만 펴다가
+      card-* 열다섯 개가 통째로 «여는 문이 없다» 로 잘못 걸렸습니다(두 겹이었습니다).
+    */
+    const namesIn = (text: string, into: Set<string>, seen = new Set<string>()) => {
+      for (const hit of text.matchAll(/["`]([^"`]*)["`]/g)) {
+        for (const name of hit[1].split(/[\s${}]+/)) {
+          if (documented.has(name)) into.add(name);
+        }
+      }
+      for (const hit of text.matchAll(/\$\{([A-Z_]+)\}/g)) {
+        if (seen.has(hit[1])) continue;
+        seen.add(hit[1]);
+        const inner = panels.match(new RegExp(`const ${hit[1]}[^;]*;`, "s"));
+        if (inner) namesIn(inner[0], into, seen);
+      }
+    };
+    namesIn(panels, held);
+
+    /*
+      이름으로 부른 상수를 펴 넣습니다. `HOLDS_*` 는 위 파일에, `TAB_OPENS` 는 구도잡기 껍데기에
+      있습니다. 상수가 품은 이름이 곧 «그 문이 열어 주는 자리» 입니다.
+    */
+    for (const name of constants) {
+      if (name.startsWith("HOLDS_")) {
+        const block = panels.match(new RegExp(`const ${name}[^;]*;`, "s"));
+        if (block) namesIn(block[0], opens);
+      } else if (name === "TAB_OPENS") {
+        const chrome = readFileSync(join(root, "components/composition/planner/PlannerChrome.tsx"), "utf8");
+        const block = chrome.match(/const TAB_OPENS[^;]*;/s);
+        if (block) namesIn(block[0], opens);
+      }
+    }
+
+    /*
+      탭과 «제자리에서 펴지는 것»(컷 카드·곡 고르기·인물 고르기)은 화면을 덮지 않습니다 —
+      닫을 창이 없으니 짝을 요구하지 않습니다. 다만 «원래 없는 것» 과 «빠뜨린 것» 이 구분되게
+      `INLINE_REVEAL` 에 적어 두게 했습니다(그것도 위 정규식에 걸려 held 에 들어옵니다).
+    */
+    const orphans = [...opens].filter((anchor) => !held.has(anchor)).sort();
+    expect(orphans, "여는 문만 있고 품은 창이 없습니다").toEqual([]);
+
+    /*
+      **반대 방향도 셉니다.** 한 방향만 보고 있었던 것이 누락이 되풀이된 까닭입니다. «여는 문이 부르는 이름은 품은 창에도
+      있어야 한다» 만 세고, «품은 창은 여는 문도 있어야 한다» 는 안 셌습니다. 그래서 구도잡기는
+      스스로 닫을 줄은 아는데 **여는 법을 아무도 안 알려 주어**, 걸음이 창 안을 가리키면
+      「자리가 화면에 없습니다」 만 떴습니다.
+
+      창은 «닫는 법» 과 «여는 법» 이 늘 한 쌍입니다. 한쪽만 적으면 여기서 걸립니다.
+    */
+    const unopenable = [...held].filter((anchor) => !opens.has(anchor)).sort();
+    expect(unopenable, "품은 창은 있는데 여는 문이 없습니다").toEqual([]);
+    expect(held.size).toBeGreaterThan(60);
+  });
+
+  /*
+    **창 안의 자리는 그 창이 품어야 합니다.**
+
+    걸음의 앵커를 `cropper-mark-shapes` 에서 `cropper-mark-made`(이름 칸이 있는 줄)로 옮겼는데,
+    그 이름을 `HOLDS_CROPPER` 에 안 넣어서 그 걸음에 이르는 순간 가위 창이 «내 것이 아니네» 하며
+    **스스로 닫혔습니다**. 앞의 두 시험은
+    «문 ↔ 창» 짝만 보므로 이것을 못 잡습니다 — 아무도 그 이름을 문으로 부르지 않았으니까요.
+
+    그래서 **이름 앞머리**로 한 번 더 셉니다. 앞머리로 «동작» 을 정하는 것은 금지지만(그건
+    새 이름이 새어 나갑니다) 시험은 반대입니다 — 새 이름이 새어 나가면 **여기서 걸려야** 합니다.
+  */
+  it("창 안의 자리는 그 창의 «품은 목록» 에 있습니다", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const panels = readFileSync(join(here, "../lib/tutorialPanels.ts"), "utf8");
+    const listOf = (name: string) => {
+      const found = new Set<string>();
+      const read = (constant: string, seen = new Set<string>()) => {
+        if (seen.has(constant)) return;
+        seen.add(constant);
+        const block = panels.match(new RegExp(`const ${constant}[^;]*;`, "s"));
+        if (!block) return;
+        for (const hit of block[0].matchAll(/["`]([^"`]*)["`]/g)) {
+          for (const word of hit[1].split(/[\s${}]+/)) if (word.includes("-")) found.add(word);
+        }
+        for (const hit of block[0].matchAll(/\$\{([A-Z_]+)\}/g)) read(hit[1], seen);
+        for (const hit of block[0].matchAll(/^\s*([A-Z_]{4,}),$/gm)) read(hit[1], seen);
+      };
+      read(name);
+      return found;
+    };
+
+    /** 앞머리 → 그 자리를 품어야 하는 창. */
+    const HOME: [string, string][] = [
+      ["cropper-", "HOLDS_CROPPER"],
+      ["mocap-", "HOLDS_MOCAP"],
+      ["sheet-", "HOLDS_SHEET"],
+      ["bottom-", "HOLDS_PLANNER"],
+      ["layout-", "HOLDS_PLANNER"],
+      ["env-", "HOLDS_PLANNER"],
+      ["timeline-", "HOLDS_PLANNER"],
+      ["planner-", "HOLDS_PLANNER"],
+    ];
+    const lists = new Map(HOME.map(([, constant]) => [constant, listOf(constant)]));
+
+    const missing: string[] = [];
+    for (const anchor of ALL_ANCHORS) {
+      const home = HOME.find(([prefix]) => anchor.startsWith(prefix));
+      if (!home) continue;
+      if (!lists.get(home[1])!.has(anchor)) missing.push(`${anchor} → ${home[1]}`);
+    }
+    expect(missing.sort(), "창 안의 자리인데 품은 목록에 없습니다").toEqual([]);
+  });
+
+  it("data-tour-open 이 부르는 이름도 전부 표에 있습니다", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = join(here, "..");
+    const named = new Set<string>();
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entry.name)) continue;
+        const text = readFileSync(full, "utf8");
+        for (const hit of text.matchAll(/data-tour-open=(?:"([^"]*)"|\{[^}]*"([^"]*)"[^}]*\})/g)) {
+          /*
+            앵커 모양이 아닌 것은 거릅니다 — 주석의 설명(«<그 안의 앵커>»)과, 값이 삼항식일 때
+            딸려 오는 `draggable` · `undefined` 같은 JSX 조각입니다. 하이픈이 든 이름만 셉니다.
+          */
+          for (const name of (hit[1] ?? hit[2] ?? "").split(/[\s${}?:]+/)) {
+            // 날짜처럼 숫자로 시작하는 것도 거릅니다 — 앵커는 늘 글자로 시작합니다.
+            if (/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(name)) named.add(name);
+          }
+        }
+      }
+    };
+    walk(root);
+
+    // 상수로 빼 둔 목록(PlannerChrome 의 TAB_OPENS)도 같이 셉니다.
+    const chrome = readFileSync(join(root, "components/composition/planner/PlannerChrome.tsx"), "utf8");
+    for (const hit of chrome.matchAll(/^\s{2}(?:camera|layout|environment|timeline):\s*"([^"]*)"/gm)) {
+      for (const name of hit[1].split(/\s+/).filter(Boolean)) named.add(name);
+    }
+
+    const documented = documentedAnchors();
+    const unknown = [...named].filter((anchor) => !documented.has(anchor)).sort();
+    expect(unknown, "표에 없는 이름을 열어 주겠다고 적었습니다").toEqual([]);
+    // 적어도 몇 개는 있어야 합니다 — 정규식이 조용히 아무것도 못 잡으면 이 시험이 무의미해집니다.
+    expect(named.size).toBeGreaterThan(20);
+  });
+
   it("걸음이 부르는 앵커는 전부 ANCHORS.md 표에 있고, 표의 앵커는 전부 쓰입니다", () => {
     const documented = documentedAnchors();
-    const used = new Set(ALL_ANCHORS);
+    /*
+      걸음이 «가리키는» 자리뿐 아니라 «기다리는» 자리(`until`)도 쓰는 것으로 셉니다 — 그리는
+      걸음은 누르는 자리와 «그리면 생기는 자리» 가 다릅니다 — 상자를 실제로 그려야 다음으로
+      넘어가는 걸음이 그렇습니다.
+    */
+    const used = new Set([...ALL_ANCHORS, ...allSteps().map((step) => step.until).filter(Boolean)]);
     const missing = ALL_ANCHORS.filter((anchor) => !documented.has(anchor));
     const unused = [...documented].filter((anchor) => !used.has(anchor)).sort();
     expect(missing, "표에 없는 앵커").toEqual([]);
@@ -181,7 +399,7 @@ describe("튜토리얼 번역", () => {
 });
 
 /*
-   읽고 «다음» 만 누르는 걸음이
+  게임 튜토리얼처럼 하나하나 따라 하게 해야 합니다. 읽고 «다음» 만 누르는 걸음이
   대부분이면 튜토리얼이 아니라 설명서입니다 — 「해 볼 것」 이 적힌 걸음은 실제로 행동해야 넘어가야 합니다.
 */
 describe("걸음을 무엇으로 넘기는가", () => {
@@ -204,8 +422,14 @@ describe("걸음을 무엇으로 넘기는가", () => {
     ).toBe("manual");
   });
 
-  it("한 바퀴의 걸음 절반 이상이 행동으로 넘어간다", () => {
+  /*
+    예전에는 «절반 이상» 이었습니다. 그런데 «구성» 같은 걸음은 전부 마그니픽을 거치므로,
+    돈이 나가거나 밖으로 나가는 자리(COSTLY_ANCHORS)는 일부러 «설명만» 으로 돌렸습니다 — 튜토리얼을
+    보려던 사람에게 마그니픽이 열리고 크레딧이 나가면 안 됩니다. 그만큼 행동 걸음이 줄어드는 것이
+    맞으므로 기준을 «셋 중 하나 이상» 으로 낮춥니다. 그래도 읽기만 하는 안내문이 되지는 않게 셉니다.
+  */
+  it("한 바퀴의 걸음 셋 중 하나 이상은 행동으로 넘어간다", () => {
     const acting = FULL_TUTORIAL.steps.filter((step) => stepAdvanceMode(step) !== "manual").length;
-    expect(acting).toBeGreaterThan(FULL_TUTORIAL.steps.length / 2);
+    expect(acting).toBeGreaterThan(FULL_TUTORIAL.steps.length / 3);
   });
 });

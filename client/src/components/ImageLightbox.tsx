@@ -1,3 +1,4 @@
+import { HOLDS_LIGHTBOX, useTutorialPanel } from "@/lib/useTutorialPanel";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -38,6 +39,12 @@ export default function ImageLightbox({
   onClose: () => void;
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  /*
+    튜토리얼이 도는 동안 **제 걸음이 아니면 스스로 물러납니다.** 크게 보기는 화면을 통째로
+    덮으므로, 걸음이 지나간 뒤에도 떠 있으면 그 다음 자리를 전부 가립니다 — 튜토리얼이
+    가리키는 곳이 이 검은 막 뒤에 숨어 걸음이 멈춰 버립니다.
+  */
+  useTutorialPanel({ open: true, holds: HOLDS_LIGHTBOX, onClose });
   const list = images && images.length ? images : image ? [image] : [];
   const [current, setCurrent] = useState(index);
   // 다른 세트를 열면 자리를 다시 잡습니다 — 앞 세트의 4번째 면에서 시작하면 어리둥절합니다.
@@ -51,7 +58,8 @@ export default function ImageLightbox({
   /*
     지금 보는 그림의 실제 픽셀 크기.
 
-     업스케일을 쓰기 시작하면서 «이건 4K 인가 원본인가» 를 눈으로는 못 가립니다.
+    업스케일을 쓰기 시작하면서 «이건 4K 인가 원본인가» 를 눈으로는 못 가립니다. 그래서 크게 볼 때
+    아래에 실제 픽셀 크기를 적습니다.
     `naturalWidth` 는 다 읽은 뒤에야 값이 차므로 onLoad 에서 받습니다(캐시된 그림은 즉시 옵니다).
     그림을 넘길 때마다 비워야 앞 장의 크기가 잠깐 남아 잘못 읽히지 않습니다.
   */
@@ -117,9 +125,12 @@ export default function ImageLightbox({
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
+          {/* 앵커는 «다음» 한쪽에만 — 양쪽에 같은 이름을 달면 띄우는 쪽이 먼저 나오는
+              «이전» 을 잡아 걸음이 엉뚱한 화살표를 가리킵니다. */}
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); next(); }}
+            data-tour="shelf-lightbox-nav"
             aria-label="다음 (→)"
             title="다음 (→)"
             className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 hover:bg-white/15"

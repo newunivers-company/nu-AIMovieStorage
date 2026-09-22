@@ -47,7 +47,8 @@ export function usePlannerRoomRules({
 }) {
   /*
     ── 방이 인물·소품보다 작을 때 ────────────────────────────────────────
-     바닥 격자가 곧 방의 밑면이므로(`floorSizeOf`),
+    바닥면은 인물이 선 범위보다 작아지지 않고, 인물을 뒤로 물리면 함께 늘어납니다.
+    바닥 격자가 곧 방의 밑면이므로(`floorSizeOf`),
     놓인 것들을 담을 만큼 방을 넓히면 격자도 함께 늘어납니다.
 
     창이 닫혀 있으면 아무것도 안 합니다 — `CompositionPlanner` 는 컷 카드마다 **항상
@@ -107,7 +108,7 @@ export function usePlannerRoomRules({
 
   /*
     ── 옛 «6면 세트 자동 걸기» 는 걷었습니다 ──────────────────────────────
-    
+    구도잡기를 열기만 해도 알림이 계속 떴습니다.
 
     예전에는 창을 열 때 «여섯 면이 비어 있으면 프로젝트에서 가장 최근 세트» 를 걸었습니다. 방이 늘 한 칸 서 있던 시절에는
     그것이 편의였지만, 이제 **새 컷에는 방이 없습니다.** 방이 없으면 면도 늘 비어 있으니 열 때마다 규칙이 발동했고,
@@ -120,7 +121,7 @@ export function usePlannerRoomRules({
 
   /*
     ── 이미 걸려 있는 세트의 크기를 방에 한 번 ──────────────────────────────
-     크기는 세트를 **걸 때** 방에 들어가서, 크기를
+    50m 짜리로 프롬프트를 뽑아 놓고 방은 2.8m 에 머무는 일이 있었습니다. 크기는 세트를 **걸 때** 방에 들어가서, 크기를
     알기 전에 이미 걸려 있던 세트(손으로 자른 세트, 크기 읽기를 붙이기 전)는 방이 옛 크기에 머뭅니다. 지금 안쪽 여섯 면이 세트
     하나 통째이고 그 세트에 크기가 있는데 방에 벽 비(`faceRatio`)가 없으면 한 번 맞춥니다. 맞춘 뒤에는 벽 비가 생겨 다시 돌지
     않으므로, 사람이 층고를 손으로 바꿔도 되돌리지 않습니다.
@@ -130,7 +131,7 @@ export function usePlannerRoomRules({
     if (!open) return;
     const room = activeRoomOf(state);
     if (room.faceRatio) return;
-    // 호리존은 세트를 안 겁니다. 면 id 가 어쩌다 남아 있어도(옛 저장본) 그 세트 크기로 스튜디오를
+    // 호리존에는 세트를 걸지 않습니다. 면 id 가 어쩌다 남아 있어도(옛 저장본) 그 세트 크기로 스튜디오를
     // 줄이면 안 됩니다 — 아래 «비율» 효과와 같은 가드입니다.
     if (room.horizon) return;
     const now = COMPOSITION_CUBE_FACES.map((face) => room.faces[face] || "");
@@ -149,7 +150,7 @@ export function usePlannerRoomRules({
 
   /*
     ── 방의 비율은 여섯 면 그림이 정합니다 ────────────────────────────────
-    
+    직육면체의 비율은 사람이 적는 것이 아니라 **여섯 면 그림에서 자동으로** 나옵니다.
 
     정면 그림의 가로세로비가 곧 W/H, 옆면 그림의 비가 곧 D/H 입니다(`roomRatioFromFaces`).
     절대 크기는 그림에 없으므로 **높이만 사람이 정하고** 가로·깊이가 따라옵니다.
@@ -159,7 +160,7 @@ export function usePlannerRoomRules({
     if (!open || !backgroundOnOf(state)) return;
     // 파노라마 돔 방은 가로·깊이가 돔 지름입니다 — 면 그림 비율로 고치면 돔이 줄어듭니다(`setRoomPanoramaIn`).
     if (activeRoomOf(state).panorama) return;
-    // 호리존은 면 그림이 없어 비율을 잴 것이 없습니다 — 치수는 사람이 적은 그대로입니다.
+    // 호리존은 면 그림이 없어 비율을 잴 것이 없습니다 — 치수는 사람이 적은 그대로 둡니다.
     if (activeRoomOf(state).horizon) return;
     let cancelled = false;
     const faces = backgroundFaceImages;

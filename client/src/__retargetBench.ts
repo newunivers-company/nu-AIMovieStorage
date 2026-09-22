@@ -1,6 +1,9 @@
 /**
  * **분석 결과를 구도잡기에 실제로 먹여 보는** 시험대(브라우저에서 돕니다).
  *
+ * 분석 엔진이 뽑은 뼈대는 파일만 봐서는 좋고 나쁨을 못 가립니다 — 구도잡기에 실제로 넣어 봐야
+ * 알 수 있어서, 엔진별로 같은 영상을 같은 길로 돌려 나란히 잽니다.
+ *
  * 앱이 «모션 넣기» 를 누를 때 지나는 길을 그대로 지납니다 —
  * 결과 JSON → `assembleCapture` → `repairPerson` → `createRetargetRig`(인형 GLB) → `retargetPerson`
  * → `placeCapturedMotion` → `applyCapturedMotionIn`.
@@ -177,7 +180,7 @@ function measure(
   const frames = retargetPerson(rig, person, raw, { smoothing: "normal" });
   if (!frames.length) return { engine, file, ok: false, note: "리타깃 결과 없음" };
   /*
-    **디딘 발 고정을 켠 판도 같이 잽니다**. 옵션이라 기본은 꺼짐인데, 켜면
+    **디딘 발 고정을 켠 판도 같이 잽니다.** 옵션이라 기본은 꺼짐인데, 켜면
     실제로 나아지는지는 숫자로만 알 수 있습니다 — 같은 영상·같은 사람으로 두 번 돌려 나란히 둡니다.
   */
   let plantReport: FootPlantReport | null = null;
@@ -237,8 +240,8 @@ function measure(
 /**
  * 결과 하나를 **구도 상태 그대로** 내보냅니다 — 프로젝트 파일의 컷에 그대로 넣을 수 있게.
  *
- * 앱에서 «모션 넣기» 를 누른 것과
- * 같은 상태(마네킹 + 이동·회전·자세 트랙)를 만들어 JSON 으로 돌려줍니다.
+ * 숫자만으로는 «잘 움직이는가» 를 끝내 못 봅니다. 앱에서 «모션 넣기» 를 누른 것과 같은 상태
+ * (마네킹 + 이동·회전·자세 트랙)를 JSON 으로 돌려줘서, 눈으로 볼 컷에 그대로 붙입니다.
  */
 async function exportComposition(file: string, template: THREE.Object3D) {
   const raw = assembleCapture({

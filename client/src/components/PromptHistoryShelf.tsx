@@ -117,13 +117,13 @@ export default function PromptHistoryShelf<
                 style={{ background: "oklch(0.145 0.01 265)", border: "1px solid oklch(1 0 0 / 7%)" }}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* 「가장 최근 / N번째 전」 배지는 뺐습니다.  (지시 341) */}
+                  {/* «가장 최근 / N번째 전» 배지는 뺐습니다 — 줄 차례가 곧 그 말이라 군더더기였습니다. */}
                   <span className="shrink-0 text-[10px] tabular-nums" style={{ color: "oklch(0.50 0.01 265)" }}>
                     {new Date(entry.createdAt).toLocaleString("ko-KR", { hour12: false })}
                   </span>
                   <input
                     // 이름 칸에 **어떤 조건으로 받았는지**를 미리 채웁니다. 손으로 고칠 수 있습니다.
-                    // 「이 판의 이름에 어떤 조건으로 받은 프롬프트인지 기록을 해줘(수정도 할 수 있게)」 (지시 341)
+                    // 시각만으로는 어느 판이 무엇인지 알 수 없어, 받은 조건을 이름으로 남깁니다.
                     value={entry.label ?? entry.note ?? ""}
                     onChange={(event) => onRename(entry.id, event.target.value)}
                     placeholder="이 판의 이름"

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { llmInvocationOf, type LlmCallOptions } from "@/lib/llm";
 
 /*
-  «보낼까, 물을까» — 
+  «보낼까, 물을까» — 앱을 껐다 켜도 기다리던 답을 이어받게 하는 갈림길입니다.
   응답 id 가 있으면 보내지 않고 `llm_resume` 으로 묻기만 해야 하고, 없으면 예전처럼 `call_llm` 으로 보내야 합니다.
   여기가 틀리면 값을 두 번 내거나(늘 보냄), 새 요청을 영영 못 보냅니다(늘 물음).
 */

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { HOLDS_VARIATION } from "@/lib/useTutorialPanel";
 import { uid } from "@/lib/projectTypes";
 import { EDITOR_DIALOG } from "@/lib/layout";
 import { Sparkles, Star, X } from "lucide-react";
@@ -93,9 +94,8 @@ export interface VariationDialogProps<
   /**
    * 이 인물(부모)의 **레퍼런스** 이미지. 생성 이미지와 함께 스트립에 뜹니다.
    *
-   * 「이 캐릭터의 생성 이미지 외에 레퍼런스 이미지들도 여기서 관리할 수
-   * 있어야 편할 것 같네? 그래야 변형 레퍼런스 이미지로 바로 바로 넣고 하지」
-   * (지시 210)
+   * 부모의 레퍼런스까지 여기서 같이 다뤄야 변형 레퍼런스로 곧바로 집어넣습니다 —
+   * 아니면 같은 그림을 폴더에서 다시 찾아 올리게 됩니다.
    */
   ownerReferences?: ReferenceImage[];
   /** 부모의 이미지 분석. 같은 부모의 변형은 이걸 «가져오기» 로 나눠 씁니다. */
@@ -130,8 +130,8 @@ export interface VariationDialogProps<
    * 주인 변형 창(`folder` 없음)용 — 같은 폴더의 **보유 에셋·다른 원본(과 그 변형)** 파일.
    *
    * 다른 원본 «겨울» 의 접두 `숲_겨울` 은 주인 변형 «겨울» 의 접두와 같습니다. 이게 없으면 폴더 읽기가
-   * 다른 원본의 `ref_숲_겨울_001` 을 «목록에 없는 내 파일» 로 붙이고, X 를 누르면 지웁니다
-   * (검토 2026-09-08). 이름 바꾸기도 이 목록에 같은 접두가 있으면 손대지 않습니다.
+   * 다른 원본의 `ref_숲_겨울_001` 을 «목록에 없는 내 파일» 로 붙이고, X 를 누르면 지웁니다.
+   * 이름 바꾸기도 이 목록에 같은 접두가 있으면 손대지 않습니다.
    */
   claimedPaths?: () => Set<string>;
   /**
@@ -179,7 +179,7 @@ export default function VariationDialog<
   /**
    * 이 창에서 파일을 저장할 때 **실제로 쓴** 접두. 이름을 「겨」 까지 적고 그림을 올리면
    * `ref_냥이_겨_001` 로 저장되는데, 닫을 때 «열 때 이름» 만 보면 그 파일을 못 찾아
-   * 영영 옛 접두로 남습니다(검토 2026-09-08). 처음 저장한 접두를 기억해 둡니다.
+   * 영영 옛 접두로 남습니다. 처음 저장한 접두를 기억해 둡니다.
    */
   const usedStem = useRef<string | null>(null);
 
@@ -239,7 +239,7 @@ export default function VariationDialog<
   }, [open, variation]);
 
   /**
-   * 고치는 즉시 **위(프로젝트)로 씁니다.** (지시 286)
+   * 고치는 즉시 **위(프로젝트)로 씁니다.**
    *
    * 예전에는 창 안 로컬 상태에만 두고 닫을 때 올렸습니다. 그런데 LLM 답은
    * 몇 십 초 뒤에 옵니다. 답이 오기 전에 창을 닫으면 컴포넌트가 사라지고,
@@ -291,7 +291,7 @@ export default function VariationDialog<
    * 보유 에셋·다른 원본의 변형(`folder` 있음)은 이름이 비어도 접두를 비우지 않고 `folder.stemBase`
    * («냥이_어린시절»)로 떨어집니다 — 접두가 없으면 Rust 가 폴더 주인 이름을 써서 `냥이_001` 로 저장돼
    * **주인 파일과 섞이고**, 나중에 변형 이름을 적어도 옛 접두가 `냥이` 라 따라가지 못하며 원본 이름을
-   * 바꿀 때도 `냥이_어린시절_` 접두로 안 잡혀 영영 주인 이름으로 남습니다(검토 2026-09-08). 마그니픽 채택
+   * 바꿀 때도 `냥이_어린시절_` 접두로 안 잡혀 영영 주인 이름으로 남습니다. 마그니픽 채택
    * (`magnificBridge.variationStemOf`)과 같은 규칙이라 두 경로의 파일 이름이 어긋나지 않습니다.
    */
   const variationStem = folder
@@ -364,7 +364,7 @@ export default function VariationDialog<
     /*
       이름이 바뀌었는데 새 접두가 보유 에셋·다른 원본의 것과 같으면 파일이 없어도 거부하고 되돌립니다.
       다른 원본 «겨울» 이 아직 파일이 없을 때 통과시키면, 이후 양쪽이 `숲_겨울_` 번호를 나눠 쓰기 시작해
-      폴더 읽기·이름 바꾸기가 서로의 파일을 가져갑니다(검토 2026-09-08). 이름 그대로 닫는 것은 안 막습니다 —
+      폴더 읽기·이름 바꾸기가 서로의 파일을 가져갑니다. 이름 그대로 닫는 것은 안 막습니다 —
       옛 데이터에 이미 겹친 이름이 있으면 닫을 때마다 되돌려 끝이 없습니다.
     */
     if (after !== before && reservedStems?.().includes(newStem)) {
@@ -414,8 +414,8 @@ export default function VariationDialog<
     /*
       보호 장치 — 남의 파일(보유 에셋·다른 원본, 그 변형)에 같은 접두가 있으면 손대지 않습니다.
       Rust 의 `rename_stem_files` 는 폴더 전체에서 접두를 바꾸므로, 다른 원본 «겨울» 의 `숲_겨울_001`
-      과 그 변형 `숲_겨울_밤_001` 까지 `숲_밤_…` 이 되어 그쪽은 이름은 «겨울» 인데 파일은 «밤» 이 됩니다
-      (검토 2026-09-08). `renameOwnedAssetFiles` 와 같은 규칙 — 이름을 되돌리고 폴더를 진실로 둡니다.
+      과 그 변형 `숲_겨울_밤_001` 까지 `숲_밤_…` 이 되어 그쪽은 이름은 «겨울» 인데 파일은 «밤» 이 됩니다.
+      `renameOwnedAssetFiles` 와 같은 규칙 — 이름을 되돌리고 폴더를 진실로 둡니다.
     */
     const foreign = foreignPaths();
     const clash = staleByStem.find(({ oldStem }) =>
@@ -500,15 +500,16 @@ export default function VariationDialog<
 
   /**
    * 정체성 기준 **바꾸기**. «빼기» 는 여전히 안 되고(규칙 6) 바꾸기만 됩니다 — 기준은 늘 한 장.
-   * 새 기준을 맨 앞에 두는 이유는 태그가
+   * 앵커를 찍은 그림을 기준으로 삼고, 그 앵커에서 다음 장을 뽑아 나가는 흐름이라 기준은 갈아 낄 수
+   * 있어야 합니다. 새 기준을 맨 앞에 두는 이유는 태그가
    * «첫 번째 = 정체성» 으로 매겨지기 때문입니다. 옛 기준은 빌려 쓴 그림으로 남아 X 로 뺄 수 있습니다(파일은 남음).
    * 레퍼런스 타일의 ★ 과 위 «이 인물의 생성 이미지» 줄의 ★ 이 같은 함수를 씁니다.
    */
   /*
     ── 변형 창에도 자동 6면 자르기 ─────────────────────────────────────────
     등장방형은 대개 **변형 창**에서 뽑습니다(앵커를 찍은 마스터가 정체성 기준). 장소 카드에만 걸어 두면
-    파노라마가 들어오는 자리에서 안 잘립니다 — 
-    전개도도 같은 훅이라 함께 걸립니다(9/15 보고서의 «변형 창에는 안 붙였다» 를 여기서 풉니다).
+    파노라마가 들어오는 자리에서 안 잘립니다 — 그림을 고르는 순간 여섯 장으로 갈라져야 손이 덜 갑니다.
+    전개도도 같은 훅이라 함께 걸립니다(보고서의 «변형 창에는 안 붙였다» 를 여기서 풉니다).
     잘라 낸 여섯 장은 잘라내기 저장(`cropSave`)과 같은 규칙으로 원본의 생성 이미지로 갑니다.
     배경 변형만, 창이 열려 있을 때만 — 닫힌 창의 `draft` 는 옛 값일 수 있습니다.
   */
@@ -573,8 +574,13 @@ ${draft.promptKo ?? ""}`)
         else onOpenChange(true);
       }}
     >
+      {/*
+        품은 자리는 카드 몸통 것 + 창 제 것 둘(`HOLDS_VARIATION`). 안 적으면 변형 창을 가리키는
+        걸음에 이르는 순간 창이 스스로 닫혀, 그 걸음이 밝힐 것을 잃습니다.
+      */}
       <DialogContent
         showCloseButton={false}
+        tutorialHolds={HOLDS_VARIATION}
         className={EDITOR_DIALOG}
         style={{ background: "oklch(0.13 0.009 265)" }}
       >
@@ -656,6 +662,7 @@ ${draft.promptKo ?? ""}`)
                 patch(() => ({ promptModel: event.target.value }) as Partial<T>)
               }
               title="이 변형 프롬프트를 어느 이미지 모델 문법으로 뽑을지"
+              data-tour="variation-model"
               className="shrink-0 rounded-md px-2.5 py-2 text-xs outline-none"
               style={fieldStyle}
             >
@@ -672,6 +679,7 @@ ${draft.promptKo ?? ""}`)
               올리게 하지 않고 여기서 바로 집어넣습니다. */}
           {(ownerImages.length > 0 || ownerReferences.length > 0) && (
             <div
+              data-tour="variation-parent-images"
               className="rounded-lg p-2.5"
               style={{
                 background: "oklch(0.12 0.008 265)",
@@ -693,7 +701,7 @@ ${draft.promptKo ?? ""}`)
               <div className="composition-scroll mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
                 {[
                   ...ownerImages,
-                  // 레퍼런스도 같은 줄에. 폴더를 뒤져 다시 올리지 않게. (지시 210)
+                  // 레퍼런스도 같은 줄에. 폴더를 뒤져 다시 올리지 않게.
                   ...ownerReferences.map((reference) => ({
                     id: `ref-${reference.id}`,
                     name: reference.name || reference.label || "레퍼런스",
@@ -713,7 +721,7 @@ ${draft.promptKo ?? ""}`)
                   /*
                     이미 넣은 것을 다시 누르면 목록에서 뺍니다(파일은 그대로).
                     정체성 기준만은 못 뺍니다 — 빼면 다른 사람이 됩니다(규칙 6).
-                    
+                    기준 한 장만 남기고 나머지는 목록에서만 빼는 일이 잦아 타일을 다시 누르는 것으로 뺍니다.
                   */
                   const detach = () => {
                     if (!hit) return;
@@ -787,7 +795,7 @@ ${draft.promptKo ?? ""}`)
                             /*
                             저장된 파일을 못 읽으면 방금 만든 blob(thumb)으로 한 번 더 시도하고, 그것도
                             없으면 숨깁니다 — ReferenceImageUploader 와 같은 규칙(액박 대신 빈 칸).
-                            
+                            파일은 폴더에 멀쩡히 있는데 타일만 깨져 보이는 일이 있었습니다.
                             어느 경로가 막혔는지는 콘솔에 남겨 원인을 짚을 수 있게 합니다.
                             «assetSrc 먼저, thumb 은 폴백» 순서는 그대로입니다.
                           */

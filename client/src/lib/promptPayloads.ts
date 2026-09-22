@@ -39,7 +39,10 @@ import type { Background, Character, Cut, GeneratedImageAsset, ReferenceImage } 
 /**
  * **프롬프트 요청의 재료와 넣기 — 카드 단추와 「AI 일괄 생성」 이 한 벌로 씁니다.**
  *
- * # 왜 어제 고친 것이 안 먹었는가
+ * LLM 에 값을 치르고 묻는 까닭은 **상황·환경·인물·동작·표정·구도를 아주 자세히** 받기
+ * 위해서입니다. 한 줄짜리 묘사가 돌아오면 API 를 쓰는 뜻이 없어집니다.
+ *
+ * # 왜 템플릿만 고쳐서는 안 먹었는가
  *
  * 카드마다 있는 「프롬프트 작성」 은 풍부한 요청 문구(`cut-prompt.md`·`character-sheet.md`…)를 타지만,
  * 일괄 생성은 3단계에서 **컷 예순 개의 프롬프트를 한 답(2만 토큰)에** 받고, 인물·장소 시트는 LLM 없이
@@ -87,9 +90,8 @@ export const BUILD_LABELS: Record<Character["build"], string> = {
 /**
  * 규칙으로 조립하거나 LLM 에 요청할 때 함께 넣을 **기본 정보**. 키와 체형은 그림에서 못 읽습니다.
  *
- * **나이·부르는 이름도 여기 넣습니다.** 2026-09-18 점검에서, 캐릭터 특징에 「19세」 를
- * 적어도 그림 프롬프트 요청에는 한 글자도 안 실리는 것이 드러났습니다(요청문을 직접
- * 열어 확인). 요청문 안내는 「인종·나이·체형처럼 정체성을 정하는 값은 basics 에 적힌
+ * **나이·부르는 이름도 여기 넣습니다.** 캐릭터 특징에 「19세」 를 적어도 그림 프롬프트
+ * 요청에는 한 글자도 안 실리는 것이 점검에서 드러났습니다(요청문을 직접 열어 확인). 요청문 안내는 「인종·나이·체형처럼 정체성을 정하는 값은 basics 에 적힌
  * 것만 쓴다」 고 하는데 나이가 거기 없었으니, 열아홉짜리가 서른으로 나와도 막을 길이
  * 없었습니다. 성격·말투처럼 **그림에 안 찍히는 것은 그대로 뺍니다** — 시트에 글자로
  * 찍히는 몫입니다.
@@ -118,7 +120,7 @@ export function characterBasics(character: Character): { basics: string[]; basic
  * 나이 칸을 **그림 프롬프트에 쓰는 영어**로. 「42세」·「42살」·「42」 → `42 years old`, 「40대 후반」 → `in their late 40s`,
  * 「10대」 → `in their teens`.
  *
- * 예전에는 칸 값을 그대로 `${age} years old` 로 이어서 «42세 years old» 가 영문 요청에 실렸습니다(2026-09-22 검토).
+ * 예전에는 칸 값을 그대로 `${age} years old` 로 이어서 «42세 years old» 가 영문 요청에 실렸습니다.
  * 영문에 한글이 섞이면 생성기가 그 부분을 통째로 버리거나 글자로 그려 넣습니다 — 못 읽는 모양이면 안 싣습니다
  * (`summarizeProjectContext` 의 «모르면 빈 글자» 와 같은 규칙).
  */
@@ -140,8 +142,8 @@ export function backgroundCardDescription(background: Pick<Background, "location
 /**
  * **그림이 없을 때 그 사람을 세우는 한 줄.**
  *
- * 이름은 우리끼리 쓰는 말이라
- * 생성기에는 아무 뜻이 없습니다. 그림이 아직 없으면 이 글이 그 사람을 대신합니다.
+ * 이름은 우리끼리 쓰는 말이라 생성기에는 아무 뜻이 없습니다 — «서진우» 만 적으면
+ * 아무나 그립니다. 그림이 아직 없으면 이 글이 그 사람을 대신합니다.
  *
  * 요청(`cutRequestPayload`)과 프롬프트 꼬리(`cutLinkInput`) **두 곳이 같이 씁니다**(규칙 1) —
  * 한쪽만 고치면 화면에 보이는 글과 API 로 가는 글이 다른 사람을 말하게 됩니다.
@@ -192,7 +194,7 @@ export function isUnfoldTemplateReference(image: ReferenceImage | undefined): bo
  * 태그가 없는 그림이 생겨서 엉뚱한 것을 가리킵니다.
  *
  * 마그니픽은 파일 이름으로 그림을 부릅니다. tag 도 name 도 파일 이름으로 보내야
- * LLM 이 `@정체성` 같은 표시 이름을 쓰지 않습니다. 
+ * LLM 이 `@정체성` 같은 표시 이름을 쓰지 않습니다.
  */
 export function sheetReferenceTags(list: ReferenceImage[], platform: string): SheetReferenceTag[] {
   /*
@@ -268,7 +270,7 @@ export interface SheetRequestInput {
  *
  * 예전에는 `runPrompt` 와 「LLM 요청문」 단추(`promptRequestData`)가 같은 것을 따로 조립했고,
  * 앵커를 한쪽에만 넣으면 창에 보이는 요청문과 실제로 보낸 것이 달라집니다. 한 함수로 둡니다.
- * 2026-09-22 부터는 「AI 일괄 생성」 4단계도 이 함수로 짓습니다.
+ * 「AI 일괄 생성」 4단계도 이 함수로 짓습니다.
  */
 export function sheetRequestPayload(input: SheetRequestInput) {
   const { kind, blueprint, entity } = input;
@@ -283,7 +285,7 @@ export function sheetRequestPayload(input: SheetRequestInput) {
     /*
       **기본 정보를 LLM 요청에도 싣습니다.**
 
-      사용자 2026-09-18 점검에서 드러났습니다 — 「나이 19 · 키 162cm · 마른 편」 이 요청에
+      점검에서 드러났습니다 — 「나이 19 · 키 162cm · 마른 편」 이 요청에
       한 글자도 안 갔습니다. 그런데 요청문은 「정체성을 정하는 값은 basics 에 적힌 것만
       쓴다」 고 안내하고 있었습니다. 그 값이 없었으니 열아홉이 서른으로 나와도 막을 길이
       없었습니다.
@@ -349,7 +351,7 @@ export function sheetRequestPayload(input: SheetRequestInput) {
     // 태그 ↔ 그림 대응표. 분석에는 실리고 있었는데 **프롬프트 작성에는
     // 안 실려서** 「@ref_1 의 헤어로」 라고 적어도 LLM 이 몇 번째 그림인지
     // 몰랐습니다. 변형 템플릿이 referenceNames 로 태그를 걸라고 하는데
-    // 그 값이 없었던 것입니다. (지시 242·244·246)
+    // 그 값이 없었던 것입니다.
     references: input.references,
     referenceNames: input.references.map((tag) => tag.name),
   };
@@ -421,7 +423,7 @@ export function withPromptResult<T extends PromptWorkflowState>(
  *
  * 카드(`usePromptCard.runPrompt`)와 「AI 일괄 생성」 4단계(`bootstrapPrompts.writeSheet`)가 **같이** 씁니다 —
  * 훅 안에만 있었을 때 일괄 생성이 이것을 건너뛰어, 같은 요청의 답이 카드에서는 완결 프롬프트로, 일괄 생성에서는
- * 틀 문장 없는 장소 묘사로 들어갔습니다(2026-09-22 검토). `references` 는 **요청에 실은 그 목록**이어야 합니다 —
+ * 틀 문장 없는 장소 묘사로 들어갔습니다. `references` 는 **요청에 실은 그 목록**이어야 합니다 —
  * 답 속의 @태그가 그 차례를 가리킵니다.
  */
 export function withUnfoldFrame(
@@ -439,7 +441,7 @@ export function withUnfoldFrame(
   if (!chip) return result;
   /*
     LLM 이 템플릿을 어기고 «same location as the reference, preserve layout…», «panel 1: …», 칸·카메라 문장을
-    장소 자리에 또 넣는 일이 있습니다(2026-09-15 실제). 그대로 끼우면 틀 문장과 싸우고 항공 구도를 끌어오므로 걷습니다.
+    장소 자리에 또 넣는 일이 있습니다. 그대로 끼우면 틀 문장과 싸우고 항공 구도를 끌어오므로 걷습니다.
   */
   const scrub = (text: string) =>
     text
@@ -453,7 +455,7 @@ export function withUnfoldFrame(
   const mention = templateMentionOf(references, platform);
   /*
     전개도에는 **틀 말고 다른 그림의 태그를 남기지 않습니다** — «구성» 은 프롬프트에 태그로 불린 그림만 올립니다.
-    2026-09-16 MCP 실측: 드론 사진인 정체성 그림을 함께 올리면 «항공 시점 금지» 를 몇 겹으로 적어도 네 장 중 두세 장이 항공
+    MCP 실측: 드론 사진인 정체성 그림을 함께 올리면 «항공 시점 금지» 를 몇 겹으로 적어도 네 장 중 두세 장이 항공
     시점이었고, 같은 문장에서 그 그림만 빼자 네 장 모두 눈높이·작은 달·50 m 공터 축척으로 나왔습니다. 장소의 내용은 LLM 이
     글로 옮겨 적은 것(식생·지형·색·달)으로 충분했습니다.
   */
@@ -488,7 +490,7 @@ export function withUnfoldFrame(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 인물은 **캐릭터 시트**를 먼저 고릅니다(). 시트 한 장에 정면·측면·표정이 다 들어
+ * 인물은 **캐릭터 시트**를 먼저 고릅니다. 시트 한 장에 정면·측면·표정이 다 들어
  * 있어서, 낱장 한 컷보다 다른 각도로 세울 때 훨씬 잘 버팁니다. 시트가 아직
  * 없는 인물만 대표 그림으로 물러섭니다.
  */
@@ -505,13 +507,14 @@ export const pickPrimaryPath = (images: GeneratedImageAsset[] | undefined) =>
 /**
  * 인물마다 **고른 레퍼런스**.
  *
- * 고른 것이 있으면 **고른 순서 그대로** 올리고, 안 골랐으면 지금까지처럼
+ * 컷마다 인물별로 어떤 그림을 올릴지 고를 수 있어야 합니다 — 전신과 클로즈업을 같이 올리는 식으로,
+ * 같은 인물에 여러 장을 겹쳐 쓰기도 합니다. 고른 것이 있으면 **고른 순서 그대로** 올리고, 안 골랐으면 지금까지처럼
  * 시트 한 장을 자동으로 고릅니다(옛 컷이 갑자기 레퍼런스를 잃지 않게).
  */
 /**
  * 컷에서 **사람이 고른** 시트 — «안 골랐다» 와 «전부 뺐다» 를 가릅니다.
  *
- * 「풀리지도 않고」.
+ * 마지막 한 장까지 뺀 뒤 «@ 다시 잇기» 를 눌러도 태그가 안 풀리는 일이 있었습니다.
  * 여태는 마지막 그림을 빼면 칸을 지워 «안 골랐다» 와 같게 봤고, 그러면 자동 시트로 물러서서 태그가 그대로였습니다.
  * 이제 칸이 없으면(null) 자동 시트로 물러서고, 칸이 비어 있으면([]) 「이 컷에서는 그림을 안 쓴다 — 이름만」 입니다.
  * 고르기·«구성»·스토리보드·일괄 뽑기·「@ 다시 잇기」 가 전부 이 하나를 봅니다(규칙 1).
@@ -596,7 +599,7 @@ export function cutSwapPeople(cut: Cut, characters: Character[]): CutSwapPerson[
  * **@태그를 잇는 재료 한 벌** — 사람(고른 시트·생김새·별칭)·배경·구도.
  *
  * 여태 「@ 다시 잇기」 만 이 재료를 알았습니다. 그래서 「영상 프롬프트」 나 「프롬프트 작성」 으로
- * 프롬프트를 새로 만들면 @태그와 꼬리 줄이 **전부 풀렸습니다**(2026-09-21 실측) — 이어 둔 것을
+ * 프롬프트를 새로 만들면 @태그와 꼬리 줄이 **전부 풀렸습니다** — 이어 둔 것을
  * 새 글이 덮어쓰고, 다시 잇기를 또 눌러야 했습니다. 이제 새로 만드는 자리들과 다시 잇기, 그리고
  * 일괄 생성 4단계가 **이 한 벌**을 같이 씁니다(규칙 1) — 따로 모으면 한 곳만 배경 생김새를
  * 빠뜨리는 식으로 반드시 어긋납니다.
@@ -669,6 +672,9 @@ export interface CutRequestInput {
 /**
  * 컷 키 이미지 프롬프트를 받을 때 LLM 에 넘기는 **재료 한 벌**.
  *
+ * 컷 하나를 세우는 재료는 **카드에 이미 다 적혀 있습니다** — 인물마다 고른 시트, 씬 설명,
+ * 저장해 둔 구도, 대사·연기 지시, VFX. 그것을 빠짐없이 실어야 프롬프트가 그 컷을 압니다.
+ *
  * 여태 여기로 간 것은 «씬 요약 · 컷 설명 · 연출 토글 · VFX» 뿐이었습니다. 구도는 그림만
  * 올라가고 **글로는 한 마디도 안 갔고**, 고른 시트도, 대사·연기 지시도 안 갔습니다.
  * 그래서 프롬프트가 「그 컷이 무엇인지」 를 반쯤만 알고 쓰였습니다.
@@ -678,7 +684,7 @@ export function cutRequestPayload(input: CutRequestInput) {
   const tags = cut.styleTags || [];
   return {
     project: input.projectFacts,
-    /** 배경과 상황의 바탕 —  */
+    /** 배경과 상황의 바탕 — 씬 설명에 적힌 것이 그대로 재료가 됩니다. */
     scene: input.sceneSummary,
     cut: cut.description,
     style: tags.map(cutToggleLabel),
@@ -703,7 +709,7 @@ export function cutRequestPayload(input: CutRequestInput) {
       : null,
     /*
       ── 인물마다 **고른 시트** ────────────────────────────────────────
-      사용자 2026-09-16 에 컷마다 시트를 고를 수 있게 해 두었는데(`cut.characterRefs`), 그 선택이
+      컷마다 시트를 고를 수 있게 해 두었는데(`cut.characterRefs`), 그 선택이
       프롬프트 요청에는 안 갔습니다. 마그니픽은 올린 그림을 **파일 이름**으로 부르므로,
       이름(@태그)을 함께 줘야 「이 인물은 이 시트대로」 가 문장에 박힙니다.
     */
@@ -712,8 +718,6 @@ export function cutRequestPayload(input: CutRequestInput) {
       시트: cutSheetPathsForRequest(cut, person).map((path) => `@${fileStemOf(path)}`),
       /*
         ── 생김새 ────────────────────────────────────────────────────
-        , 「그림은 아직 안뽑았으니까 없는거고」.
-
         여태 **이름과 시트 태그만** 보냈습니다. 그래서 그림이 아직 없는 인물은
         프롬프트에 「서진우가 운전대를 쥔다」 로만 남고, 생성기는 그게 누구인지
         알 길이 없어 **아무나 그립니다.** 이름은 우리끼리 쓰는 말이지 생성기에는
@@ -737,8 +741,6 @@ export function cutRequestPayload(input: CutRequestInput) {
     })),
     /*
       ── 배경도 인물과 **같은 대우** ───────────────────────────────────
-      
-
       여태 배경은 `scene` 요약 안에 녹아 있을 뿐, **장소 카드 자체는 한 글자도** 안
       갔습니다. 그래서 「중앙고속도로 터널 입구」 라는 이름만 프롬프트에 남고 그곳이
       어떤 곳인지는 생성기가 지어냈습니다 — 컷마다 다른 터널이 나오는 까닭입니다.
@@ -769,6 +771,8 @@ export function cutRequestPayload(input: CutRequestInput) {
 
 /**
  * 컷 프롬프트 이력에 적는 조건 한 줄.
+ *
+ * 이력에는 글만이 아니라 **어떤 항목이 체크되어** 나온 글인지도 남아야 합니다.
  *
  * 「무엇이 체크되었나」 는 컷에서 **연출 토글·기법·구도를 쓰는지**입니다. 그 조건이
  * 적혀 있어야 「아까 판이 더 나았다」 를 되짚을 수 있습니다.
@@ -834,7 +838,7 @@ export function characterNamesOf(characters: Character[]): Record<string, string
 /**
  * 인물 이름 → **연기 기준** 한 줄. 캐릭터 특징에 적어 둔 것을 영상 프롬프트로 나릅니다.
  *
- * 2026-09-18 점검에서, 그 칸의 안내가 「영상 프롬프트에서 이 인물의 연기 기준이 됩니다」
+ * 점검에서, 그 칸의 안내가 「영상 프롬프트에서 이 인물의 연기 기준이 됩니다」
  * 인데 실제로는 시트에 글자만 찍고 끝이라는 것이 드러났습니다. 연출 메모를 앞에 둡니다 —
  * 「클로즈업에서 시선을 먼저 준다」 처럼 **찍을 수 있는 말**이 거기 적히기 때문입니다.
  */
@@ -904,7 +908,7 @@ export function cutVideoSkeletonInput(input: CutVideoSkeletonInput): CutVideoPro
     /*
       켠 연출 토글과 자동 실사 기본값을 영상에도 싣습니다. 같은 구절은 여기서 한 번만 — 일괄 생성이 `styleTags` 에 자동
       질감 칩을 이미 합쳐 넣어 두 줄이 같은 구절을 들고 옵니다(`dedupePhrases` 주석). 뼈대(`buildCutVideoPrompt`)만이
-      아니라 LLM 요청의 `lookEn` 도 이 값을 그대로 싣기 때문에 **재료를 짓는 자리**에서 걷어 냅니다(2026-09-22 검토).
+      아니라 LLM 요청의 `lookEn` 도 이 값을 그대로 싣기 때문에 **재료를 짓는 자리**에서 걷어 냅니다.
     */
     lookEn: dedupePhrases([cutTogglesEnglish(tags), videoAuto.en].filter(Boolean).join(", ")),
     modelId: cutVideoModelId(input.videoModel),
@@ -925,6 +929,7 @@ export function cutVideoModelId(videoModel?: string): string | undefined {
  * **컷 영상 프롬프트를 LLM 에 부탁할 때** 싣는 재료 — 규칙이 지은 뼈대(`draftKo`/`draftEn`) 위에
  * 상황·환경·동작·표정을 채우게 합니다(요청 문구 `cut-video-prompt.md`).
  *
+ * 상황·배경·환경·인물·구도를 아주 자세히 적어야 쓸 만한 영상이 나옵니다.
  * 여태 영상 프롬프트는 **규칙 조립뿐**이라(`buildCutVideoPrompt`) 무슨 일이 어떻게
  * 일어나는지를 한 문장으로만 적었습니다 — 규칙은 상황을 지어낼 수 없습니다.
  *

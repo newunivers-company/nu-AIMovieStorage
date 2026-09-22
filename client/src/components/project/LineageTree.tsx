@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { assetSrc } from "@/lib/mediaLibrary";
+import { HOLDS_VARIATION } from "@/lib/useTutorialPanel";
 import type { GeneratedImageAsset } from "@/lib/projectTypes";
 
 /**
@@ -272,6 +273,7 @@ function LineageCard({
     */
     <div
       ref={register}
+      data-tour="lineage-card"
       className={`group relative overflow-hidden rounded-xl ${compact ? "w-[132px]" : "w-[210px]"}`}
       onDragOver={
         onDropFiles
@@ -320,7 +322,19 @@ function LineageCard({
         )}
       </div>
 
-      <button type="button" onClick={onOpen} className="block w-full text-left">
+      {/*
+        이 카드를 누르면 편집 창이 뜹니다 — 창 안의 자리는 그때 생깁니다.
+
+        원본 카드는 원본 창을, 변형 카드는 변형 창을 엽니다. 문이 하나인데 목록을
+        `HOLDS_ENTITY_CARD` 로 좁게 적어 두면 변형 창 제 자리(모델 문법·부모 그림 줄)로 가는
+        걸음에서 «내 것이 아니네» 하며 창이 스스로 닫힙니다. 더 넓은 쪽을 적습니다.
+      */}
+      <button
+        type="button"
+        onClick={onOpen}
+        data-tour-open={HOLDS_VARIATION}
+        className="block w-full text-left"
+      >
         <div
           className="relative aspect-[4/3] w-full overflow-hidden"
           style={{ background: "oklch(0.10 0.006 265)" }}
@@ -377,6 +391,7 @@ function LineageCard({
           type="button"
           onClick={onRemove}
           aria-label={`${node.label || "변형"} 지우기`}
+          data-tour="lineage-variation-remove"
           className="absolute right-1.5 top-1.5 rounded-full p-1 opacity-0 transition-opacity group-hover:opacity-100"
           style={{ background: "oklch(0 0 0 / 72%)", color: "oklch(0.74 0.16 25)" }}
         >

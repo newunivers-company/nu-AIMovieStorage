@@ -19,7 +19,8 @@ import { assetSrc } from "@/lib/mediaLibrary";
  * «업스케일» 단추 + ▾ 메뉴 — 지금은 **6면 세트 카드(FaceSetCard)의 «세트 업스케일» 만** 씁니다.
  * 단추는 기본 엔진·기본 목표로 바로 돌리고, ▾ 는 설치된 엔진과 목표 크기를 고르게 합니다.
  *
- * 낱장 타일(ImageActions)에도 붙어 있었지만 2026-09-09 에 뗐습니다. — 낱장 키우기는 편집 창
+ * 낱장 타일(ImageActions)에도 붙어 있었지만 뗐습니다. 자르면 그림이 작아지니 키우는 일은
+ * 편집하는 자리에서 이어서 하는 것이 자연스럽습니다 — 낱장 키우기는 편집 창
  * (`SheetPanelCropper`)의 «업스케일해서 저장»·«지금 그림 업스케일» 한 곳으로 모았습니다.
  * 여섯 장을 한 번에 덮어쓰는 세트는 성격이 달라(편집이 아니라 묶음 작업) 카드에 남겼습니다.
  *
@@ -28,8 +29,8 @@ import { assetSrc } from "@/lib/mediaLibrary";
  * `fixed` 만으로는 모자랍니다. `transform` 이 걸린 조상이 있으면 `fixed` 가 화면이 아니라 **그
  * 조상을 기준**으로 자리를 잡는데, 편집 창(Radix Dialog)이 `translate(-50%, -50%)` 를 씁니다.
  * 그래서 `getBoundingClientRect()`(화면 좌표)로 잰 값을 그대로 주면 메뉴가 창 밖 엉뚱한 데
- * 떴습니다 — (단추는 이름 줄에 있는데
- * 메뉴는 화면 위쪽에 뜬 그림). 몸통으로 내보내면 기준이 다시 화면이 됩니다.
+ * 떴습니다 — 단추는 이름 줄에 있는데 메뉴만 화면 위쪽에 따로 떴습니다.
+ * 몸통으로 내보내면 기준이 다시 화면이 됩니다.
  * 썸네일 상자의 `overflow-hidden` 에 잘리지 않는 것은 덤입니다.
  * 설치된 엔진이 하나도 없으면 아무것도 그리지 않습니다(부르는 쪽이 따로 숨길 필요 없음).
  */
@@ -48,7 +49,7 @@ export interface UpscaleButtonProps {
    *
    * 6면 세트 카드가 이걸 씁니다. 겹쳐 두면 3×2 격자의 칸을 가리는데, 세트 카드는 여섯 면을
    * 한눈에 보려고 있는 것이라 어디에 겹쳐도 틀립니다. 카드 밖 이름 줄에 «떠 있는 단추» 로
-   * 두는 것도 어색해서() 아예
+   * 두는 것도 어색합니다 — 무엇에 걸린 단추인지 보이지 않습니다. 그래서 아예
    * 흐름 안에 넣습니다.
    */
   inline?: boolean;
@@ -173,7 +174,7 @@ export default function UpscaleButton({
       const left = Math.min(rect.left, window.innerWidth - 200);
       /*
         아래로 열되 **화면 밖으로는 안 나갑니다.** 세트 카드가 오른쪽 패널 맨 아래에 있으면
-        `rect.bottom + 4` 가 화면 밖이라 메뉴가 안 보입니다. 메뉴 높이는
+        `rect.bottom + 4` 가 화면 밖이라 메뉴가 통째로 안 보입니다. 메뉴 높이는
         고를 수 있는 엔진 수에 따라 다르므로 넉넉히 190 으로 잡고 위로 밀어 올립니다.
       */
       const top = Math.min(rect.bottom + 4, window.innerHeight - 190);
@@ -195,6 +196,9 @@ export default function UpscaleButton({
   return (
     <div
       ref={anchorRef}
+      // 메뉴는 `document.body` 로 포털되어 이 상자 밖에 뜹니다 — 그래서 튜토리얼이
+      // 밝힐 자리는 메뉴가 아니라 두 단추가 붙은 이 줄입니다.
+      data-tour="shelf-upscale"
       className={`${position} z-10 flex shrink-0 items-center gap-px transition-opacity ${visibility}`}
     >
       <button

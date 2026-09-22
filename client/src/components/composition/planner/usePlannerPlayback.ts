@@ -10,7 +10,8 @@ import { useEffect, useRef, useState } from "react";
 export function usePlannerPlayback(
   timelineDuration: number,
   /**
-   * 타임라인에 깔린 노래 — 재생하면 **같이 울립니다**().
+   * 타임라인에 깔린 노래 — 재생하면 **같이 울립니다**. 컷 길이를 노래 박자에 맞추는 일이라
+   * 소리 없이 구도만 돌려 봐서는 맞는지 알 수 없습니다.
    *
    * 소리는 브라우저가 제 시계로 돌립니다. 우리 시계(`playheadRef`)와 둘이 따로 가므로, 시작·멈춤·머리 옮기기 때
    * **한 번씩만 맞춰 줍니다.** 프레임마다 맞추면 소리가 끊깁니다(지직거림).
@@ -32,10 +33,9 @@ export function usePlannerPlayback(
   /**
    * 화면 아래 타임라인의 **빨간 세로선**. 재생 중에도 여기만 직접 옮깁니다.
    *
-   * 선 자리를
-   * React 상태(`playhead`)로 그리고 있어서, 재생 중에는 상태를 안 바꾸는 이 훅의 규칙
-   * 때문에 **선이 멈춰 있었습니다.** 눈금 글씨는 움직이는데 선만 안 움직이니 어디를
-   * 재생 중인지 알 수가 없었어요.
+   * 선 자리를 React 상태(`playhead`)로 그렸더니, 재생 중에는 상태를 안 바꾸는 이 훅의
+   * 규칙 때문에 **선이 멈춰 있었습니다.** 눈금 글씨는 움직이는데 선만 안 움직이니 어디를
+   * 재생 중인지 알 수가 없었습니다.
    */
   const playheadLineRef = useRef<HTMLDivElement>(null);
   const paintPlayhead = (time: number) => {
@@ -103,8 +103,8 @@ export function usePlannerPlayback(
     /*
       **끝에서 다시 누르면 처음부터.**
 
-       재생이 끝나면 머리가 맨 끝에 서는데, 그대로 다시 누르면
-      «끝에서 끝까지» 라 한 프레임 만에 멈췄습니다 — 눌러도 아무 일이 없는 것처럼 보여요.
+      재생이 끝나면 머리가 맨 끝에 서는데, 그대로 스페이스바를 다시 누르면
+      «끝에서 끝까지» 라 한 프레임 만에 멈췄습니다 — 눌러도 아무 일이 없는 것처럼 보입니다.
     */
     if (playheadRef.current >= timelineDuration - 0.001) {
       playheadRef.current = 0;

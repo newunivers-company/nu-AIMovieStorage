@@ -12,7 +12,7 @@ import type { SavedPromptEntry } from "@/lib/promptHistory";
 /**
  * **컷 그림 프롬프트 칸** — 받기·규칙 조립·@ 다시 잇기·이력·로컬로 뽑기.
  *
- * 2026-09-18 에 `CutCard.tsx` 에서 떼어 냈습니다. 영상 칸(`CutVideoSection`)과 짝이고,
+ * `CutCard.tsx` 에서 떼어 낸 것입니다. 영상 칸(`CutVideoSection`)과 짝이고,
  * 둘을 나눈 까닭은 `lib/cutVideoPrompt.ts` 에 적어 두었습니다 — 한 칸에 섞으면
  * 그림 쪽 자세가 흐려집니다.
  */
@@ -51,7 +51,7 @@ export default function CutPromptSection({
    * 이 작품이 **그림을 뽑을 모델**(`targetModels("image")` 의 id).
    *
    * 있으면 LLM 요청에 그 모델의 가이드가 함께 붙어, 그 문법으로 쓰인 프롬프트가
-   * 돌아옵니다. 
+   * 돌아옵니다 — 영상 쪽과 같은 방식입니다.
    */
   modelId?: string;
 }) {
@@ -75,11 +75,11 @@ export default function CutPromptSection({
             다듬습니다
           </p>
           {/*
-            API 로 바로 받는 「프롬프트 작성」. (지시 324)
+            API 로 바로 받는 «프롬프트 작성».
 
-            캐릭터·배경에는 있는데 컷에는 손으로 붙여넣는 「LLM 요청문」 뿐이라
+            캐릭터·배경에는 있는데 컷에는 손으로 붙여넣는 «LLM 요청문» 뿐이라
             컷 프롬프트는 API 기록에도 안 남고 한 번에 받을 수도 없었습니다.
-            「공통 기능은 배경·캐릭터·씬 구성에 함께 반영할 것」.
+            공통 기능은 캐릭터·배경·씬 구성이 같이 가져야 합니다(공통 규칙 1).
           */}
           <button
             type="button"
@@ -144,7 +144,7 @@ export default function CutPromptSection({
             )}
             @ 다시 잇기
           </button>
-          {/* 이 컷에 실을 기법 가이드. 필요한 것만 고릅니다. (지시 131) */}
+          {/* 이 컷에 실을 기법 가이드. 전부 싣지 않고 필요한 것만 고릅니다 — 겹치면 서로 상쇄됩니다. */}
           <TechniqueSelect
             value={cut.techniques || []}
             onChange={(techniques: string[]) => patchCut(() => ({ techniques }))}
@@ -204,8 +204,8 @@ export default function CutPromptSection({
         </div>
 
         {/*
-          «구성» 은 칸마다 답니다 — 한글로 보낼지 영문으로 보낼지는 그때그때 다릅니다
-          ().
+          «구성» 은 칸마다 답니다 — 한글로 보낼지 영문으로 보낼지는 그때그때 다릅니다.
+          단추가 하나뿐이면 어느 칸을 보냈는지가 손에서 정해지지 않습니다.
           캐릭터·배경 카드가 쓰는 그 단추와 같은 자리, 같은 모양입니다(공통 규칙 1).
         */}
         <PromptResultPanels

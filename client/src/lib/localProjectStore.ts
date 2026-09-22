@@ -1,3 +1,4 @@
+import { coverOf } from "@/lib/projectCover";
 import { toast } from "sonner";
 import { migrateProjectLayout } from "@/lib/mediaLibrary";
 import { applyMovedPaths } from "@/lib/ownerFolders";
@@ -24,6 +25,8 @@ export interface LocalProjectSummary {
   updatedAt: string;
   sceneCount: number;
   assetCount: number;
+  /** 보드 카드에 띄울 그림. 사람이 정한 것이 없으면 작품 안에서 찾은 한 장입니다. */
+  coverPath?: string;
   /** 저장 폴더 안의 프로젝트 폴더 이름. 파일로 저장된 경우에만 있습니다. */
   folder?: string;
 }
@@ -596,6 +599,8 @@ function stageLocalProject(
     updatedAt: now,
     sceneCount: scenes.length,
     assetCount: scenes.reduce((count, scene) => count + (scene.cuts?.length || 0), 0),
+    // 보드 카드에 띄울 한 장. 사람이 정한 것이 없으면 작품 안에서 찾습니다(`projectCover`).
+    coverPath: coverOf(draft as Parameters<typeof coverOf>[0]),
     // 폴더 이름은 처음 저장할 때 정하고 이후 바꾸지 않습니다.
     // 제목을 고칠 때마다 폴더가 따라 움직이면 이미지 경로가 전부 끊깁니다.
     folder: previous?.folder || uniqueFolderName(draft.title?.trim() || "", id, projects),

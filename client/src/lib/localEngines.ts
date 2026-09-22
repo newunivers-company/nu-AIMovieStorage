@@ -7,6 +7,8 @@ import { isEngineIncluded } from "@/lib/edition";
 /**
  * 로컬 생성 엔진 — 프런트 쪽.
  *
+ * 로컬 모델은 컴피UI 를 거치지 않고 업스케일 엔진처럼 앱이 직접 돌립니다.
+ *
  * 살림(설치·워커·취소·제거)은 업스케일 엔진과 **같은 Rust 코드**를 씁니다
  * (`src-tauri/src/upscale.rs` 의 `Family`). 이 파일은 `upscale.ts` 와 같은 모양의
  * 구독 저장소입니다 — 설치는 수십 분이 걸리고 화면을 떠나 있는 동안에도 진행 이벤트가
@@ -14,9 +16,8 @@ import { isEngineIncluded } from "@/lib/edition";
  *
  * # 미니맥스를 씁니다
  *
- * 맞습니다. **MiniMax-H3**
- * (영상+오디오, 2026-08-03)와 **MiniMax-Music3**(2026-08-13)가 오픈 웨이트로 공개됐고
- * diffusers 로 바로 돕니다. 컴피UI 를 거치지 않고 우리가 직접 돌립니다.
+ * **MiniMax-H3**(영상+오디오)와 **MiniMax-Music3** 가 오픈 웨이트로 공개돼 diffusers 로
+ * 바로 돕니다. 컴피UI 를 거치지 않고 우리가 직접 돌립니다.
  *
  * Wan·ACE-Step 은 **가벼운 대안**으로 남깁니다. H3 는 bf16 기준 125 GB 짜리라 int8 로
  * 줄여도 호스트 RAM 이 75 GB 쯤 있어야 합니다. 그 문턱에 못 미치는 기계에서도 뭔가는
@@ -77,6 +78,8 @@ export interface LocalEngineInfo {
   /**
    * **동작을 그대로 옮길 수 있는가**(컨트롤넷·포즈 조건).
    *
+   * 모캡 영상을 옮겨 쓰려면 엔진에 컨트롤넷이 붙어 있어야 합니다.
+   *
    * 아무 모델에나 뼈 그림을 준다고 따라 그리지 않습니다 — **그 조건을 학습한 가지**가
    * 따로 있어야 합니다. 없는 엔진에 주면 조용히 무시되고, 사람은 「왜 안 따라 하지」 를
    * 한참 뒤에야 알게 됩니다. 그래서 받는 엔진만 켜 두고 화면에서도 그 엔진일 때만 묻습니다.
@@ -84,6 +87,8 @@ export interface LocalEngineInfo {
   pose?: boolean;
   /**
    * **이 기계에서 돌아갈까**를 재는 기준.
+   *
+   * 기계마다 VRAM 이 달라, 큰 카드에서는 원본이 돌고 작은 카드에서는 양자화로 내려야 합니다.
    *
    * 125 GB 를 한 시간 받고 나서 「VRAM 이 모자랍니다」 를 보는 것이 가장 나쁩니다.
    * 그래서 설치 단추 옆에 미리 적습니다.
@@ -179,14 +184,14 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
       "영상과 사운드트랙을 한 번에. 구도잡기 레퍼런스 영상·인물 시트·배경을 통째로 물려 그 움직임과 인물을 그대로 따릅니다. 24fps · 5~15초.",
     license: "모델 카드 확인 — 오픈 웨이트(2026-08-03)",
     /*
-      125 → 190 GB (2026-09-22). 사용자의 기계에는 글·첫 프레임용 transformer(62 GB)·text_encoder(63 GB)만
+      125 → 190 GB. 먼저 깐 기계에는 글·첫 프레임용 transformer(62 GB)·text_encoder(63 GB)만
       있고 **레퍼런스용 transformer_ref(62 GB)가 없었습니다** — 첫 생성 때 그 워크플로 것만 받았기 때문.
       이제 설치 때 저장소를 통째로 받아 두므로 그 62 GB 까지 넣어 적습니다.
     */
     sizeHint: "약 190 GB (레퍼런스용 transformer_ref 62 GB 까지 설치 때 받아 둡니다) · 24~32 GB 카드는 int8 로 돌며 호스트 RAM 75 GB 필요",
     extension: "mp4",
     priority: 0,
-    // vramGb 80 은 틀린 값이었습니다(2026-09-18). 워커는 VRAM 155 GB 아래면 양자화합니다 —
+    // vramGb 80 은 틀린 값이었습니다. 워커는 VRAM 155 GB 아래면 양자화합니다 —
     // 96 GB 카드에서도 bf16 원본은 안 들어갑니다. 워커 기준과 같은 숫자로 맞춥니다.
     needs: { vramGb: 155, quantVramGb: 24, ramGb: 75, diskGb: 190, quantNote: "int8 로 줄이고 호스트 RAM 으로 흘려" },
   },
@@ -215,7 +220,7 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     needs: { vramGb: 24, quantVramGb: 12, ramGb: 32, diskGb: 45, quantNote: "모델을 블록 단위로 흘려" },
   },
   /*
-    
+    FLUX 와 스테이블 디퓨전을 빼고 Z-Image Turbo·Anima 를 넣었습니다.
     둘 다 게이트 저장소라 토큰을 받아야 했고, FLUX 는 가중치가 비상업이었습니다.
     새로 들어온 둘은 성격이 확실히 갈립니다 — 하나는 «빠르고 가벼운 실사», 하나는 «애니메 전용».
   */
@@ -263,14 +268,14 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     purpose:
       "미니맥스 H3 가 무거운 기계를 위한 가벼운 대안. 대표 그림을 주면 그 그림에서 시작하고(I2V), 로라를 여러 개 겹칩니다.",
     license: "Apache 2.0 — 상업 이용 제한 없음",
-    // 65 → 120 GB (2026-09-22). 첫 장면 그림을 주는 컷에서 I2V 판 60 GB 를 «생성 중» 안에서 말없이
+    // 65 → 120 GB. 첫 장면 그림을 주는 컷에서 I2V 판 60 GB 를 «생성 중» 안에서 말없이
     // 받던 것을, 설치 때 T2V·I2V 두 판을 다 받아 두는 것으로 바꿨습니다. 둘을 합친 값입니다.
     sizeHint: "약 120 GB (T2V·I2V 두 판을 설치 때 받아 둡니다)",
     extension: "mp4",
     // 미니맥스 H3 가 무거워 못 돌릴 때의 **가벼운 대안**입니다. 기본은 H3.
     priority: 1,
     /*
-      vramGb 는 오래 24 였는데 **틀린 값**이었습니다(2026-09-18 실측). A14B 는 전문가가 둘이라
+      vramGb 는 오래 24 였는데 실측해 보니 **틀린 값**이었습니다. A14B 는 전문가가 둘이라
       bf16 원본이 126 GB 이고, 텍스트 인코더까지 올리면 157 GB 쯤 필요합니다. 24 로 적어 두면
       24 GB 카드 주인에게 「원래 정밀도로 돕니다」 라고 알리고는 실제로는 int4 로 내려가
       오프로드로 버팁니다. 워커의 BF16_GB 와 같은 근거로 맞춥니다.
@@ -288,7 +293,7 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     extension: "mp4",
     priority: 2,
     /*
-      동작을 그대로 옮길 수 있는 **유일한** 엔진입니다(2026-09-17 기준). Lightricks 가 낸
+      동작을 그대로 옮길 수 있는 **유일한** 엔진입니다. Lightricks 가 낸
       포즈 IC-LoRA 를 얹어 씁니다. Wan 2.2 도 Fun-Control 로 되지만 diffusers 가 아니라
       VideoX-Fun 저장소를 따로 깔아야 해서 아직 안 붙였습니다.
     */
@@ -306,17 +311,17 @@ export const LOCAL_ENGINE_CATALOG: Record<LocalEngineId, LocalEngineInfo> = {
     extension: "wav",
     // 미니맥스 Music3 를 못 돌릴 때의 **가벼운 대안**입니다.
     priority: 1,
-    // 「fp16 로 줄여」 라고 적어 두었지만 워커는 그런 길이 없었습니다(2026-09-18). 이 파이프라인은
+    // 「fp16 로 줄여」 라고 적어 두었지만 워커에는 그런 길이 없었습니다. 이 파이프라인은
     // bitsandbytes 로 못 줄입니다 — 대신 좁으면 CPU 오프로드로 내립니다. 적힌 대로 고쳤습니다.
     needs: { vramGb: 10, quantVramGb: 6, ramGb: 16, diskGb: 12, quantNote: "CPU 로 흘려" },
   },
   /*
     ── 모션 캡처 ──────────────────────────────────────────────────────────
-     앱 안 MediaPipe 는 설치가 필요 없어
+    업스케일처럼 모델을 골라 분석할 수 있게 합니다. 앱 안 MediaPipe 는 설치가 필요 없어
     목록에 없고(구도잡기 창에서 늘 고를 수 있음), 여기는 파이썬으로 도는 무거운 모델들입니다. 결과는 영상 속 사람들의 관절
     좌표 JSON — 앱이 이어 붙이기·튐 보정·리타깃을 똑같이 합니다.
 
-    넣지 않은 것(2026-09-16 확인): WHAM 은 torch 1.11 판이라 RTX 50 계열(Blackwell) GPU 에서 안 돌고, DanceHMR 은 코드가
+    넣지 않은 것: WHAM 은 torch 1.11 판이라 RTX 50 계열(Blackwell) GPU 에서 안 돌고, DanceHMR 은 코드가
     공개되지 않았고, SAM3DBody-cpp 는 SAM 3D Body 와 같은 모델의 C++ 판이라 따로 둘 까닭이 없습니다.
   */
   sam3dbody: {
@@ -372,7 +377,7 @@ export interface LocalEngineStatus extends LocalEngineInfo {
   /**
    * 지금 가중치를 미리 받는 중인가(Rust `UpscaleState::prefetching`). `installing` 과 따로인 까닭은 «멈추기»
    * 단추 문구 — 예전에는 `installed` 로 골랐는데, 새로 까는 엔진은 uv venv 직후부터 «설치됨» 이라 패키지를
-   * 받는 동안에도 「받기 멈추기」 로 보였습니다(2026-09-22 점검).
+   * 받는 동안에도 「받기 멈추기」 로 보였습니다.
    */
   prefetching: boolean;
   version: string;
@@ -592,7 +597,7 @@ function ensureProgressHook(): Promise<void> {
       if (!payload || typeof payload !== "object") return;
       /*
         «disk» 는 Rust 가 엔진 폴더 크기를 **뒤에서** 다시 재고 난 뒤 보내는 살림 신호입니다
-        . 상태를 한 번 더 읽어 카드 숫자를
+        (카드에는 「4.5 GB」 라고 떠 있는데 폴더는 183 GB 이던 적이 있습니다). 상태를 한 번 더 읽어 카드 숫자를
         맞추고, 생성 진행을 듣는 쪽에는 넘기지 않습니다 — 빈 문구가 생성 상태 줄을 지우면 안 됩니다.
       */
       if (payload.stage === "disk") {
@@ -668,8 +673,8 @@ export async function cancelLocalInstall(id: LocalEngineId): Promise<void> {
 /**
  * 이미 깔린 엔진의 가중치를 **지금** 통째로 받아 둡니다(«가중치 미리 받기» 단추).
  *
- * 이 개편 뒤에 새로 까는 엔진은 설치 끝에 받지만, 사용자의
- * 기계처럼 이미 깔린 것은 그 길을 지나쳤으므로 단추가 따로 있어야 합니다. 진행은 설치와 같은
+ * 이 개편 뒤에 새로 까는 엔진은 설치 끝에 받지만, 이미 깔려 있던 엔진은 그 길을 지나쳤으므로
+ * 단추가 따로 있어야 합니다. 진행은 설치와 같은
  * «가중치 받기(models)» 막대로 오고, 멈추기도 `cancelLocalInstall` 이 그대로 듣습니다.
  */
 export async function prefetchLocalWeights(id: LocalEngineId): Promise<void> {
@@ -710,14 +715,14 @@ export async function stopLocalWorkers(): Promise<void> {
 
 /* ────────────────────────── 생성 ────────────────────────── */
 
-/** 로라 한 장. 경로는 사용자가 직접 받아 둔 `.safetensors` 입니다. */
+/** 로라 한 장. 경로는 사람이 직접 받아 둔 `.safetensors` 입니다. */
 export interface LocalLora {
   path: string;
   weight: number;
   /**
    * 이 로라를 **불러오는 말**. 프롬프트 앞에 붙여야 먹는 로라가 있습니다.
    *
-   * 2026-09-18 점검에서 드러났습니다 — 이 칸이 아예 없어서 `lorasToRun` 이 돌려준
+   * 점검에서 드러났습니다 — 이 칸이 아예 없어서 `lorasToRun` 이 돌려준
    * 트리거가 **타입 단계에서 조용히 버려지고** 있었습니다. 화면에는 「프롬프트에 넣어야
    * 먹습니다」 라고 적어 두고 정작 안 보내고 있었던 것입니다.
    *
@@ -750,7 +755,7 @@ export interface LocalRunOptions {
   /**
    * 레퍼런스 — 구도잡기 영상·인물 시트·배경을 **순서대로** 물립니다(H3 의 `ref2va`).
    *
-   * 로컬에서 그 일을 하는 길이 이것입니다.
+   * 구도잡기 레퍼런스 영상과 인물·배경을 한꺼번에 물려 컷 영상을 바로 뽑는 길입니다.
    *
    * **순서가 뜻입니다.** 모델이 프롬프트에 「<Video 1>」 처럼 이름을 붙이고 공유 시계에
    * 올려 두기 때문에, 같은 것을 다른 순서로 주면 다른 요청이 됩니다.
@@ -759,11 +764,12 @@ export interface LocalRunOptions {
   references?: { kind: "image" | "video" | "audio"; path: string }[];
   /** 음악 가사. 비우면 연주곡(`[inst]`). */
   lyrics?: string;
-  /** 여러 개를 겹쳐 먹입니다. */
+  /** 여러 개를 겹쳐 먹입니다 — 화풍·동작·질감을 나눠 건 로라를 한 번에 씁니다. */
   loras?: LocalLora[];
   /**
    * **동작 기준** — 모캡에서 구운 뼈 그림들(차례가 곧 시간).
    *
+   * 댄스 커버 영상에서 동작만 뽑아 인물과 배경을 갈아 끼우는 길입니다.
    * 원본 영상이 아니라 **뼈 그림**을 주는 까닭은
    * `lib/poseFrames.ts` 머리말에 있습니다.
    *
@@ -777,7 +783,7 @@ export interface LocalRunOptions {
   /**
    * **어떤 정밀도로 올릴까.** 안 주면 `auto` — 워커가 이 GPU 의 VRAM 을 보고 정합니다.
    *
-   * 판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과
+   * 기계의 GPU 를 보고 맞는 정밀도를 스스로 고릅니다. 판단은 **워커 안에서** 합니다 — 앱이 nvidia-smi 로 읽은 값과
    * torch 가 보는 값이 다를 수 있고(여러 장·MIG), 실제로 올리는 쪽이 torch 라서요.
    * 여기서 못 박는 것은 자동이 틀릴 때(다른 프로그램이 VRAM 을 쥐고 있을 때)를 위한 길입니다.
    */
@@ -890,7 +896,7 @@ export interface LoraEntry {
   id: string;
   /** 화면에 보일 이름. 비면 파일 이름을 씁니다. */
   name: string;
-  /** 사용자가 직접 받아 둔 `.safetensors` 의 전체 경로. */
+  /** 사람이 직접 받아 둔 `.safetensors` 의 전체 경로. */
   path: string;
   /** 0~2. 1 이 원래 세기입니다. */
   weight: number;
@@ -899,7 +905,9 @@ export interface LoraEntry {
   /**
    * 이 로라가 **무엇을 바꾸는가**.
    *
-   * 맞습니다 — **화풍 로라는 한 번에 하나**입니다. 둘을 겹치면 어느 쪽도 아닌 그림이 나오고,
+   * 어느 로라로 뽑을지 고르려면 그 로라가 무엇을 바꾸는지부터 알아야 합니다.
+   *
+   * **화풍 로라는 한 번에 하나**입니다. 둘을 겹치면 어느 쪽도 아닌 그림이 나오고,
    * 그게 로라 탓인지 프롬프트 탓인지 가려낼 수가 없습니다. 반면 «동작»·«질감» 은 화풍과
    * 겹쳐도 됩니다. 그래서 갈래를 적어 두고, 화풍이 둘 이상 켜지면 경고합니다.
    */
@@ -931,8 +939,8 @@ export const LORA_STYLES: { id: LoraStyle; label: string; exclusive: boolean; hi
 /**
  * 로라 목록 — **설정입니다.** 프로젝트가 아니라 이 컴퓨터에 붙습니다.
  *
- * 로라 파일은 사용자가 직접 받아 어딘가에 둡니다(수 GB 짜리도 있어
- * 프로젝트 폴더에 복사하지 않습니다). 우리는 **경로와 세기만** 기억합니다.
+ * 로라 파일은 사람이 직접 받아 어딘가에 둡니다(수 GB 짜리도 있어 프로젝트 폴더에
+ * 복사하지 않습니다). 우리는 **경로와 세기만** 기억합니다.
  */
 export function loadLoras(): LoraEntry[] {
   if (typeof window === "undefined") return [];

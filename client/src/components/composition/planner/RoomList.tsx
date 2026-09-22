@@ -19,8 +19,6 @@ import { confirmDialog } from "@/components/ConfirmDialog";
 /**
  * 세워 둔 **방들** — 고르기·더하기·지우기와 활성 방의 자리.
  *
- *
- *
  * # 왜 방을 나누는가 — 크게 만들면 되지 않나
  *
  * 안 됩니다. **방 크기가 곧 축척**이기 때문입니다(`roomAutoGrow` 주석). 거실과 주방을
@@ -41,7 +39,8 @@ export function RoomList({
   state: CompositionState;
   setState: UpdateComposition;
   /**
-   * 방 **아래에 펴지는 속성**. 고른 방 하나만 펴집니다 — 여럿을 동시에 펴면 어느 방을 만지는지 화면에서 사라집니다.
+   * 방 **아래에 펴지는 속성**. 속성을 딴 데 두면 어느 방의 값인지 화면에서 안 보입니다.
+   * 고른 방 하나만 펴집니다 — 여럿을 동시에 펴면 어느 방을 만지는지 또 사라집니다.
    */
   renderProperties?: (room: CompositionRoom) => React.ReactNode;
 }) {
@@ -71,8 +70,8 @@ export function RoomList({
   };
 
   /**
-   * 방을 세우고 **바로 펼칩니다**. 
-   * 세우자마자 하는 일이 크기 맞추기라, 한 번 더 눌러야 열리면 손이 한 번 더 갑니다.
+   * 방을 세우고 **바로 펼칩니다**. 실내든 실외든 세우자마자 하는 일이 크기 맞추기라,
+   * 방을 다시 골라야 속성이 열리면 손이 한 번 더 갑니다.
    */
   const addRoom = (kind: RoomKind) =>
     setState((current) => {
@@ -99,13 +98,18 @@ export function RoomList({
         </span>
         {/*
           ── 실내 · 실외 ────────────────────────────────────────────────
-           세울 때 정해야 «이미지 생성» 이 전개도를 뽑을지 파노라마를 뽑을지 알 수 있습니다.
+          방을 세울 때 실내·실외를 고르게 한 까닭 — 실외는 돔이라 파노라마 한 장을 두릅니다.
+          세울 때 정해야 «이미지 생성» 이 전개도를 뽑을지 파노라마를 뽑을지 알 수 있습니다.
         */}
         <span className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => addRoom("indoor")}
             data-tour="env-room-add-indoor"
+            // 방을 세워야 치수·가릴 면·전개도·6면 세트 칸이 생깁니다 — 튜토리얼이
+            // 「먼저 «실내» 를 누르세요」 라고 가리킵니다 — 방부터 세우라고 짚어 주지 않으면
+            // 다음 걸음이 가리키는 칸이 아직 없어 튜토리얼이 어긋납니다.
+            data-tour-open="env-room-size env-occlude-faces env-room-make-image env-face-sets env-room-props env-room-section"
             title="여섯 면을 붙일 실내 방입니다. 이미 방이 있으면 오른쪽에 벽을 맞대어 세웁니다"
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold"
             style={{ background: "oklch(0.55 0.15 200 / 26%)", color: "oklch(0.80 0.13 200)" }}
@@ -115,6 +119,7 @@ export function RoomList({
           <button
             type="button"
             onClick={() => addRoom("outdoor")}
+            data-tour-open="env-outdoor-shape env-panoramas"
             title="파노라마 한 장을 두르는 돔입니다. 한 변 100 m 짜리 공터로 서고, 크기는 아래 칸에서 바꿉니다"
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold"
             style={{ background: "oklch(0.72 0.16 60 / 26%)", color: "oklch(0.86 0.14 60)" }}
@@ -123,12 +128,14 @@ export function RoomList({
           </button>
           {/*
             ── 호리존 ──────────────────────────────────────────────────
-             그림을 안 붙이는 방이라 색조는 무채색으로 —
+            그림 대신 **색을 고르는 방**입니다. 제품 컷처럼 배경이 없어야 하는 구도에 씁니다.
+            그림을 안 붙이는 방이라 단추의 색조는 무채색으로 —
             «색은 당신이 고른다» 는 뜻입니다.
           */}
           <button
             type="button"
             onClick={() => addRoom("horizon")}
+            data-tour-open="env-horizon-color"
             title="단색 호리존 스튜디오 — 색을 고르는 방, 제품 컷용. 전개도·파노라마 없이 여섯 면이 한 가지 색으로 이어집니다"
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold"
             style={{ background: "oklch(0.80 0.02 300 / 24%)", color: "oklch(0.90 0.03 300)" }}
@@ -205,8 +212,8 @@ export function RoomList({
                 </button>
               )}
               {/*
-                이름 고치기 단추. 두 번 누르기만으로는 **있는 줄을 모릅니다** —
-                
+                이름 고치기 단추. 방이 여럿이면 이름으로 가려야 하는데,
+                두 번 누르기만으로는 **고칠 수 있다는 줄을 모릅니다.**
               */}
               {!isEditing && (
                 <button

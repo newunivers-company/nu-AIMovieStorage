@@ -20,9 +20,9 @@ import type { PlannerMedia } from "@/components/composition/planner/usePlannerMe
 /**
  * **방과 벽에 걸 «장소 카드»** — 만들기와, 그림이 들어오면 자동으로 거는 일.
  *
- * 2026-09-18 에 `CompositionPlanner.tsx` 에서 떼어 냈습니다. 만드는 곳과 거는 곳이
- * 창 본문의 위아래로 130줄쯤 떨어져 있어서, 「그림을 등록했는데 안 걸린다」 를 볼 때
- * 두 곳을 오가며 읽어야 했습니다. 실은 **한 흐름**입니다 —
+ * `CompositionPlanner.tsx` 에서 떼어 냈습니다. 만드는 곳과 거는 곳이 창 본문의 위아래로
+ * 130줄쯤 떨어져 있어서, 그림을 등록했는데 안 걸리는 일을 볼 때 두 곳을 오가며 읽어야
+ * 했습니다. 실은 **한 흐름**입니다 —
  * 카드를 만든다 → 그 카드에서 그림을 뽑는다 → 폴더 읽기가 들여온다 → 여기서 건다.
  */
 export function usePlannerPlaces({
@@ -45,7 +45,7 @@ export function usePlannerPlaces({
 }) {
   /*
     ── 방에 이어 둔 장소 카드 ────────────────────────────────────────────
-    
+    방을 세운 자리에서 전개도까지 이어지게 하려고 둡니다 — 방 추가 → 전개도 만들기 → 고르면 바로 6면.
     카드는 프로젝트가 들고 있고(씬 탭의 장소 목록과 **같은 카드**), 방은 그 id 만 가리킵니다.
   */
   const [placeOpen, setPlaceOpen] = useState(false);
@@ -77,7 +77,7 @@ export function usePlannerPlaces({
 
   /*
     ── 벽에 붙일 **배경 그림 만들기** ────────────────────────────────────
-    
+    벽을 세운 자리에서 그 벽에 붙일 그림까지 한 번에 갑니다 — 만들고 바로 적용됩니다.
 
     장소 카드를 그대로 씁니다(씬 탭에서 쓰던 그 카드) — 프롬프트·그림 등록·폴더 저장이 이미 거기 다 있습니다(공통 규칙 1).
     카드에는 **벽의 실제 크기와 인물까지의 거리**를 적어 둡니다. 생성기는 미터를 지키지 않지만 «4 m 벽을 3 m 뒤에서 본 그림» 은
@@ -118,7 +118,7 @@ export function usePlannerPlaces({
   };
   /*
     ── 뽑아 온 6면을 **그 방에** 자동으로 겁니다 ──────────────────────────
-    
+    뽑은 전개도를 사람이 다시 찾아 거는 걸음을 없앱니다.
 
     장소 카드에 전개도를 등록하면 자동 커팅(`useAutoUnfold`)이 «<장소>_NNN» 세트를 만들고, 폴더 읽기가 그것을 `media.faceSets`
     로 들여옵니다. 그때 **면이 아직 비어 있는 방**이면 손을 안 대고 겁니다 — 사람이 이미 다른 세트를 걸어 둔 방은 건드리지
@@ -126,7 +126,7 @@ export function usePlannerPlaces({
   */
   /*
     ── 벽에 붙일 그림이 들어오면 **그 벽에** ────────────────────────────
-     «이 크기로 배경 그림 만들기» 로 연 카드에 그림이 등록되면
+    «이 크기로 배경 그림 만들기» 로 연 카드에 그림이 등록되면
     (폴더 읽기가 그 그림을 들여옵니다) 그 벽에 곧바로 붙입니다. 사람이 목록에서 다시 찾아 고를 까닭이 없습니다.
   */
   const wallHungRef = useRef<string>("");
@@ -162,7 +162,7 @@ export function usePlannerPlaces({
       .filter((set) => set.complete && set.prefix.startsWith(name))
       .sort((a, b) => a.number.localeCompare(b.number));
     /*
-      **안쪽·바깥은 따로** 겁니다().
+      **안쪽·바깥은 따로** 겁니다 — 한 방이 안팎 두 벌의 껍질을 가질 수 있어, 한쪽에 건다고 다른 쪽이 정해지지 않습니다.
       세트 이름이 «…외벽» 이면 바깥 껍질입니다(`usePlannerMedia.shellOfSet` 과 같은 규칙). 각각 그 껍질이 비어 있을 때만
       손대고, 사람이 이미 걸어 둔 것은 덮지 않습니다.
     */
@@ -187,7 +187,7 @@ export function usePlannerPlaces({
       return;
     }
     /*
-      실외 방은 잘릴 것이 없습니다 — 등장방형 한 장이 그대로 돔이 됩니다.
+      실외 방은 잘릴 것이 없습니다 — 돔이라 등장방형 한 장이 그대로 둘러집니다.
     */
     if (!room.outdoor && !activePlace.blueprint?.includes(DOME_CHIP_ID)) return;
     if (room.panorama) return;

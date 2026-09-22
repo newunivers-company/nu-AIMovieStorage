@@ -1,3 +1,4 @@
+import { SURFACE_BOX, SURFACE_MEDIA } from "@/lib/imageSurface";
 import { useEffect, useRef, useState } from "react";
 import { MousePointer2, PenLine, Slash, Undo2 } from "lucide-react";
 import {
@@ -19,6 +20,9 @@ import { uid } from "@/lib/projectTypes";
  * 함께 올리면 방향이 고정됩니다.
  *
  * # 왜 부품으로 뺐는가
+ *
+ * 동선 그리기는 컷에만 있을 일이 아닙니다 — 캐릭터·배경 그림을 손볼 때도 똑같이 쓰는 기능이라,
+ * 컷 전용 단추로 두면 같은 기능이 자리마다 따로 생깁니다.
  *
  * 그래서 컷 전용 창이 아니라 **공용 이미지 편집 창**(자르기·표시하기·파노라마·전개도)의 한 탭으로 들어갑니다.
  * 그리는 규칙과 굽는 규칙이 여기 한 군데에만 있어야 두 자리가 갈라지지 않습니다(CLAUDE.md 규칙 1).
@@ -266,7 +270,7 @@ export function MotionLinesEditor({
   return (
     <div className="space-y-3">
       {/* ── 도구줄 ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-tour="cropper-motion">
         <select
           value={kind}
           onChange={(event) => setKind(event.target.value as GuideLineKind)}
@@ -348,10 +352,10 @@ export function MotionLinesEditor({
       {/* ── 그림 ────────────────────────────────────────────────────── */}
       {src && (
         <div
-          className="relative w-full overflow-hidden rounded-lg"
+          className={`${SURFACE_BOX} overflow-hidden rounded-lg`}
           style={{ border: "1px solid oklch(1 0 0 / 10%)" }}
         >
-          <img src={src} alt="" className="block w-full select-none" draggable={false} />
+          <img src={src} alt="" className={SURFACE_MEDIA} draggable={false} />
           <svg
             ref={svgRef}
             viewBox={`0 0 ${MOTION_VIEW_W} ${viewH}`}

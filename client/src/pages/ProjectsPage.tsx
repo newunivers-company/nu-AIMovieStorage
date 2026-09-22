@@ -1,3 +1,4 @@
+import { assetSrc } from "@/lib/mediaLibrary";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import GlobalNav from "@/components/GlobalNav";
@@ -32,6 +33,16 @@ import { totalLlmJobCount } from "@/lib/llmActivity";
  * 문구는 전부 `t()` 를 거칩니다(한국어 원문이 열쇠). 튜토리얼이 가리키는 자리에는
  * `data-tour` 가 달려 있습니다 — 이름은 `tutorials/ANCHORS.md` 표와 한 글자도 다르면 안 됩니다.
  */
+/**
+ * 보드 카드 격자.
+ *
+ * 창이 넓어지면 **칸 수를 늘립니다.** 3열에서 멈춰 있어 전체화면에서는 카드 하나가 800px 을
+ * 넘었고, 16:9 대표 그림이 그 폭에 맞춰 늘어나며 위아래가 잘려 얼굴이 날아갔습니다.
+ * 칸을 늘리면 카드가 제 크기로 돌아옵니다.
+ */
+const BOARD_GRID =
+  "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4";
+
 export default function ProjectsPage() {
   const t = useT();
   const locale = useLocale();
@@ -44,6 +55,8 @@ export default function ProjectsPage() {
   const [showHidden, setShowHidden] = useState(false);
 
   const [reloading, setReloading] = useState(false);
+  /** 예시 작품은 그림 넉 장을 복사하므로 잠깐 걸립니다. 그 사이 두 번 눌리면 두 번 만듭니다. */
+  const [makingSample, setMakingSample] = useState(false);
 
   const refresh = () => {
     setProjects(listLocalProjects());
@@ -162,7 +175,7 @@ export default function ProjectsPage() {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-widest uppercase mb-3" style={{ color: "oklch(0.62 0.22 290)" }}>
-                  {t("AIMovieStorage · 프로덕션 보드")}
+                  {t("AI 영상 스토리지 · 프로덕션 보드")}
                 </p>
                 <h1 className="font-display text-3xl font-bold text-white mb-2 tracking-tight">
                   {t("프로젝트 보드")}
@@ -273,9 +286,41 @@ export default function ProjectsPage() {
               <p className="text-[10px]" style={{ color: "oklch(0.42 0.01 265)" }}>
                 {t("제목만 정해 두면 나머지는 나중에 채워도 됩니다")}
               </p>
+
+              {/*
+                **처음 온 사람이 실제로 보는 자리.** 연습용 예시 작품을 설정 안에 숨겨 두면
+                갓 깔고 들어온 사람은 그런 것이 있는 줄도 모릅니다.
+
+                빈 작품으로 시작하면 가위도 시트도 뽑은 그림도 없어 «이 앱이 무엇을 하는지» 를 볼 수가
+                없습니다. 여기에 미리 채워 둔 작품을 함께 두어, 만들지 않고도 열어 볼 수 있게 합니다.
+              */}
+              <div className="mt-3 flex flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={makingSample}
+                  onClick={() => {
+                    setMakingSample(true);
+                    void import("@/lib/tutorialSample")
+                      .then((module) => module.ensureTutorialSample())
+                      .then((id) => navigate(`/project/${id}`))
+                      .catch(() =>
+                        toast.error(t("예시 작품을 만들지 못했습니다. 설정에서 기본 저장 폴더를 먼저 정하세요.")),
+                      )
+                      .finally(() => setMakingSample(false));
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                  style={{ background: "oklch(1 0 0 / 6%)", color: "oklch(0.74 0.12 200)" }}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {makingSample ? t("만드는 중…") : t("연습용 예시 작품 열어 보기")}
+                </button>
+                <p className="text-[10px]" style={{ color: "oklch(0.40 0.01 265)" }}>
+                  {t("인물 · 장소 · 장면과 뽑아 둔 그림이 미리 들어 있는 작품입니다. 튜토리얼도 여기서 돕니다.")}
+                </p>
+              </div>
             </div>
           ) : (
-            <div data-tour="projects-grid" className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "flex flex-col gap-3"}>
+            <div data-tour="projects-grid" className={viewMode === "grid" ? BOARD_GRID : "flex flex-col gap-3"}>
               {/* 새 프로젝트 카드 */}
               <button
                 onClick={() => navigate("/new-project")}
@@ -296,10 +341,31 @@ export default function ProjectsPage() {
                   className="group rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:border-white/15 hover:-translate-y-0.5"
                   style={{ background: "oklch(0.16 0.01 265)", border: "1px solid oklch(1 0 0 / 8%)" }}>
                   {/* 썸네일 자리 */}
-                  <div className="relative h-36 overflow-hidden" style={{ background: "oklch(0.13 0.009 265)" }}>
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Clapperboard className="w-10 h-10" style={{ color: "oklch(0.30 0.01 265)" }} />
-                    </div>
+                  {/*
+                    높이를 못 박지 않고 **16:9 로 둡니다.** 창을 키우면 칸이 넓어지는데 높이가
+                    144px 에 묶여 있어 `object-cover` 가 세로를 잘라 얼굴이 날아갔습니다
+                    — 창을 줄이면 도로 맞는 것이 이 증상의 표시였습니다.
+                  */}
+                  <div className="relative aspect-video overflow-hidden" style={{ background: "oklch(0.13 0.009 265)" }}>
+                    {/*
+                      **대표 그림.** 무엇이 실리는지 화면만 보고는 알 수 없어 카드가 허전해 보였습니다.
+                      사람이 정한 것이 없으면 작품 안에서 찾은 한 장입니다
+                      (`projectCover.coverOf`). 그것도 없을 때만 필름 아이콘이 남습니다.
+                    */}
+                    {assetSrc(project.coverPath) ? (
+                      <img
+                        src={assetSrc(project.coverPath)}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                        // 파일이 사라졌으면 아이콘으로 물러납니다 — 액박은 두지 않습니다.
+                        onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Clapperboard className="w-10 h-10" style={{ color: "oklch(0.30 0.01 265)" }} />
+                      </div>
+                    )}
                     <div className="absolute inset-0" style={{ background: "linear-gradient(to top, oklch(0.16 0.01 265) 0%, transparent 50%)" }} />
                     {/* 코너 프레임 — 이 앱의 표식입니다 */}
                     <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 opacity-40" style={{ borderColor: "oklch(0.62 0.22 290)" }} />

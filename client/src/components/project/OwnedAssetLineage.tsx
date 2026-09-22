@@ -33,8 +33,8 @@ export interface OwnedAssetsProps {
  * 「보유 애셋」 상자 — 인물·장소 패널 안의 **미니 계보 목록**.
  *
  * 예전에는 60px 썸네일을 늘어놓고 누르면 관리 창(`AssetLibraryDialog`)이 열렸습니다.
- * 지시 115(08/26)도 같은 말이었습니다 — 「캐릭터랑 배경 페이지에서
- * 카드형태로 분류하고 부모 자식...에셋 정리 하는 부분 반영 안됐네」.
+ * 에셋도 캐릭터처럼 **부모-자식 카드 목록**이어야 합니다 — 창을 한 겹 띄워야 보이면
+ * 인물 옆에 무엇이 딸려 있는지 한눈에 안 들어옵니다.
  *
  * 에셋마다 이름 줄(이름 칸 + X) 밑에 작은 계보(원본 → 변형)가 붙습니다. 카드를 누르면
  * 공용 에셋과 **같은 편집 창** 이 열립니다(`AssetLineageDialogs`). 계보 조작은 캐릭터·
@@ -82,7 +82,8 @@ export default function OwnedAssetLineage({ owner, assets, ownerPaths, reservedS
     });
   };
 
-  // «애셋 생성» 은 관리 창이 아니라 바로 새 보유 애셋을 만들어 엽니다.
+  // «애셋 생성» 은 관리 창이 아니라 바로 새 보유 애셋을 만들어 엽니다 — 만들려고 누른 사람에게
+  // 목록부터 보여 주면 한 걸음이 헛돕니다.
   const create = () => {
     const created = newVisualAsset();
     onChange((current) => [...current, created]);
@@ -159,7 +160,7 @@ export default function OwnedAssetLineage({ owner, assets, ownerPaths, reservedS
         </div>
       )}
 
-      {/* «애셋 생성» 은 목록 끝에 — 아래로 길어지니 위에 두면 오르내립니다. */}
+      {/* «애셋 생성» 은 목록 끝에 — 목록이 아래로 길어지니 위에 두면 단추가 오르내립니다. */}
       <button
         type="button"
         onClick={create}

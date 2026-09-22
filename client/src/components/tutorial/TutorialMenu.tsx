@@ -4,13 +4,18 @@ import { useLocation } from "wouter";
 import { BookOpen, Check } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { pageForLocation, startTutorial, useReportedTutorialPage, useTutorial } from "@/lib/tutorialStore";
-import { FULL_TUTORIAL, PLANNER_TUTORIALS, tutorialsFor, type Tutorial } from "@/tutorials";
+import { FULL_TUTORIAL, tutorialsFor, type Tutorial } from "@/tutorials";
 
 /**
- * 위 띠의 «튜토리얼» 단추와 그 아래 펼쳐지는 목록.
+ * «튜토리얼» 단추와 그 아래 펼쳐지는 목록. 위 띠에 하나, 구도잡기 창의 머리줄에 하나입니다.
  *
- * 세 묶음입니다 — «전체 따라하기» 하나, «이 페이지 기능»(지금 화면의 것만), «구도잡기 기능»
- * (구도잡기는 주소가 없어 어느 화면에서든 늘 보입니다). 
+ * 두 묶음입니다 — «전체 따라하기» 하나, 그리고 **지금 화면의 기능**뿐. 작업하다 막혀서 여는 것이라,
+ * 지금 보고 있지도 않은 화면의 갈래까지 늘어놓으면 찾는 데만 한참 걸립니다.
+ *
+ * 구도잡기 갈래 열한 개를 어느 화면에서든 늘 세워 두었다가 뺐습니다 — 창이 닫힌 채로 «방과 환경» 을
+ * 누르면 걸음이 가리키는 자리가 하나도 없어 「이 단계의 자리가 지금 화면에 없습니다」 만 뜨고,
+ * 정작 창을 여는 길은 어디에도 없습니다. 이제 그 갈래는 **구도잡기 창이 열려 있을 때만**
+ * 목록에 오릅니다 — 창이 열리는 동안 스스로 «지금 화면은 planner» 라고 알립니다.
  *
  * 설정에서 튜토리얼을 끄면 단추째 사라집니다 — 꺼 놓았는데 단추가 남아 있으면 «껐는데 왜 있나» 가 됩니다.
  *
@@ -26,6 +31,9 @@ export default function TutorialMenu() {
   const reported = useReportedTutorialPage();
   const [open, setOpen] = useState(false);
   const [left, setLeft] = useState(0);
+  // 판은 body 로 내보내므로 단추가 어디 있든 스스로 자리를 재야 합니다. 위 띠와 구도잡기 창의
+  // 머리줄 두 곳에서 쓰는데, 창은 화면 가운데 떠 있어 «띠 아래» 로 못 박아 두면 어긋납니다.
+  const [top, setTop] = useState(48);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -44,7 +52,10 @@ export default function TutorialMenu() {
 
   const toggle = () => {
     const box = buttonRef.current?.getBoundingClientRect();
-    if (box) setLeft(Math.max(8, Math.min(box.left, window.innerWidth - PANEL_WIDTH - 8)));
+    if (box) {
+      setLeft(Math.max(8, Math.min(box.left, window.innerWidth - PANEL_WIDTH - 8)));
+      setTop(box.bottom + 6);
+    }
     setOpen((value) => !value);
   };
 
@@ -122,20 +133,29 @@ export default function TutorialMenu() {
               type="button"
               aria-label={t("튜토리얼 메뉴 닫기")}
               onClick={() => setOpen(false)}
+              data-tutorial-layer=""
               className="fixed inset-0 z-[94] cursor-default"
+              style={{ pointerEvents: "auto" }}
             />
             <div
-              className="fixed top-12 z-[95] max-h-[75vh] overflow-y-auto rounded-xl p-1.5 shadow-2xl"
+              data-tutorial-layer=""
+              className="fixed z-[95] max-h-[75vh] overflow-y-auto rounded-xl p-1.5 shadow-2xl"
               style={{
+                top,
                 left,
                 width: `min(${PANEL_WIDTH}px, calc(100vw - 1rem))`,
                 background: "oklch(0.14 0.01 265)",
                 border: "1px solid oklch(1 0 0 / 12%)",
+                // 구도잡기 창(Radix 모달)이 body 의 클릭을 꺼 두므로 판이 제 몫을 되살립니다.
+                pointerEvents: "auto",
               }}
             >
               {group(t("전체 따라하기"), [FULL_TUTORIAL])}
-              {group(t("이 페이지 기능"), forPage, t("이 화면의 튜토리얼이 없습니다"))}
-              {group(t("구도잡기 기능"), PLANNER_TUTORIALS)}
+              {group(
+                page === "planner" ? t("구도잡기 기능") : t("이 페이지 기능"),
+                forPage,
+                t("이 화면의 튜토리얼이 없습니다"),
+              )}
             </div>
           </>,
           document.body,

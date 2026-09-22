@@ -19,7 +19,8 @@ import { getActiveProvider, getApiKeyStatus } from "@/lib/llm";
  * 아무것도 가리지 않는 유일한 자리입니다.
  *
  * 문구는 전부 `t()` 를 거칩니다 — 한국어 원문이 열쇠라 코드에는 한국어가 그대로 남고,
- * 설정에서 언어를 바꾸면 `useT` 가 다시 그립니다().
+ * 설정에서 언어를 바꾸면 `useT` 가 다시 그립니다 — 띠는 모든 화면에 걸쳐 있어서, 여기가 한국어로 남으면
+ * 언어를 바꿔도 «안 바뀌었다» 로 보입니다.
  */
 export default function GlobalNav() {
   const t = useT();
@@ -65,7 +66,7 @@ export default function GlobalNav() {
         className="mr-2 flex items-center gap-2 text-sm font-semibold text-white"
       >
         <Film className="h-4 w-4" style={{ color: "oklch(0.78 0.18 290)" }} />
-        {t("AIMovieStorage")}
+        {t("AI 영상 스토리지")}
       </button>
 
       {items.map((item) => {

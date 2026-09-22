@@ -13,7 +13,8 @@ import { GroupRows } from "./ObjectGroupPanel";
  * 세워 둔 소품 목록 — **한 줄에 하나**, 묶은 것은 덩어리 한 줄로.
  *
  * 배치 탭(캐릭터 소품)과 환경 탭(그 방의 배경 소품)이 같이 씁니다. 목록에 무엇을 낼지는 부르는 쪽이 정합니다
- * (`objects`) — 
+ * (`objects`) — 두 탭의 소품을 한 목록에 섞으면 이게 환경 소품인지 캐릭터 소품인지 가려낼 수 없고,
+ * 줄만 길어져 찾기도 어렵습니다.
  *
  * 이름은 **두 번 눌러** 고칩니다.
  * 아래쪽 속성 칸에 이름 입력칸을 따로 두면, 덩어리를 골랐을 때도 남아 무엇의 이름인지 헷갈립니다.
@@ -93,11 +94,13 @@ export function ObjectList({
             ) : (
               <button
                 type="button"
+                // 소품을 골라야 조명·시트로 바꿔 그리기·관절에 붙이기·에셋 만들기 칸이 생깁니다.
+                data-tour-switch="layout-light layout-object-swap layout-object-asset layout-attach-bone layout-object-group"
                 onClick={(event) => {
                   /*
                     Ctrl(맥은 ⌘) 로 누르면 **함께 잡습니다** — 둘 이상이면 아래에 «묶기» 가 뜹니다.
-                    
-                    체크칸은 한 줄에 늘 붙어 있어 자리를 먹는데, 실제로 쓰는 건 묶을 때뿐입니다.
+                    줄마다 체크칸을 두지 않은 까닭 — 체크칸은 한 줄에 늘 붙어 있어 자리를 먹는데,
+                    실제로 쓰는 건 묶을 때뿐입니다. 조명 줄도 같은 손놀림으로 잡습니다.
                   */
                   if (event.ctrlKey || event.metaKey) {
                     // 조명은 묶을 수 없습니다(`groupObjectsIn`) — 잡히지도 않게 둡니다.

@@ -1,3 +1,4 @@
+import { SURFACE_BOX, SURFACE_MEDIA } from "@/lib/imageSurface";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { loadImageForCanvas } from "@/lib/mediaLibrary";
@@ -249,7 +250,12 @@ export default function ImageMarkupEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      {/*
+        저장 줄(이름 칸 · «표시한 그림 저장»)은 표시를 하나라도 찍어야 생깁니다. 튜토리얼이 그것을
+        가리키면 아직 아무것도 안 그린 사람에게는 영영 안 보이므로, **늘 있는 이 도구줄**이 두 이름을
+        같이 받습니다 — 튜토리얼이 가리킬 자리는 늘 화면에 있거나, 아니면 대신 눌러 줘야 합니다.
+      */}
+      <div className="flex flex-wrap items-center gap-2" data-tour="cropper-mark-shapes">
         {(["anchor", "rect", "ellipse", "free"] as MarkShape[]).map(item => {
           const Icon =
             item === "anchor" ? MapPin : item === "rect" ? Square : item === "ellipse" ? CircleIcon : PenLine;
@@ -278,7 +284,7 @@ export default function ImageMarkupEditor({
         </span>
 
         {marks.length > 0 && onSave && (
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1.5" data-tour="cropper-mark-made">
             <input
               value={saveName}
               onChange={event => setSaveName(event.target.value)}
@@ -328,15 +334,15 @@ export default function ImageMarkupEditor({
         onPointerDown={startDraw}
         onPointerMove={moveDraw}
         onPointerUp={endDraw}
-        className="relative w-full select-none overflow-hidden rounded-lg"
+        className={`${SURFACE_BOX} overflow-hidden rounded-lg`}
         style={{ background: "oklch(0.10 0.008 265)", border: "1px solid oklch(1 0 0 / 10%)", cursor: "crosshair" }}
       >
-        <img src={imageSrc} alt="전경" className="pointer-events-none block w-full" draggable={false} />
+        <img src={imageSrc} alt="전경" className={`pointer-events-none ${SURFACE_MEDIA}`} draggable={false} />
 
         {/*
           표시 덮개 — 저장본과 **같은 함수**(drawImageMarks)로 CSS px 크기에 그립니다.
           예전 SVG(viewBox 0~100 을 늘려 그림)는 가로로 긴 그림에서 앵커 원이 타원이 되고
-          번호표가 DOM 배지라 저장한 파일과 모양이 달랐습니다().
+          번호표가 DOM 배지라, 화면에서 보던 모양과 저장한 파일의 모양이 서로 달랐습니다.
         */}
         <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>

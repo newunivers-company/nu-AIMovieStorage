@@ -4,8 +4,6 @@ import { Pencil } from "lucide-react";
 /**
  * 앱 디자인에 맞춘 **값 입력 창** — `window.prompt` 를 대신합니다.
  *
- *
- *
  * `window.prompt` 는 주소창 도메인("127.0.0.1:3000의 메시지")이 그대로 뜨고, 단위도
  * 설명도 넣을 자리가 없습니다. 무빙 각도처럼 **자주 고치는 값**일수록 앱 안에서
  * 끝나야 손이 끊기지 않습니다.
@@ -38,8 +36,7 @@ type Pending = PromptOptions & { resolve: (value: string | null) => void };
  * 하나만 두면 안 되는 까닭 — 구도잡기는 Radix Dialog 안에서 열리고, Radix 는 포커스를
  * 그 Dialog 안에 **가둡니다**(`FocusScope`). Dialog 밖(앱 뿌리)에 그린 입력칸은 눌러서
  * 포커스를 줘도 Radix 가 곧바로 되가져가, **글자를 칠 수가 없었습니다**
- * (단추는 눌리는데 타이핑만
- * 안 되는 것이 이 증상의 표시였습니다).
+ * (창 위에 뜨는 것마다 입력만 안 되고 단추는 눌리는 것이 이 증상의 표시였습니다).
  *
  * 그래서 구도잡기는 **자기 Dialog 안에** 창을 하나 더 둡니다. 둘이 동시에 살아 있을 때
  * 안쪽 것이 답해야 하므로 목록의 마지막을 씁니다. 닫히면 스스로 빠지고 바깥 것이
@@ -114,12 +111,13 @@ export function PromptDialogHost() {
   return (
     <div
       /*
-        **가장 위에 섭니다.** 
+        **가장 위에 섭니다.**
 
         구도잡기(Radix Dialog)가 z-50, 관절 파이 메뉴가 z-60 입니다. 값 입력 창은 그
         위에서 답을 기다리는 창이라 무엇에도 가리면 안 됩니다 — 가리면 답을 못 하는데
         뒤도 못 만지는 «멈춘 화면» 이 됩니다.
       */
+      data-tutorial-layer=""
       className="fixed inset-0 z-[2147483000] flex items-center justify-center p-6"
       style={{
         background: "oklch(0 0 0 / 68%)",
@@ -142,7 +140,7 @@ export function PromptDialogHost() {
 
         잡는 단계(capture)에서 무조건 끊었더니 구도잡기의 한 글자 단축키(G·F·A·1·2·3,
         스페이스)는 막혔지만 **입력칸으로 가는 키까지 함께 막혔습니다** — 값을 고칠 수가
-        없었어요(). 창 안의 입력칸이 목표일 때는
+        없었어요. 창 안의 입력칸이 목표일 때는
         그대로 흘려보내고, 그 밖에서 눌린 키만 여기서 끝냅니다.
       */
       onKeyDownCapture={(event) => {

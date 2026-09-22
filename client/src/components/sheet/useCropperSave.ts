@@ -109,7 +109,8 @@ export function useCropperSave({
   /**
    * 저장 직후 앱이 그 파일을 읽을 수 있는지 한 번 확인합니다.
    *
-   * — 파일은 멀쩡한데 화면이 깨지면 사람이 원인을 알 길이 없었습니다. 못 읽으면
+   * 지우기로 만든 그림이 폴더에는 멀쩡히 저장됐는데 화면에는 깨진 그림으로 떴습니다 —
+   * 파일과 화면 중 어느 쪽이 잘못된 것인지 알 길이 없었습니다. 못 읽으면
    * 경로와 크기를 알림으로 띄워 바로 짚을 수 있게 합니다. 등록은 그대로 진행합니다 — 받는 쪽이
    * 방금 만든 blob(`thumb`)을 폴백으로 보여 줍니다.
    */
@@ -133,7 +134,7 @@ export function useCropperSave({
     kind: "mark" | "motion" | "panorama",
     extraMarks?: ImageMark[],
   ) => {
-    // 표시한 그림은 «원본 이름_표시» — 무엇을 한 것인지 이름에 남깁니다. 표시 창의 이름 칸은
+    // 표시한 그림은 «원본 이름_표시» — 파일 이름만 보고 무슨 일을 한 것인지 알아야 합니다. 표시 창의 이름 칸은
     // 기본값이 «표시» 라 그대로면 두 번 붙지 않게 빼고, 다르게 적었으면 꼬리로 붙입니다.
     // 파노라마는 면 이름(`front`·`equirect`)이 곧 무엇인지라 기존 규칙 그대로입니다.
     const full =
@@ -152,7 +153,8 @@ export function useCropperSave({
       assetType: markAssetType || assetType,
       ownerName,
       stem: full,
-      // 돔에 두르는 파노라마는 **별도 폴더**에. 자리로 갈려야 목록에서 가릴 수 있습니다.
+      // 돔에 두르는 파노라마는 **별도 폴더**에. 돔을 고를 때는 파노라마만 떠야 하는데,
+      // 자리로 갈리지 않으면 낱장 그림과 섞여 목록에서 가려낼 길이 없습니다.
       subdir: kind === "panorama" ? PANORAMA_DIR : undefined,
     });
     if (!result?.path) {
@@ -187,7 +189,8 @@ export function useCropperSave({
   /**
    * 파노라마에서 잘라낸 여섯 면을 **한 세트**로 저장합니다.
    *
-   * - 자리: 주인 폴더 안 `6면/` . 뿌리에 섞이지 않으니 목록이 세트 카드 하나로 접힙니다.
+   * - 자리: 주인 폴더 안 `6면/`. 뿌리에 그냥 쏟으면 원본까지 여덟 장이 흩어져 보입니다 —
+   * 폴더로 갈라 두면 목록이 세트 카드 하나로 접힙니다.
    * - 이름: `<접두>_<면>_<NNN>` — 면 이름을 **앞에 두지 않습니다.** 폴더 이름 바꾸기(Rust
    * `rename_owner_tree`)와 마그니픽 @태그가 «접두 먼저» 를 전제로 해서, 앞에 두면 장소 이름을
    * 바꿀 때 여섯 면이 옛 이름으로 남습니다. 화면은 `faceDisplayName` 이 «정면 · 장소 #1» 로 보여 줍니다.
@@ -344,7 +347,7 @@ export function useCropperSave({
       const saved: CropperSavedFile[] = [];
 
       // 지운 판 자체도 남깁니다. 원본은 그대로 두고 새 파일로.
-      // 이름은 «원본 이름_지움» — 
+      // 이름은 «원본 이름_지움» — 파일 이름만 보고 무슨 일을 한 것인지 알아야 합니다.
       if (erases.length) {
         const blob = await toBlob(clean);
         if (blob) {

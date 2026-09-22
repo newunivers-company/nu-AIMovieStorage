@@ -39,7 +39,7 @@ export type BlueprintOption = {
     패널은 `result` 가 없는 칩이면 설명 줄을 그냥 건너뜁니다.
   */
 
-  /** 완성 형태 — 한 줄. */
+  /** 완성 형태 — 한 줄. 어떤 배경이 완성되는지 칩만 보고 알 수 있게. */
   result?: string;
   /** 어디에 쓰는가 — 짧게 */
   use?: string;
@@ -147,10 +147,10 @@ function headingOf(degrees: number): string {
 }
 
 /**
- * 표시 목록을 «동선» 문장으로. 「도면도 같은 실내 배경 만들어서 화살표로 이동 동선 표시」
+ * 표시 목록을 «동선» 문장으로 — 도면 같은 실내 배경 위에 화살표로 이동 동선을 그리게 하려는 것입니다.
  *
  * 자유선은 시작점 하나만 실려 오므로(`describeMarksForLlm`) 경로 모양은 note 에 기댑니다.
- * note 가 한국어여도 그대로 붙입니다 — 사용자가 적은 말이 가장 정확한 재료입니다.
+ * note 가 한국어여도 그대로 붙입니다 — 손으로 적어 둔 말이 가장 정확한 재료입니다.
  */
 export function renderRouteMarksEn(marks: BlueprintRouteMark[] | null | undefined): string {
   if (!marks?.length) return MARKS_FALLBACK_EN;
@@ -171,10 +171,10 @@ export function renderRouteMarksEn(marks: BlueprintRouteMark[] | null | undefine
 /**
  * 앵커 파노라마가 담을 **공간의 실제 넓이**(미터).
  *
- *
+ * 등장방형은 넓이를 정해 두고 그 값을 프롬프트에 실어 보내야 합니다.
  * 파노라마는 **각도만 담고 거리는 담지 않습니다**(`background-scale.md`). 넓이를 안 주면 생성기가
  * 방을 제멋대로 넓히거나 좁혀서, 여섯 면으로 잘라 구도잡기에 세웠을 때 벽이 인물과 안 맞습니다.
- * 9/12 «실측 방의 사이즈를 주고 거기에 맞춰 배경을 AI 생성» 과 같은 뜻을 파노라마에도 넣습니다.
+ * «실측 방의 사이즈를 주고 거기에 맞춰 배경을 AI 생성» 과 같은 뜻을 파노라마에도 넣습니다.
  *
  * 가로는 마스터 그림의 좌우, 깊이는 위아래입니다(앵커를 찍은 그림과 같은 방향).
  * 높이는 천장까지 — 실외면 비워 둡니다.
@@ -269,7 +269,7 @@ export function renderPanoramaSpaceEn(
 }
 
 /**
- * 칩에 맞춘 상자 치수. 실외는 **정육면체**(한 변 = 가로) — 
+ * 칩에 맞춘 상자 치수. 실외는 **정육면체**(한 변 = 가로) — 트인 자리라 깊이·높이를 따로 잴 것이 없습니다.
  * 실내 층고가 비었거나 눈높이보다 낮으면 2.4 m 로 봅니다(천장이 눈 아래면 각도 단서가 뒤집힙니다).
  */
 export function panoramaBoxOf(space: PanoramaSpace, indoor: boolean): Required<PanoramaSpace> {
@@ -294,7 +294,7 @@ export function describePanoramaSpaceKo(space: PanoramaSpace, indoor: boolean): 
 /**
  * ── 전개도(«등장방형») 프롬프트 한 벌 — 틀·칸·카메라는 앱이, 장소만 LLM·규칙이 ─────────────────
  *
- * 마그니픽 결과가 전부 칸 틀 위에 **항공 사진**을 덮은 모양이었습니다.
+ * 마그니픽 결과가 전부 칸 틀 위에 **항공 사진**을 덮은 모양으로 나왔습니다.
  * 받은 프롬프트가 «@표시_002 와 같은 장소를 유지한다 … 구도·배치 보존» 으로 시작하고, 칸 지시는 LLM 이 한 줄로 줄여
  * 뒤에 묻었습니다. 한글 프롬프트에는 칸 지시가 아예 없었고, 올라간 것은 한글이었습니다.
  *
@@ -340,7 +340,7 @@ ${ko}`;
 /**
  * LLM 답에서 **앱의 틀 문장을 걷어 내고 장소 묘사만** 남깁니다.
  *
- * 2026-09-15 실제: 요청에 실어 보낸 칩 문장(틀·칸·옆면 규칙 전부)을 LLM 이 영문 답에 통째로 베껴 넣고 그 뒤에 장소를
+ * 실제로 겪은 일 — 요청에 실어 보낸 칩 문장(틀·칸·옆면 규칙 전부)을 LLM 이 영문 답에 통째로 베껴 넣고 그 뒤에 장소를
  * 붙였습니다. 그걸 `composeUnfoldPrompt` 가 다시 «PLACE:» 자리에 끼우니 틀 문장이 두 번, «PLACE: the place described
  * below» 까지 겹친 프롬프트가 나갔습니다. 템플릿으로 막아도 LLM 은 어길 수 있으니, 앱이 아는 틀 문장 줄을 글자 그대로 지웁니다.
  */
@@ -443,7 +443,7 @@ export function unfoldNegativeOf(chipId: string): { en: string; ko: string } {
 /**
  * «구성» 으로 놓을 생성기의 **비율**.
  *
- * 2026-09-15 나노 바나나 결과: «구성» 이 비율을 안 넘겨 늘 16:9 로 놓였고, 4:3 큐브맵 틀이 가로로 늘어나 가운데 줄에
+ * 나노 바나나로 뽑아 본 결과 — «구성» 이 비율을 안 넘겨 늘 16:9 로 놓였고, 4:3 큐브맵 틀이 가로로 늘어나 가운데 줄에
  * 다섯 칸 넘게 그려졌습니다. 전개도는 틀과 **같은 비율**이라야 칸이 그대로 옵니다. 마그니픽이 받는 비율 가운데 가장 가까운 것.
  */
 export function backgroundComposeAspect(
@@ -490,14 +490,14 @@ function unfoldEnglishOf(item: BlueprintOption, text: string, space?: PanoramaSp
 /**
  * 전개도 문장이 **틀 그림을 이름으로** 부르게 합니다.
  *
- * 칩 문장은 «the attached colour
+ * 전개도 문장에 틀 그림을 가리키는 @ 태그가 빠져 있었습니다. 칩 문장은 «the attached colour
  * map» 이라고만 적어서, 마그니픽 생성기가 올라간 그림 둘(정체성 기준·틀) 중 어느 것이 칸 틀인지 몰랐고 LLM 도 태그를
  * 안 붙였습니다. 틀의 태그를 문장 맨 앞에 박아 둡니다 — 규칙 조립은 그대로 나가고, LLM 은 이 문장을 앞에 두라고 시킵니다.
  */
 function withTemplateMention(text: string, mention?: string | null, outdoor = false): string {
   if (!mention) return text;
   /*
-    2026-09-15 마그니픽 MCP · 나노 바나나 프로로 고른 문장입니다. 틀은 바탕과 거의 같은 회색 칸이라(`buildUnfoldTemplate`) 색 이름을
+    마그니픽 MCP · 나노 바나나 프로로 실제로 뽑아 보며 고른 문장입니다. 틀은 바탕과 거의 같은 회색 칸이라(`buildUnfoldTemplate`) 색 이름을
     부르지 않습니다 — 색 틀 시절에는 틀 색이 테두리로 남고 벽이 물들었습니다. «칸의 자리·너비·높이 그대로 가득» 을 빼면 그림을 칸보다
     작게 그려 칸 사이에 틈이 났습니다. 실외는 빈 회색 칸(윗줄 3열)에 달이 한 번 더 그려지는 일이 잦아 그 금지를 더합니다.
   */
@@ -546,7 +546,7 @@ export const CHARACTER_BLUEPRINT_GROUPS: BlueprintGroup[] = [
       option("body-front", "기준 전신", "canonical front full-body identity reference, 0 degrees facing camera, neutral balanced pose"),
       option("body-left", "좌측 전신", "full-body view rotated 90 degrees so the character's LEFT side faces the camera, character faces the left edge of the frame, consistent proportions"),
       // 좌측은 90°, 우측은 **270°** 로 적습니다. 둘 다 90° 라고 쓰면 한글 번역에서
-      // 「패널 2도 90도, 패널 3도 90도」 가 나와 어느 쪽인지 알 수 없습니다. (지시 291)
+      // 「패널 2도 90도, 패널 3도 90도」 가 나와 어느 쪽인지 알 수 없습니다.
       option("body-right", "우측 전신", "full-body view rotated 270 degrees (the opposite direction from the left-side panel) so the character's RIGHT side faces the camera, character faces the right edge of the frame, consistent proportions"),
       option("body-back", "후면 전신", "full-body view rotated 180 degrees, back of the character facing camera, showing silhouette and hairstyle continuity"),
       option("body-three-quarter", "3/4 전신", "three-quarter full-body hero reference rotated 45 degrees, readable silhouette"),
@@ -606,12 +606,13 @@ export const CHARACTER_BLUEPRINT_GROUPS: BlueprintGroup[] = [
       option("outfit-back", "의상 후면", "back of the complete outfit, showing closures, hood, cape, or back detail"),
       /*
         ── 장신구와 소지품은 **다른 것**입니다 ──────────────────────────
-        
+        장신구는 몸에 붙어 있는 것이라 전신·얼굴 클로즈업에도 함께 나와야 하고,
+        소지품은 따로 떼어 나와야 합니다.
 
         여태 한 칩(「장신구·소지품」)이라 둘이 같이 딸려 왔습니다. 그런데 이 둘은
         레퍼런스로서 **정반대**입니다. 목걸이는 그 사람의 외형이라 전신·얼굴 칸에
         늘 보여야 하고, 가방은 그 사람이 아니어서 인물 칸에 있으면 생성기가
-        사람과 물건을 한 덩어리로 읽습니다(같은 날 사용자의 소품 지시).
+        사람과 물건을 한 덩어리로 읽습니다.
 
         경계는 **「손을 펴면 떨어지는가」** — 걸친 것은 인물, 드는 것은 소품.
         그래서 드는 것은 여기서 빼고 「소품·상호작용」 그룹으로 보냅니다.
@@ -684,8 +685,8 @@ export const PANORAMA_INTERIOR_CHIP_ID = "space-panorama-interior";
 /**
  * «방 바깥쪽 · 외벽 전개도» 칩 id — 방 상자의 **바깥 껍질**(건물 외벽·지붕)을 뽑습니다.
  *
- * , 「방 안쪽이랑 방 바깥쪽 면
- * 말하는 거야」. 방 바깥쪽 네 벽은 **한 자리에서 360° 로 찍는 등장방형으로는 담을 수 없습니다** — 방 밖 어디에
+ * 방은 **안쪽 면과 바깥쪽 면을 둘 다** 뽑을 수 있어야 합니다. 그런데 방 바깥쪽 네 벽은
+ * **한 자리에서 360° 로 찍는 등장방형으로는 담을 수 없습니다** — 방 밖 어디에
  * 서도 벽은 두 면까지만 보이고, 지붕은 안 보입니다. 그래서 바깥쪽은 같은 방 크기로 짓는 **외벽 전개도**(틀 그림 +
  * 프롬프트, 구도잡기 «바깥면(외벽)» 과 같은 `buildUnfoldPrompt`)입니다. 들어온 전개도는 자동으로 잘려
  * «<장소>_외벽» 세트가 되고, 구도잡기에서 그 세트를 걸면 바깥 껍질로 들어갑니다.
@@ -697,7 +698,7 @@ export const CUBEMAP_CHIP_ID = "space-cubemap";
 /**
  * «파노라마 · 실외 돔» 칩 id — 등장방형 한 장을 구도잡기의 지면 투영 돔에 감습니다(`buildPanoramaDome`).
  *
- * 한가운데에서는 이음매 없이
+ * 실외는 구 형태로 감는 파노라마가 맞고, 돔은 카메라 무빙 없는 씬용입니다. 한가운데에서는 이음매 없이
  * 가장 자연스럽고, 카메라가 가운데서 멀어지면 바닥이 번져서 제자리 컷용입니다. 전개도 칩과 같은 «장소만 LLM, 틀은 앱» 길을 타되
  * 틀 그림·자동 자르기는 없습니다(`isUnfoldChipId` 에는 들고, 틀·자르기 판정에서만 뺍니다).
  */
@@ -707,7 +708,7 @@ export const DOME_CHIP_ID = "space-panorama-dome";
 export const isOutdoorSpaceChipId = (id: string) => id === CUBEMAP_CHIP_ID || id === DOME_CHIP_ID;
 
 /**
- * «전개도 · 방 안쪽» 칩 id. 
+ * «전개도 · 방 안쪽» 칩 id — 2차에 등장방형 하나만 서 있던 자리를 넓힌 것입니다.
  * 방 안쪽은 등장방형(360°) 말고도 전개도로 뽑을 수 있습니다 — 벽이 휘지 않고 곧게 나오는 대신 앵커 시점이 없습니다.
  * 바깥쪽 전개도와 틀 그림·치수를 같이 씁니다.
  */
@@ -721,7 +722,7 @@ export const isUnfoldChipId = (id: string) => id === CUBEMAP_CHIP_ID || id === D
 /**
  * 고른 칩에 맞는 **공간 크기**. 방(안쪽 등장방형·안쪽/바깥쪽 전개도)은 한 벌을 같이 쓰고, 실외는 따로입니다.
  *
- * 한 칸에 두었더니 숲(정육면체 50 m)을 넣고
+ * 실내는 공간 크기를 한 벌로 나눠 쓰고 실외는 따로 둡니다. 한 칸에 두었더니 숲(정육면체 50 m)을 넣고
  * 방 칩으로 바꾸면 방이 50×50×50 m 가 되고, 방을 12×15 로 고치면 숲이 12 m 정육면체가 됐습니다.
  */
 export function spaceForChips(
@@ -733,7 +734,7 @@ export function spaceForChips(
   return list.includes(CUBEMAP_CHIP_ID) || list.includes(DOME_CHIP_ID) || list.includes(PANORAMA_CHIP_ID) ? exterior ?? null : room ?? null;
 }
 /**
- * 원통 파노라마 칩 id — **칩은 2026-09-15 에 뺐습니다**. 등장방형이 자동으로 잘리게
+ * 원통 파노라마 칩 id — **칩은 뺐습니다.** 등장방형이 자동으로 잘리게
  * 되면서 원통(하늘·바닥을 앱이 색으로 채우고 세로 화각을 손으로 맞춰야 하는 길)은 쓸 일이 없어졌습니다.
  * 옛 저장값을 읽는 판정이 남아 있어 글자만 둡니다. 원통 그림은 여전히 가위 → 파노라마 탭에서 손으로 폅니다.
  */
@@ -750,7 +751,7 @@ export const isEquirectChipId = (id: string) =>
 export function blueprintForSpace(selected: string[] | undefined, spaceKind?: SpaceKind | null): string[] {
   const list = selected || [];
   /*
-    등장방형 칩은 2026-09-15 에 걷었습니다(2차는 전개도 세 벌 — `CUBEMAP_CHIP_ID` 위 주석). 옛 저장값은 뜻이 가장 가까운
+    등장방형 칩은 걷었습니다(2차는 전개도 세 벌 — `CUBEMAP_CHIP_ID` 위 주석). 옛 저장값은 뜻이 가장 가까운
     전개도로 읽습니다: 옛 한 칩은 카드가 실내면 방 안쪽, 아니면 실외 큐브맵 / 실외 등장방형 → 큐브맵 / 방 안쪽 등장방형 → 방 안쪽.
   */
   const read = (id: string) =>
@@ -886,7 +887,7 @@ export const BACKGROUND_BLUEPRINT_GROUPS: BlueprintGroup[] = [
         mapLike: true,
         allowsLabels: true,
         /*
-          (2026-09-09)
+          도면 같은 실내 배경 위에 화살표로 이동 동선을 얹는 칩입니다.
           «arrow» 낱말은 파노라마 칩에서는 금지지만 여기서는 화살표가 목적입니다.
           `{{marks}}` 는 blueprintEnglish 가 반드시 치웁니다 — 남으면 그림에 글자로 그려집니다.
         */
@@ -925,13 +926,13 @@ export const BACKGROUND_BLUEPRINT_GROUPS: BlueprintGroup[] = [
   {
     id: ANCHOR_PANORAMA_GROUP_ID,
     /*
-      이름을 «2차» 라고 부르지 않습니다. 마스터를 먼저 뽑던 시절의 차례이고,
+      이름을 «2차» 라고 부르지 않습니다. «2차» 는 마스터를 먼저 뽑던 시절의 차례이고,
       지금은 방에서 곧바로 전개도를 뽑습니다. 하는 일 그대로 부릅니다.
     */
     label: "전개도 · 파노라마 뽑기",
     englishLabel: "From the anchor point",
     /*
-      예전에는 여기 북(정면)·남(후면)·서·동·천장·바닥 칩이 같이 있었습니다(2026-09-09 삭제).
+      예전에는 여기 북(정면)·남(후면)·서·동·천장·바닥 칩이 같이 있었습니다(지금은 없습니다).
       여섯 면을 생성기에 따로 시키면 같은 공간이라는 보장이 없고, 칩 문장의
       north/south 가 그림 위 «LOOKING NORTH» 라벨로 그려졌습니다. 파노라마 한 장을 뽑아
       앱의 파노라마 탭에서 계산으로 잘라내면 이음매·달 방위·조명이 저절로 맞습니다.
@@ -943,13 +944,14 @@ export const BACKGROUND_BLUEPRINT_GROUPS: BlueprintGroup[] = [
     options: [
       /*
         ── 2차는 **전개도 세 벌** ──────────────────────────────────────────
-         같은 날 등장방형 칩(실외·방 안쪽)을 다시 세웠다가 걷었습니다. 등장방형은 한 장을
+        등장방형으로 6면을 뽑았더니 잘 안 붙어서 전개도로 뽑는 방식으로 바꾼 것입니다. 등장방형 칩
+        (실외·방 안쪽)을 다시 세웠다가 곧 걷었습니다. 등장방형은 한 장을
         계산으로 다시 투영하니 이음매 자체는 맞지만, ① 생성기가 진짜 등장방형(위아래 늘어남)을 잘 못 그려 하늘·바닥이
         극점으로 뭉개지고 ② 90° 한 면이 가로의 1/4(2752 px 면 688 px)뿐이라 흐리며 ③ 방은 곧은 벽이 휘었습니다.
         문서 16 §10 에서 실제로 성공한 것이 이 세 벌(실외 50 m 정육면체 큐브맵 · 방 안쪽 · 방 바깥)입니다.
 
-        **이름은 «등장방형» 입니다.** , 「등장방형 실외,
-        등장방형 실내 안쪽면, 등장방형 실내 바깥쪽면 이렇게 3개」. 사용자에게 «등장방형» 은 투영 방식이 아니라 «6면
+        **이름은 «등장방형» 입니다** — 화면에는 «등장방형 실외 · 등장방형 실내 안쪽면 · 등장방형 실내
+        바깥쪽면» 셋으로 섭니다. 여기서 «등장방형» 은 투영 방식이 아니라 «6면
         배경» 이라는 뜻입니다 — 무엇으로 뽑는지(전개도)는 앱이 알아서 합니다. id 는 뽑는 방식 그대로 둡니다.
         틀 그림은 프롬프트를 만들 때 레퍼런스에 자동으로 들어갑니다(`usePromptCard.ensureUnfoldTemplate`).
       */
@@ -1013,8 +1015,8 @@ export const BACKGROUND_BLUEPRINT_GROUPS: BlueprintGroup[] = [
       },
       /*
         ── 일반 배경 한 장 ─────────────────────────────────────────────────
-         6면이 아니라 컷에 바로 쓰는
-        눈높이 배경 한 장입니다. 같은 날 «1차 마스터» 정리 때 뺀 진입 전경·입구에서 본 전경·코너 뷰의 문장을 그대로
+        등장방형 말고 일반적으로 배경을 뽑는 항목도 있어야 합니다. 6면이 아니라 컷에 바로 쓰는
+        눈높이 배경 한 장입니다. «1차 마스터» 를 정리하며 뺀 진입 전경·입구에서 본 전경·코너 뷰의 문장을 그대로
         옮겼습니다(마스터는 앵커를 찍는 지도라 눈높이 한 장이 거기 있을 까닭이 없었고, 여기가 제자리입니다).
         카메라가 서는 자리는 앵커(있으면)를 말로 풀어 LLM·규칙 조립이 적습니다.
       */
@@ -1636,17 +1638,16 @@ export const DEFAULT_CHARACTER_BLUEPRINT: string[] = [];
 export const INITIAL_CHARACTER_BLUEPRINT = [
   "body-front",
   /*
-    사용자 2026-09-21 이 화면에서 켜 놓고 「캐릭터 레퍼런스 구성 토글 기본값 이걸로 해줘」
-    라고 지정한 아홉 칸입니다. 위 다섯 칸 설명에 「옆면은 앞뒤에서 유추됩니다」 라고
-    적어 두었지만, 실제로 써 보니 옆이 없으면 코 높이와 어깨 두께가 컷마다 흔들립니다.
+    실제로 써 보고 정한 기본 아홉 칸입니다. 위 다섯 칸 설명에 「옆면은 앞뒤에서 유추됩니다」
+    라고 적어 두었지만, 옆이 없으면 코 높이와 어깨 두께가 컷마다 흔들립니다.
     한 쪽(우측)만 넣어 칸 수는 아끼면서 그 흔들림을 잡습니다 — 좌측은 여전히 뺍니다.
   */
   "body-right",
   "body-back",
   "face-front",
-  // 아래 넷은 사용자가 이름을 대어 지정한 것입니다.
-  // 「첫 캐릭터 생성 시 헤어 후면, 눈, 피부 기본, 색상 기준 디폴트로 넣기
-  // (일관성을 살리기 위해) 단 얼굴 좌측, 우측은 기본에서 빼기」
+  // 아래 넷 — 헤어 후면·눈·피부 기본·색상 기준 — 은 일관성을 살리려고 처음부터 켭니다.
+  // 얼굴 좌측·우측은 기본에서 뺍니다: 칸 수를 먹는 데 비해 같은 사람인지를
+  // 가르는 힘이 약합니다.
   //
   // 그래서 face-left·face-right 는 여기 없습니다. 이 넷이 다음 시트에서
   // 「같은 사람인가」 를 재는 자입니다.
@@ -1723,7 +1724,7 @@ function pickBlueprint(kind: BlueprintKind, selected: string[] | undefined): Blu
 /**
  * id → 칩. 목록에 없는 id 는 `undefined` 라 호출하는 쪽이 버립니다.
  *
- * 옛 프로젝트에는 지운 칩(«북(정면)» 등, 2026-09-09)의 id 가 그대로 남아 있습니다.
+ * 옛 프로젝트에는 지운 칩(«북(정면)» 등)의 id 가 그대로 남아 있습니다.
  * 여기서 모르는 id 를 조용히 떨어뜨리므로 터지지도, 요청에 실리지도 않습니다.
  * 뜻이 이어지는 옛 id 만 `LEGACY_BACKGROUND_CHIP_ALIAS` 로 읽어 줍니다.
  */
@@ -1769,7 +1770,6 @@ export function countKnownBlueprint(
  * 무엇인지 스스로 짐작해야 해서, 「좌측 전신」 이 인물의 왼쪽인지 화면의
  * 왼쪽인지 헷갈렸고 헤어 후면에서 고양이 귀가 사라졌습니다. 칸마다 무엇을
  * 그려야 하는지 영문으로 정확히 적어 둔 것이 있는데 그게 안 갔던 것입니다.
- * (지시 203·205)
  */
 export function detailBlueprint(
   kind: BlueprintKind,
