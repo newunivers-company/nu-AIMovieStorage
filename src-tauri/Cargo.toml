@@ -1,7 +1,7 @@
 [package]
 name = "frameforge"
 version = "0.1.0"
-description = "FrameForge local AI preproduction workspace"
+description = "AIMovieStorage local AI preproduction workspace"
 authors = ["FrameForge"]
 license = ""
 repository = ""

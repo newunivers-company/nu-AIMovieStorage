@@ -1,15 +1,15 @@
-# FrameForge — AI Video Production Workbench
+# AIMovieStorage — AI Video Production Workbench
 
-[English](#frameforge--ai-video-production-workbench) · [한국어](#한국어)
+[English](#aimoviestorage--ai-video-production-workbench) · [한국어](#한국어)
 
 A Windows desktop app for planning AI videos, managing character references, blocking shots in 3D,
 and preparing model-specific prompts. Keep each cut's prompts, references and generated assets in one project.
 
-**[Download for Windows](https://github.com/raonolje/AIStorage/releases/latest)** · [Installation](#installation) ·
+**[Download for Windows](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [Installation](#installation) ·
 [Feature details](#what-it-does) · [Build from source](#build-from-source) ·
-[Report an issue](https://github.com/raonolje/AIStorage/issues)
+[Report an issue](https://github.com/raonolje/AIMovieStorage/issues)
 
-| Task | What FrameForge provides |
+| Task | What AIMovieStorage provides |
 | --- | --- |
 | Plan the story | Break a screenplay into characters, locations, scenes and cuts, with a prompt request for each card. |
 | Keep character references connected | Reference sheets, linked variants and `@tags` for reusing the same identity across cuts. |
@@ -24,8 +24,8 @@ and preparing model-specific prompts. Keep each cut's prompts, references and ge
 
 ## Installation
 
-Download the installer or portable ZIP from the **[latest release](https://github.com/raonolje/AIStorage/releases/latest)**.
-Both packages are available in [v0.1.0](https://github.com/raonolje/AIStorage/releases/tag/v0.1.0).
+Download the installer or portable ZIP from the **[latest release](https://github.com/raonolje/AIMovieStorage/releases/latest)**.
+Both packages are available in [v0.1.0](https://github.com/raonolje/AIMovieStorage/releases/tag/v0.1.0).
 Prebuilt packages do not require Node, pnpm or Rust; those tools are only needed to [build from source](#build-from-source).
 
 Open the release's **Assets** section and choose:
@@ -37,7 +37,7 @@ Open the release's **Assets** section and choose:
 
 In v0.1.0 the files are named `AI._0.1.0_x64-setup.exe` and `frameforge_portable.zip`.
 GitHub's automatic **Source code (zip/tar.gz)** archives contain source files, not a ready-to-run app.
-The app's public build uses the product name **AI 영상 스토리지 (공개판)**, so names shown during installation may differ from FrameForge.
+The existing v0.1.0 packages predate the rename and still display **AI 영상 스토리지 (공개판)**. New builds use **AIMovieStorage (공개판)**; existing settings and model storage locations are retained.
 
 - **Windows 10/11, x64.** macOS and Linux are not currently supported.
 - **NVIDIA GPU (CUDA):** needed only for local generation; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
@@ -64,7 +64,7 @@ Write each cut's prompt from scratch and the character drifts, the room grows a 
 wrong wall, and you get the angle the generator likes instead of the one you drew. Every frame
 looks fine on its own; strung together they belong to different films.
 
-FrameForge is the workbench that keeps those three anchored. It manages prompts and references
+AIMovieStorage is the workbench that keeps those three anchored. It manages prompts and references
 in one place, and takes what you generated outside back in **as the reference for the next step**.
 
 It does not generate images itself by default — you write the prompt here, render it in Magnific,
@@ -108,7 +108,7 @@ The app keeps the rule table and rewrites your prompt into that model's dialect 
 
 ### It drives Magnific for you
 
-FrameForge talks to the **Magnific desktop app** directly. Press **Compose** on a cut and it opens
+AIMovieStorage talks to the **Magnific desktop app** directly. Press **Compose** on a cut and it opens
 Magnific, drops the prompt in, uploads the references — layout capture, character sheets, background —
 and wires them into the generator node, so the canvas is set up and waiting instead of you dragging
 files around. Finished renders come back through an inbox and attach themselves to the card that asked.
@@ -138,8 +138,8 @@ Development requires **Windows 10/11**, **Git**, **Node 22+**, **pnpm 10+**, **R
 and **Visual Studio C++ Build Tools**. The GPU and API key requirements above apply only to their optional features.
 
 ```bash
-git clone https://github.com/raonolje/AIStorage.git
-cd AIStorage
+git clone https://github.com/raonolje/AIMovieStorage.git
+cd AIMovieStorage
 pnpm install --frozen-lockfile
 pnpm dev:desktop --edition public  # run with public-edition engine restrictions
 ```
@@ -167,7 +167,7 @@ made from inside the app — so keys are not visible to the web layer and CORS i
 
 ## Suggestions and bug reports
 
-Both are welcome, and wanted. Open an [Issue](https://github.com/raonolje/AIStorage/issues) for anything at all —
+Both are welcome, and wanted. Open an [Issue](https://github.com/raonolje/AIMovieStorage/issues) for anything at all —
 something crashed, something behaved oddly, a step was hard to follow, or a feature you need is missing.
 Korean or English is fine. If it is a bug, the app version, what you clicked and a screenshot make it
 much faster to track down; if it is an idea, just describe what you were trying to do.
@@ -183,14 +183,14 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ## 한국어
 
-### FrameForge — AI 영상 제작 워크벤치
+### AIMovieStorage — AI 영상 제작 워크벤치
 
 인물 레퍼런스, 3D 구도, 모델별 프롬프트와 생성 결과를 한 프로젝트에서 관리하는 Windows 데스크톱 앱입니다.
 시나리오를 씬과 컷으로 나누고, 각 컷의 인물·공간·카메라 구도를 준비하는 작업을 돕습니다.
 
-**[Windows 다운로드](https://github.com/raonolje/AIStorage/releases/latest)** · [설치 안내](#설치-안내) ·
+**[Windows 다운로드](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [설치 안내](#설치-안내) ·
 [기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
-[오류 제보](https://github.com/raonolje/AIStorage/issues)
+[오류 제보](https://github.com/raonolje/AIMovieStorage/issues)
 
 | 작업 | 주요 기능 |
 | --- | --- |
@@ -207,8 +207,8 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ## 설치 안내
 
-**[최신 Release](https://github.com/raonolje/AIStorage/releases/latest)** 페이지에서 설치본이나 무설치 ZIP을 받으세요.
-[v0.1.0](https://github.com/raonolje/AIStorage/releases/tag/v0.1.0)에 두 파일이 모두 게시되어 있습니다.
+**[최신 Release](https://github.com/raonolje/AIMovieStorage/releases/latest)** 페이지에서 설치본이나 무설치 ZIP을 받으세요.
+[v0.1.0](https://github.com/raonolje/AIMovieStorage/releases/tag/v0.1.0)에 두 파일이 모두 게시되어 있습니다.
 배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다. 이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
 
 Release의 **Assets**에서 원하는 형식을 선택합니다.
@@ -220,7 +220,7 @@ Release의 **Assets**에서 원하는 형식을 선택합니다.
 
 v0.1.0의 파일 이름은 `AI._0.1.0_x64-setup.exe`와 `frameforge_portable.zip`입니다.
 GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`)은 바로 실행하는 앱이 아닌 소스 코드입니다.
-앱의 공개판 제품 이름은 **AI 영상 스토리지 (공개판)** 입니다. 설치 화면에는 FrameForge와 다른 이름이 표시될 수 있습니다.
+기존 v0.1.0 배포 파일에는 변경 전 이름인 **AI 영상 스토리지 (공개판)** 이 표시됩니다. 새 빌드부터 **AIMovieStorage (공개판)** 으로 표시하며, 기존 설정과 모델 저장 위치는 유지합니다.
 
 - **Windows 10/11, x64.** macOS·Linux는 아직 지원하지 않습니다.
 - **NVIDIA GPU(CUDA):** 로컬 생성에만 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
@@ -246,7 +246,7 @@ GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`
 머릿속에 그린 앵글 대신 생성기가 좋아하는 앵글이 나옵니다. 컷 하나로는 멀쩡한데
 이어 붙이면 다른 작품이 됩니다.
 
-FrameForge 는 그 일관성을 지키는 **작업대**입니다 — 인물·공간·구도를 각각 **기준으로 붙들어 두고**,
+AIMovieStorage 는 그 일관성을 지키는 **작업대**입니다 — 인물·공간·구도를 각각 **기준으로 붙들어 두고**,
 프롬프트와 레퍼런스를 한자리에서 관리하고, 밖에서 뽑은 결과를 다시 등록해 **다음 단계의 레퍼런스로** 씁니다.
 
 이 앱은 그림을 직접 만들지 않습니다(로컬 모델을 켜면 만들 수도 있습니다). 프롬프트를 여기서 짓고,
@@ -315,8 +315,8 @@ Seedance 는 중괄호. 금지 사항을 어디에 적는지도(네거티브 칸
 GPU와 API 키는 위에서 설명한 선택 기능에만 사용됩니다.
 
 ```bash
-git clone https://github.com/raonolje/AIStorage.git
-cd AIStorage
+git clone https://github.com/raonolje/AIMovieStorage.git
+cd AIMovieStorage
 pnpm install --frozen-lockfile
 pnpm dev:desktop --edition public  # 공개판 엔진 제한을 적용해 실행
 ```
@@ -341,7 +341,7 @@ API 키는 브라우저가 아니라 **앱 설정 폴더에 파일로** 저장�
 
 ## 건의와 오류 제보
 
-둘 다 환영합니다. 무엇이든 [Issues](https://github.com/raonolje/AIStorage/issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
+둘 다 환영합니다. 무엇이든 [Issues](https://github.com/raonolje/AIMovieStorage/issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
 따라 하기 어려웠다거나, 필요한 기능이 없다거나. 한국어·영어 다 좋습니다.
 오류라면 앱 판과 «무엇을 눌렀는지», 화면 한 장이 있으면 훨씬 빨리 찾습니다.
 건의라면 «무엇을 하려고 했는지» 만 적어 주셔도 됩니다.

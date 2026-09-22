@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AI 영상 스토리지",
+  "productName": "AIMovieStorage",
   "version": "0.1.0",
   "identifier": "com.aivideostorage.local",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AI 영상 스토리지",
+        "title": "AIMovieStorage",
         "width": 1440,
         "height": 960,
         "minWidth": 1100,

@@ -162,7 +162,7 @@ export default function ProjectsPage() {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-widest uppercase mb-3" style={{ color: "oklch(0.62 0.22 290)" }}>
-                  {t("AI 영상 스토리지 · 프로덕션 보드")}
+                  {t("AIMovieStorage · 프로덕션 보드")}
                 </p>
                 <h1 className="font-display text-3xl font-bold text-white mb-2 tracking-tight">
                   {t("프로젝트 보드")}

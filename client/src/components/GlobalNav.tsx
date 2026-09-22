@@ -65,7 +65,7 @@ export default function GlobalNav() {
         className="mr-2 flex items-center gap-2 text-sm font-semibold text-white"
       >
         <Film className="h-4 w-4" style={{ color: "oklch(0.78 0.18 290)" }} />
-        {t("AI 영상 스토리지")}
+        {t("AIMovieStorage")}
       </button>
 
       {items.map((item) => {

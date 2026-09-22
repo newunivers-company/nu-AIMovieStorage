@@ -404,7 +404,8 @@ function packPortable(childEnv) {
 
   const outDir = path.join(releaseDir, "bundle", "portable");
   mkdirSync(outDir, { recursive: true });
-  const zipName = `${exe.replace(/\.exe$/, "")}_portable.zip`;
+  const productName = JSON.parse(readFileSync(path.join(tauriDir, "tauri.conf.json"), "utf8")).productName;
+  const zipName = `${productName}_portable.zip`;
   const zipPath = path.join(outDir, zipName);
   rmSync(zipPath, { force: true });
   // 윈도에 기본으로 있는 것만 씁니다 — 빌드 기계에 압축 도구를 더 깔게 하지 않으려고요.

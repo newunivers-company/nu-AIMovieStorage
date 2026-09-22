@@ -111,7 +111,7 @@ async fn ensure_client_id(saved: &mut Saved) -> Res<String> {
         return Ok(id);
     }
     let body = json!({
-        "client_name": "FrameForge",
+        "client_name": "AIMovieStorage",
         "application_type": "native",
         "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
         "response_types": ["code"],
@@ -446,7 +446,7 @@ async fn call_tool(tool: &str, args: Value) -> Res<Value> {
             "params": {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": { "name": "FrameForge", "version": "0.1.0" },
+                "clientInfo": { "name": "AIMovieStorage", "version": "0.1.0" },
             },
         }),
     )
@@ -537,7 +537,7 @@ pub async fn magnific_check() -> Res<usize> {
             "params": {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": { "name": "FrameForge", "version": "0.1.0" },
+                "clientInfo": { "name": "AIMovieStorage", "version": "0.1.0" },
             },
         }),
     )
