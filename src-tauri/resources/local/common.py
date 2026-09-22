@@ -182,6 +182,21 @@ def plain_attention(pipe):
         log("전역 어텐션을 되돌리지 못했습니다: {}".format(error))
 
 
+"""빠른 어텐션이 못 돌 때 내는 말들.
+
+「sage」·「attention」 만 보고 있었더니 **「No available kernel. Aborting execution.」** 을
+못 잡아 그림이 아예 안 나왔습니다(anima). 커널이 바뀌면 문구도 바뀌므로, 아는 말은 여기
+한 곳에 모읍니다 — 엔진마다 따로 적으면 한 엔진만 조용히 못 잡습니다.
+"""
+_FAST_ATTENTION_SIGNS = (
+    "sage",
+    "attention",
+    "no available kernel",
+    "flash",
+    "backend",
+)
+
+
 def run_attention_safe(pipe, run):
     """`run()` 을 돌리되, **빠른 어텐션 때문에 죽으면 기본으로 되돌려 한 번 더** 합니다.
 
@@ -200,7 +215,7 @@ def run_attention_safe(pipe, run):
         return run()
     except Exception as error:
         text = str(error).lower()
-        if "sage" not in text and "attention" not in text:
+        if not any(mark in text for mark in _FAST_ATTENTION_SIGNS):
             raise
         log("빠른 어텐션으로는 못 돌려 기본 어텐션으로 다시 합니다: {}".format(error))
         plain_attention(pipe)
