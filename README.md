@@ -2,76 +2,25 @@
 
 [English](#aimoviestorage--ai-video-production-workbench) · [한국어](#한국어)
 
-A Windows desktop workbench for **local AI image, video and music generation**, **SeedVR2 image upscaling**,
-and shot planning. Connect **Claude or OpenAI (GPT) APIs** to break down scripts, analyze references and write
-model-specific prompts, while keeping characters, 3D blocking and generated assets in one project.
+A Windows desktop app for planning AI videos, managing character references, blocking shots in 3D,
+and preparing model-specific prompts. Keep each cut's prompts, references and generated assets in one project.
 
-**[Download for Windows](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [Installation](#installation) ·
-[Local models](#local-models-and-seedvr2) · [Claude / OpenAI APIs](#claude-and-openai-api-connections) ·
+**[Release status](https://github.com/raonolje/AIMovieStorage/releases)** · [Installation](#installation) ·
 [Feature details](#what-it-does) · [Build from source](#build-from-source) ·
 [Report an issue](https://github.com/raonolje/AIMovieStorage/issues)
 
 | Task | What AIMovieStorage provides |
 | --- | --- |
-| Generate locally | Managed image, video and music engines on your own PC, without requiring ComfyUI. |
-| Upscale images | Local SeedVR2 with 7B, 7B Sharp and 3B model options. |
-| Plan and write with AI | Claude / OpenAI API connections for screenplay breakdown, reference analysis and per-card prompts. |
+| Plan the story | Break a screenplay into characters, locations, scenes and cuts, with a prompt request for each card. |
 | Keep character references connected | Reference sheets, linked variants and `@tags` for reusing the same identity across cuts. |
 | Design the shot | 3D rooms, character poses, camera framing and movement, plus reference-video export. |
-| Work with external generators | Model-specific prompts and Magnific desktop integration, with imported results linked to the project. |
+| Prepare generation | Model-specific prompts, Magnific desktop integration and optional local image, video and music engines. |
 | Organize the results | Project folders, named assets and imported renders linked back to their cards. |
 
-**Workflow:** screenplay → characters & locations → 3D blocking → AI-assisted prompts → local or external generation → upscale & reuse.
+**Workflow:** screenplay → characters & locations → 3D blocking → prompts & references → generation → import & reuse.
 
 > **Beta.** Local generation and model-specific prompts are still being verified. Check results and keep backups.
 > The interface defaults to Korean; English, Japanese and Chinese are available in Settings, with some screens still untranslated.
-
-## Local models and SeedVR2
-
-Choose and install the engines you need from Settings. Local generation runs through the app's own workers;
-ComfyUI is not required for these engines.
-
-| Task | Models available in the public edition |
-| --- | --- |
-| Images | **Qwen-Image (20B)** · **Z-Image Turbo (6B)** · **Krea 2 Turbo (12B)** |
-| Video | **MiniMax-H3** · **Wan 2.2 (A14B)** · **LTX 2.5 (22B)** |
-| Music | **MiniMax-Music3** · **ACE-Step v1 (3.5B)** |
-| Motion capture | **SAM 3D Body (Meta)**; a separate MediaPipe mode is also available |
-| Image upscaling | **SeedVR2** — 7B fp16 by default, with optional 7B Sharp fp16 and 3B fp16 weights |
-
-- **Hardware guidance:** Settings detects GPU/VRAM, system RAM and free disk space, and estimates each engine's fit.
-  Supported engines can use reduced precision or offloading; available modes and memory needs vary by engine.
-- **Model management:** install engines, download weights and manage supported LoRAs from one place.
-  Image/video LoRAs can be searched on Civitai or Hugging Face, imported, and configured with strengths and trigger words.
-- **SeedVR2 workflow:** upscale still images to a target long edge of 2K, 4K, 6K or 8K and keep the result with the project's assets.
-  The current in-app SeedVR2 integration processes still images; video generation is handled by the video engines above.
-
-Model weights are separate downloads. Some models require a Hugging Face token or access approval.
-Hardware fit is an estimate, and each model has its own [license terms](#license).
-**Anima Base (2B)** appears in the private-edition catalog but is excluded from public builds by [edition.json](edition.json).
-
-<details>
-<summary>View the local model manager</summary>
-
-![AIMovieStorage local model settings, showing image, video, music and motion-capture engines](docs/images/local-model-manager.png)
-
-This supplied screenshot includes private-edition entries such as Anima. Memory readings belong to the machine shown;
-they are not a minimum hardware requirement for every model.
-
-</details>
-
-## Claude and OpenAI API connections
-
-Bring your own **Anthropic Claude** or **OpenAI (GPT)** API key. In **Settings**, choose the prompt-writing provider,
-save and verify its API key, then select a model and reasoning effort for each task.
-
-Use the connection for screenplay-to-project breakdown, character/background reference analysis, character and scene
-prompts, cut/video prompts, storyboards and BGM prompt writing. Model choices are saved separately for each provider.
-API activity includes token usage and estimated cost.
-
-These connections provide cloud-based analysis and prompt writing; local image/video/music generation and SeedVR2
-upscaling use the installed engines on your PC. Local engines do not require a Claude/OpenAI key, though some model
-downloads require a separate token. API usage is billed by the selected provider.
 
 ## Installation
 
@@ -89,8 +38,8 @@ Choose one:
 GitHub's automatic **Source code (zip/tar.gz)** archives contain source files, not a ready-to-run app.
 
 - **Windows 10/11, x64.** macOS and Linux are not currently supported.
-- **NVIDIA GPU (CUDA):** required by the GPU-based local generation and SeedVR2 workflows; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
-- **OpenAI or Claude API key:** optional, for [AI-assisted analysis and prompt writing](#claude-and-openai-api-connections).
+- **NVIDIA GPU (CUDA):** needed only for local generation; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
+- **OpenAI or Claude API key:** optional, for LLM-assisted prompt writing.
 - **WebView2 Runtime:** required by the desktop app. If missing when using the portable package, follow its included `읽어보세요.txt`.
 
 ## Workflow and beta status
@@ -116,8 +65,9 @@ looks fine on its own; strung together they belong to different films.
 AIMovieStorage is the workbench that keeps those three anchored. It manages prompts and references
 in one place, and takes what you generated outside back in **as the reference for the next step**.
 
-Generate with the installed local engines, or prepare prompts and references for Magnific, ComfyUI or another
-external generator. Bring the result back so the next sheet can use it as a reference; SeedVR2 can upscale still images locally.
+It does not generate images itself by default — you write the prompt here, render it in Magnific,
+ComfyUI or whatever you use, then bring the result back so the next sheet can point at it.
+(It *can* generate locally — see below.)
 
 > The interface is Korean-first, with English, Japanese and Chinese available in Settings.
 
@@ -176,10 +126,9 @@ Magnific's MCP interface is supported too, for running a batch end to end withou
 
 ### Generating on your own machine
 
-The [local model catalog](#local-models-and-seedvr2) covers images, video, music, motion capture and SeedVR2 image
-upscaling. Image/video LoRAs are searched per engine (Civitai · Hugging Face), downloaded, and managed down to
-strength and trigger words. Use [Claude or OpenAI APIs](#claude-and-openai-api-connections) when you also want
-AI-assisted analysis and prompt writing.
+Images (Qwen-Image · Z-Image Turbo · Krea 2), video (MiniMax-H3 · Wan 2.2 · LTX 2.5) and music
+(MiniMax-Music3 · ACE-Step) run directly, without ComfyUI. LoRAs are searched per engine
+(Civitai · Hugging Face), downloaded, and managed down to strength and trigger words.
 
 ### Files organise themselves
 
@@ -246,75 +195,25 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ### AIMovieStorage — AI 영상 제작 워크벤치
 
-**로컬 AI 이미지·영상·음악 생성**, **SeedVR2 이미지 업스케일**, 컷별 구도 설계를 한곳에서 하는 Windows 데스크톱 앱입니다.
-**Claude 또는 OpenAI(GPT) API** 를 연결해 시나리오 분해·레퍼런스 분석·모델별 프롬프트 작성을 돕고,
-인물·3D 구도·생성 결과를 한 프로젝트에서 관리합니다.
+인물 레퍼런스, 3D 구도, 모델별 프롬프트와 생성 결과를 한 프로젝트에서 관리하는 Windows 데스크톱 앱입니다.
+시나리오를 씬과 컷으로 나누고, 각 컷의 인물·공간·카메라 구도를 준비하는 작업을 돕습니다.
 
-**[Windows 다운로드](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [설치 안내](#설치-안내) ·
-[로컬 모델](#로컬-모델과-seedvr2) · [Claude / OpenAI API](#claudeopenai-api-연결) ·
+**[배포 상태](https://github.com/raonolje/AIMovieStorage/releases)** · [설치 안내](#설치-안내) ·
 [기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
 [오류 제보](https://github.com/raonolje/AIMovieStorage/issues)
 
 | 작업 | 주요 기능 |
 | --- | --- |
-| 로컬 생성 | ComfyUI 없이 내 PC에서 이미지·영상·음악 엔진을 설치하고 실행합니다. |
-| 이미지 업스케일 | 로컬 SeedVR2의 7B·7B Sharp·3B 모델을 선택해 사용합니다. |
-| AI 기획·프롬프트 작성 | Claude / OpenAI API로 시나리오를 분해하고 레퍼런스 분석과 카드별 프롬프트 작성을 돕습니다. |
+| 이야기 구성 | 시나리오에서 인물·장소·씬·컷을 정리하고 카드마다 프롬프트를 요청합니다. |
 | 인물 레퍼런스 관리 | 기준 시트, 연결된 변형, `@태그`로 컷마다 같은 인물의 레퍼런스를 재사용합니다. |
 | 구도 설계 | 3D 공간에서 인물 포즈·카메라·동선을 잡고 레퍼런스 영상을 내보냅니다. |
-| 외부 생성기 연동 | 모델별 프롬프트와 마그니픽 데스크톱 연동을 제공하고 외부 생성 결과를 프로젝트에 연결합니다. |
+| 생성 준비 | 모델별 프롬프트, 마그니픽 데스크톱 연동, 선택형 로컬 이미지·영상·음악 생성을 제공합니다. |
 | 결과 정리 | 프로젝트 폴더와 파일 이름을 관리하고, 외부 생성 결과를 해당 카드에 연결합니다. |
 
-**작업 흐름:** 시나리오 → 인물·장소 → 3D 구도 → AI 프롬프트 작성 → 로컬·외부 생성 → 업스케일·재사용.
+**작업 흐름:** 시나리오 → 인물·장소 → 3D 구도 → 프롬프트·레퍼런스 → 생성 → 결과 등록·재사용.
 
 > **베타입니다.** 로컬 생성과 모델별 프롬프트는 검증 중입니다. 결과를 확인하고 중요한 자료는 백업해 주세요.
 > 기본 언어는 한국어이며 설정에서 English · 日本語 · 中文으로 바꿀 수 있습니다. 일부 화면은 아직 한국어로 표시됩니다.
-
-## 로컬 모델과 SeedVR2
-
-설정에서 필요한 엔진을 골라 설치합니다. 아래 로컬 생성 엔진은 앱의 워커로 직접 실행하므로 ComfyUI가 필요하지 않습니다.
-
-| 작업 | 공개판에서 제공하는 모델 |
-| --- | --- |
-| 이미지 | **Qwen-Image (20B)** · **Z-Image Turbo (6B)** · **Krea 2 Turbo (12B)** |
-| 영상 | **MiniMax-H3** · **Wan 2.2 (A14B)** · **LTX 2.5 (22B)** |
-| 음악 | **MiniMax-Music3** · **ACE-Step v1 (3.5B)** |
-| 모션 캡처 | **SAM 3D Body (Meta)** · 별도의 MediaPipe 모드도 제공 |
-| 이미지 업스케일 | **SeedVR2** — 기본 7B fp16, 선택형 7B Sharp fp16·3B fp16 가중치 |
-
-- **내 PC에 맞는 안내:** GPU·VRAM·시스템 RAM·남은 디스크 공간을 읽고 엔진별 실행 가능성을 추정합니다.
-  지원 엔진은 정밀도를 낮추거나 일부를 시스템 메모리로 옮겨 실행할 수 있으며, 방식과 요구 사양은 엔진마다 다릅니다.
-- **모델·LoRA 관리:** 엔진 설치, 가중치 다운로드, 지원 LoRA 관리를 한곳에서 합니다.
-  이미지·영상용 LoRA를 Civitai·Hugging Face에서 검색하거나 직접 등록하고, 강도와 트리거 단어를 관리합니다.
-- **SeedVR2 작업 흐름:** 정지 이미지를 긴 변 기준 2K·4K·6K·8K로 업스케일하고 결과를 프로젝트 에셋과 함께 관리합니다.
-  현재 앱의 SeedVR2 연결은 정지 이미지용이며, 영상 생성은 위 영상 엔진이 담당합니다.
-
-모델 가중치는 별도로 내려받습니다. 일부 모델에는 Hugging Face 토큰이나 접근 승인이 필요합니다.
-하드웨어 판정은 추정치이며, 모델마다 [라이선스 조건](#라이선스)이 다릅니다.
-**Anima Base (2B)** 는 비공개판 목록에는 있지만 [edition.json](edition.json)에 따라 공개판에서 제외됩니다.
-
-<details>
-<summary>로컬 모델 관리 화면 보기</summary>
-
-![이미지·영상·음악·모션 캡처 엔진을 관리하는 AIMovieStorage 설정 화면](docs/images/local-model-manager.png)
-
-제공된 화면에는 Anima 등 비공개판 항목이 포함되어 있습니다. 표시된 메모리는 촬영한 PC의 정보이며,
-모든 모델에 필요한 최소 사양을 뜻하지 않습니다.
-
-</details>
-
-## Claude·OpenAI API 연결
-
-본인의 **Anthropic Claude** 또는 **OpenAI(GPT)** API 키를 연결합니다.
-**설정**에서 프롬프트 작성 제공자를 고르고, API 키를 저장·확인한 뒤 작업별 모델과 추론 수준을 선택합니다.
-
-시나리오에서 작품·인물·장소·씬·컷 구성하기, 인물·배경 레퍼런스 분석, 시트·컷·영상 프롬프트 작성,
-스토리보드와 BGM 프롬프트 작성에 활용합니다. 작업별 모델 선택은 제공자마다 따로 저장하며,
-API 활동에서 사용 토큰과 예상 비용을 확인할 수 있습니다.
-
-API는 클라우드에서 분석과 프롬프트 작성을 돕고, 로컬 이미지·영상·음악 생성과 SeedVR2 업스케일은 PC에 설치한 엔진이 수행합니다.
-로컬 엔진 실행에는 Claude·OpenAI 키가 필요하지 않습니다. 다만 일부 모델을 받으려면 별도 토큰이 필요하며,
-API 사용료는 선택한 제공자의 과금 기준을 따릅니다.
 
 ## 설치 안내
 
@@ -330,8 +229,8 @@ API 사용료는 선택한 제공자의 과금 기준을 따릅니다.
 GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`)은 바로 실행하는 앱이 아닌 소스 코드입니다.
 
 - **Windows 10/11, x64.** macOS·Linux는 아직 지원하지 않습니다.
-- **NVIDIA GPU(CUDA):** GPU 기반 로컬 생성과 SeedVR2 작업에 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
-- **OpenAI 또는 Claude API 키:** [AI 분석과 프롬프트 작성](#claudeopenai-api-연결)에 사용하는 선택 사항입니다.
+- **NVIDIA GPU(CUDA):** 로컬 생성에만 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
+- **OpenAI 또는 Claude API 키:** LLM 프롬프트 작성에만 필요한 선택 사항입니다.
 - **WebView2 런타임:** 데스크톱 앱에 필요합니다. 무설치본을 쓰는 컴퓨터에 없다면 동봉된 `읽어보세요.txt`를 참고하세요.
 
 ## 작업 흐름과 베타 상태
@@ -356,8 +255,8 @@ GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`
 AIMovieStorage 는 그 일관성을 지키는 **작업대**입니다 — 인물·공간·구도를 각각 **기준으로 붙들어 두고**,
 프롬프트와 레퍼런스를 한자리에서 관리하고, 밖에서 뽑은 결과를 다시 등록해 **다음 단계의 레퍼런스로** 씁니다.
 
-설치한 로컬 엔진으로 직접 생성하거나, 프롬프트와 레퍼런스를 마그니픽·ComfyUI 같은 외부 생성기에 전달합니다.
-생성 결과를 다시 등록해 다음 시트의 레퍼런스로 쓰고, 정지 이미지는 로컬 SeedVR2로 업스케일할 수 있습니다.
+이 앱은 그림을 직접 만들지 않습니다(로컬 모델을 켜면 만들 수도 있습니다). 프롬프트를 여기서 짓고,
+마그니픽·ComfyUI 같은 생성기에서 뽑고, 결과를 되가져와 다음 시트에 물립니다.
 
 ---
 
@@ -410,9 +309,9 @@ Seedance 는 중괄호. 금지 사항을 어디에 적는지도(네거티브 칸
 
 ### 이 컴퓨터에서 직접 뽑기
 
-[로컬 모델 목록](#로컬-모델과-seedvr2)에서 이미지·영상·음악·모션 캡처와 SeedVR2 이미지 업스케일을 확인할 수 있습니다.
-이미지·영상용 LoRA는 엔진별로 찾아 받고(Civitai · Hugging Face), 강도와 트리거 단어까지 관리합니다.
-AI 분석과 프롬프트 작성은 [Claude·OpenAI API](#claudeopenai-api-연결)를 연결해 함께 사용할 수 있습니다.
+그림(Qwen-Image · Z-Image Turbo · Krea 2) · 영상(MiniMax-H3 · Wan 2.2 · LTX 2.5) ·
+음악(MiniMax-Music3 · ACE-Step)을 ComfyUI 없이 앱이 직접 돌립니다. LoRA 는 엔진별로 찾아
+받고(Civitai · Hugging Face), 세기와 «불러오는 말» 까지 관리합니다.
 
 ### 파일은 알아서 정리됩니다
 
