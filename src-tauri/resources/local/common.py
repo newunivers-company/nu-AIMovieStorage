@@ -560,7 +560,8 @@ def freeze_by_mask(frames, mask_path):
     """
     if not mask_path or not os.path.isfile(mask_path):
         return frames
-    if not frames:
+    if len(frames) == 0:
+        # numpy 배열이 올 수도 있어 `if not frames:` 로 재면 터집니다(실측 2026-09-23).
         return frames
     try:
         import numpy as np
@@ -570,7 +571,15 @@ def freeze_by_mask(frames, mask_path):
         return frames
 
     first = frames[0]
-    size = first.size if hasattr(first, "size") else (first.shape[1], first.shape[0])
+    # 엔진마다 PIL 을 주기도 하고 numpy 를 주기도 합니다. **PIL 인지 먼저** 봐야 합니다 —
+    # numpy 에도 `.size` 가 있는데 그건 «원소 개수» 라, 그걸 크기로 읽으면 조용히 어긋납니다.
+    pil = hasattr(first, "convert")
+
+    def as_array(frame):
+        return np.asarray(frame.convert("RGB") if pil else frame).astype("float32")
+
+    base = as_array(first)
+    size = (base.shape[1], base.shape[0])
     mask = Image.open(mask_path).convert("L")
     if mask.size != size:
         mask = mask.resize(size, Image.BILINEAR)
@@ -581,17 +590,14 @@ def freeze_by_mask(frames, mask_path):
         log("움직임 구역이 전부 검습니다 — 무시하고 그대로 내보냅니다.")
         return frames
 
-    base = np.asarray(first.convert("RGB") if hasattr(first, "convert") else first).astype("float32")
-    out = [frames[0]]
-    moved = 0
+    out = [first]
     for frame in frames[1:]:
-        arr = np.asarray(frame.convert("RGB") if hasattr(frame, "convert") else frame).astype("float32")
-        mixed = arr * alpha + base * (1.0 - alpha)
-        out.append(Image.fromarray(mixed.clip(0, 255).astype("uint8")))
-        moved += 1
+        mixed = (as_array(frame) * alpha + base * (1.0 - alpha)).clip(0, 255).astype("uint8")
+        # **받은 모양 그대로 돌려줍니다** — 뒤에서 mp4 로 굽는 쪽이 둘 중 하나만 받습니다.
+        out.append(Image.fromarray(mixed) if pil else mixed)
     log("움직임 구역 적용 — {}프레임을 첫 장면에 묶었습니다({:.0f}%가 움직임).".format(
-        moved, 100.0 * float(alpha.mean())))
-    return out
+        len(out) - 1, 100.0 * float(alpha.mean())))
+    return out if pil else np.stack(out)
 
 
 def save_video(frames, path, fps):

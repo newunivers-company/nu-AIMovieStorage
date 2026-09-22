@@ -34,7 +34,11 @@ jobs:
   # 붙여도 설치 파일이 그대로 나갔습니다(실제로 한 판이 그렇게 나갔습니다). 태그는 보통
   # push 와 같이 오지 않아 다른 워크플로의 결과를 기다릴 수도 없으므로, **여기서 직접** 셉니다.
   # 우분투에서 몇 분이면 끝나고, 실패하면 아래 빌드가 아예 시작되지 않습니다.
-  검사:
+  # id 는 **반드시 영문**입니다. 한글 id 를 쓰면 깃허브가 워크플로 전체를 무효로 보고
+  # 이름 자리에 파일 경로를 적은 채 실패시킵니다 — 어느 줄이 문제인지 아무 말도 없습니다
+  # (2026-09-23 실제로 두 판이 이렇게 죽었습니다). 보이는 이름만 `name:` 으로 한글을 답니다.
+  check:
+    name: 검사
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +60,7 @@ jobs:
         run: python -m compileall -q src-tauri/resources
 
   windows:
-    needs: 검사
+    needs: check
     runs-on: windows-latest
     env:
       # 빌드 스크립트가 이 값도 읽습니다(`scripts/tauri.mjs`). 손으로 돌릴 때는 고른 판, 태그면 공개판.
