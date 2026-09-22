@@ -18,6 +18,7 @@ model-specific prompts, while keeping characters, 3D blocking and generated asse
 | Plan and write with AI | Claude / OpenAI API connections for screenplay breakdown, reference analysis and per-card prompts. |
 | Keep character references connected | Reference sheets, linked variants and `@tags` for reusing the same identity across cuts. |
 | Design the shot | 3D rooms, character poses, camera framing and movement, plus reference-video export. |
+| Keep the background alive | Backgrounds in a room or dome are still images, so they freeze on camera. Four ways to move them: a prompt line, drifting the texture, a black-and-white “only this area moves” mask, and video on a face. |
 | Work with external generators | Model-specific prompts and Magnific desktop integration, with imported results linked to the project. |
 | Organize the results | Project folders, named assets and imported renders linked back to their cards. |
 
@@ -262,6 +263,7 @@ For the same reason a few engines are not part of this build — `edition.json` 
 | AI 기획·프롬프트 작성 | Claude / OpenAI API로 시나리오를 분해하고 레퍼런스 분석과 카드별 프롬프트 작성을 돕습니다. |
 | 인물 레퍼런스 관리 | 기준 시트, 연결된 변형, `@태그`로 컷마다 같은 인물의 레퍼런스를 재사용합니다. |
 | 구도 설계 | 3D 공간에서 인물 포즈·카메라·동선을 잡고 레퍼런스 영상을 내보냅니다. |
+| 배경도 움직이게 | 방·돔에 넣은 배경은 정지 이미지라 화면에서 얼어붙습니다. 네 갈래로 풉니다 — 프롬프트 한 줄 · 그림 흘리기 · 「여기만 움직인다」 흑백 마스크 · 면에 영상 걸기. |
 | 외부 생성기 연동 | 모델별 프롬프트와 마그니픽 데스크톱 연동을 제공하고 외부 생성 결과를 프로젝트에 연결합니다. |
 | 결과 정리 | 프로젝트 폴더와 파일 이름을 관리하고, 외부 생성 결과를 해당 카드에 연결합니다. |
 
