@@ -5,7 +5,7 @@
 A Windows desktop app for planning AI videos, managing character references, blocking shots in 3D,
 and preparing model-specific prompts. Keep each cut's prompts, references and generated assets in one project.
 
-**[Installation](#installation)** · [Releases](https://github.com/raonolje/AIStorage/releases) ·
+**[Download for Windows](https://github.com/raonolje/AIStorage/releases/latest)** · [Installation](#installation) ·
 [Feature details](#what-it-does) · [Build from source](#build-from-source) ·
 [Report an issue](https://github.com/raonolje/AIStorage/issues)
 
@@ -24,19 +24,20 @@ and preparing model-specific prompts. Keep each cut's prompts, references and ge
 
 ## Installation
 
-**Release status (2026-09-22): no packaged release has been published yet.**
-For now, use the [source setup below](#build-from-source). The [Releases page](https://github.com/raonolje/AIStorage/releases)
-is the place to check for future Windows downloads.
+Download the installer or portable ZIP from the **[latest release](https://github.com/raonolje/AIStorage/releases/latest)**.
+Both packages are available in [v0.1.0](https://github.com/raonolje/AIStorage/releases/tag/v0.1.0).
+Prebuilt packages do not require Node, pnpm or Rust; those tools are only needed to [build from source](#build-from-source).
 
-When a release is available, open its **Assets** section and choose:
+Open the release's **Assets** section and choose:
 
 | Package | How to use it |
 | --- | --- |
 | Installer (`*-setup.exe`) | Run the installer and follow the setup steps. |
 | Portable (`*_portable.zip`) | Extract the entire archive, then run the included `.exe`. Keep the `resources` folder beside it. Settings and model downloads still use the user's app data folder. |
 
+In v0.1.0 the files are named `AI._0.1.0_x64-setup.exe` and `frameforge_portable.zip`.
 GitHub's automatic **Source code (zip/tar.gz)** archives contain source files, not a ready-to-run app.
-The public build uses the product name **AI 영상 스토리지 (공개판)**, so the installer name may differ from FrameForge.
+The app's public build uses the product name **AI 영상 스토리지 (공개판)**, so names shown during installation may differ from FrameForge.
 
 - **Windows 10/11, x64.** macOS and Linux are not currently supported.
 - **NVIDIA GPU (CUDA):** needed only for local generation; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
@@ -187,7 +188,7 @@ For the same reason a few engines are not part of this build — `edition.json` 
 인물 레퍼런스, 3D 구도, 모델별 프롬프트와 생성 결과를 한 프로젝트에서 관리하는 Windows 데스크톱 앱입니다.
 시나리오를 씬과 컷으로 나누고, 각 컷의 인물·공간·카메라 구도를 준비하는 작업을 돕습니다.
 
-**[설치 안내](#설치-안내)** · [Releases](https://github.com/raonolje/AIStorage/releases) ·
+**[Windows 다운로드](https://github.com/raonolje/AIStorage/releases/latest)** · [설치 안내](#설치-안내) ·
 [기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
 [오류 제보](https://github.com/raonolje/AIStorage/issues)
 
@@ -206,19 +207,20 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ## 설치 안내
 
-**배포 상태(2026-09-22): 아직 공개된 Release와 설치 파일이 없습니다.**
-현재는 [소스에서 실행](#소스에서-실행)할 수 있습니다. 향후 Windows 배포 파일은
-[Releases](https://github.com/raonolje/AIStorage/releases)에서 확인하세요.
+**[최신 Release](https://github.com/raonolje/AIStorage/releases/latest)** 페이지에서 설치본이나 무설치 ZIP을 받으세요.
+[v0.1.0](https://github.com/raonolje/AIStorage/releases/tag/v0.1.0)에 두 파일이 모두 게시되어 있습니다.
+배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다. 이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
 
-Release가 게시되면 **Assets**에서 원하는 형식을 선택합니다.
+Release의 **Assets**에서 원하는 형식을 선택합니다.
 
 | 파일 | 실행 방법 |
 | --- | --- |
 | 설치본(`*-setup.exe`) | 파일을 실행하고 설치 안내를 따릅니다. |
 | 무설치본(`*_portable.zip`) | 압축을 모두 푼 뒤 안의 `.exe`를 실행합니다. `resources` 폴더를 실행 파일 옆에 유지하세요. 설정과 모델은 사용자 앱 데이터 폴더에 저장됩니다. |
 
-GitHub가 자동으로 제공하는 **Source code (zip/tar.gz)**는 바로 실행하는 앱이 아닌 소스 코드입니다.
-공개판 제품 이름은 **AI 영상 스토리지 (공개판)**이므로 설치 파일에는 FrameForge와 다른 이름이 표시될 수 있습니다.
+v0.1.0의 파일 이름은 `AI._0.1.0_x64-setup.exe`와 `frameforge_portable.zip`입니다.
+GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`)은 바로 실행하는 앱이 아닌 소스 코드입니다.
+앱의 공개판 제품 이름은 **AI 영상 스토리지 (공개판)** 입니다. 설치 화면에는 FrameForge와 다른 이름이 표시될 수 있습니다.
 
 - **Windows 10/11, x64.** macOS·Linux는 아직 지원하지 않습니다.
 - **NVIDIA GPU(CUDA):** 로컬 생성에만 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
