@@ -1,0 +1,22 @@
+{
+  "id": "wanvideo",
+  "name": "영상 — Wan 2.2 (A14B) · 멀티 로라",
+  "purpose": "미니맥스 H3 가 무거운 기계를 위한 가벼운 대안. 로라를 여러 개 겹쳐 화풍을 고정할 수 있습니다.",
+  "version": "Wan2.2-T2V/I2V-A14B · diffusers 0.36",
+  "kind": "python",
+  "heavy": true,
+  "python": "3.12",
+  "experimental": false,
+  "fast_attention": true,
+  "prefetch": true,
+  "models_dir": "models",
+  "확인일": "2026-09-22",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "사용자가 지목한 미니맥스 H3 가 기본입니다. 이것은 H3(125 GB)를 못 돌리는 기계를 위한 가벼운 대안입니다.",
+    "가중치는 T2V 와 I2V 두 저장소(합쳐 약 120 GB)를 설치 때 다 미리 받습니다(prefetch: true → 워커 op prefetch). : 그전에는 첫 생성 때 그 판만 받아서, 첫 장면 그림을 주는 첫 컷에서 «생성 중» 안에 I2V 판 60 GB 를 말없이 받게 돼 있었습니다. 이미 깔린 엔진은 설정의 «가중치 미리 받기» 단추로 받습니다.",
+    "Apache-2.0 — 상업 이용에 제한이 없습니다."
+  ]
+}

@@ -1,0 +1,88 @@
+# 공개판 설치 파일 만들기 — 태그를 밀면 GitHub Releases 에 NSIS 설치 파일이 올라갑니다.
+#
+# → 저장소에는 **소스**, 설치 파일은 CI 가 만들어 **Releases** 에.
+#
+# - 어떤 엔진이 빠지는지는 저장소 뿌리의 `edition.json` 한 곳이 정합니다. 여기에는 id 를 적지 않습니다.
+# - 윈도우만 만듭니다. 맥은 뺐습니다 — 로컬 워커가 CUDA 를 전제로 하고, 서명·공증까지 갈래가 둘로
+# 늘어납니다(`docs/복원/21_배포.md` §6).
+# - **코드 서명은 아직 없습니다.** 받은 사람의 윈도우가 SmartScreen 경고(「알 수 없는 게시자」)를 띄웁니다.
+# «추가 정보 → 실행» 으로 넘어갑니다. 인증서를 사면 `tauri.conf.json` 의 `bundle.windows.certificateThumbprint`
+# 와 여기 `signtool` 걸음을 더합니다.
+# - Gitea Actions(자체 호스팅 Gitea)에서도 거의 그대로 돕니다: `actions/*` 는 Gitea 가 GitHub 에서
+# 받아 오고, 마지막 «Releases 에 올리기» 만 `softprops/action-gh-release` 대신 Gitea 의 릴리스 API
+# (`akkuman/gitea-release-action` 등)로 바꾸면 됩니다. `runs-on: windows-latest` 는 윈도우 러너를 직접
+# 등록해야 합니다.
+name: 공개판 설치 파일
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: "판 — public(제외 엔진 빠짐) / private(전부, 사용자 전용 · Releases 에는 안 올림)"
+        type: choice
+        options: [public, private]
+        default: public
+
+permissions:
+  # Releases 에 파일을 붙이려면 쓰기 권한이 필요합니다.
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      # 빌드 스크립트가 이 값도 읽습니다(`scripts/tauri.mjs`). 손으로 돌릴 때는 고른 판, 태그면 공개판.
+      FRAMEFORGE_EDITION: ${{ inputs.edition || 'public' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # pnpm 은 package.json 의 `packageManager` 에 적힌 판(10.x)을 corepack 이 그대로 씁니다 —
+      # 여기 판을 따로 적으면 lockfile 과 어긋나는 날이 옵니다.
+      - name: pnpm (corepack)
+        run: corepack enable
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Rust 의존성 캐시 — 600개 크레이트를 매번 처음부터 컴파일하면 20분이 넘습니다.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 의존성
+        run: pnpm install --frozen-lockfile
+
+      # 빌드 스크립트가 VsDevCmd 를 찾아 MSVC 링커를 잡고, 공개판이면 `edition.json` 의 제외 엔진을
+      # 번들 리소스에서 뺀 설정을 `tauri build --config` 로 덧씌웁니다.
+      - name: 빌드
+        run: node scripts/tauri.mjs build --edition ${{ env.FRAMEFORGE_EDITION }}
+
+      # 태그로 시작한 공개판만 Releases 에 올립니다. 손으로 돌린 것(특히 비공개판)은 실행 결과에 붙는
+      # 작업 산출물로만 남깁니다 — 비공개판을 공개 Releases 에 올리는 사고를 막기 위해서입니다.
+      # 공개판 설치 파일은 이름에 «(공개판)» 이 들어갑니다(`AI 영상 스토리지 (공개판)_<판>_x64-setup.exe` —
+      # 빌드 스크립트가 productName 을 덧씌움). 비공개판과 이름이 같으면 올라간 뒤에는 구분할 길이 없습니다.
+      - name: Releases 에 올리기
+        if: startsWith(github.ref, 'refs/tags/v') && env.FRAMEFORGE_EDITION == 'public'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          # 설치본(NSIS)과 무설치본(zip)을 함께 올립니다 — 「깔기 싫다」 는 쪽을 위해 둘 다 둡니다.
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/portable/*.zip
+          generate_release_notes: true
+
+      - name: 작업 산출물로 남기기
+        if: ${{ !(startsWith(github.ref, 'refs/tags/v') && env.FRAMEFORGE_EDITION == 'public') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frameforge-${{ env.FRAMEFORGE_EDITION }}-windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/portable/*.zip
+          if-no-files-found: error

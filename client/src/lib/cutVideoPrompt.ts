@@ -1,0 +1,339 @@
+import { describeCameraMoves, cameraMovesEnd } from "@/lib/cameraMoves";
+import { cameraMovesOf, timelineOf } from "@/lib/compositionEdit";
+import { describeObjectSwaps, describePeople } from "@/lib/objectSwapPrompt";
+import { describeHorizonRoom, horizonOverridesLocation, type CompositionState } from "@/lib/composition";
+import { modelRuleOf, negativeStyleOf, speaksDialogue } from "@/lib/modelRules";
+import { shapeDialogue } from "@/lib/dialogueShape";
+import { plainify } from "@/lib/naturalPrompt";
+import type { Cut, GeneratedImageAsset } from "@/lib/projectTypes";
+
+/**
+ * 컷 하나를 **영상으로** 뽑는 프롬프트.
+ *
+ * # 그림 프롬프트와 무엇이 다른가
+ *
+ * 그림은 **한순간**을 적습니다 — 「누가 어디에 어떤 표정으로 서 있다」. 영상은 **무엇이
+ * 어떻게 변하는가**를 적어야 합니다 — 「0~2초 다가가고, 2초에 고개를 든다」. 같은 칸에
+ * 섞으면 그림을 뽑을 때 동작 설명이 끼어들어 자세가 흐려집니다. 그래서 칸을 나눕니다.
+ *
+ * # 레퍼런스 영상이 있으면 말을 줄입니다
+ *
+ * 구도잡기에서 뽑은 mp4 를 레퍼런스로 올리면 **카메라 무빙은 그림으로 이미 전달됩니다**.
+ * 그때 글로 또 「천천히 달리 인」 이라고 적으면 두 지시가 겹쳐 오히려 어긋납니다. 글은
+ * «그 움직임을 따르되 사람과 재질은 이렇게» 쪽으로 비켜섭니다.
+ */
+export interface CutVideoPromptInput {
+  /** 대사·연기 지시(`Cut.acting`). 있으면 효과보다 앞에 실립니다. */
+  acting?: string;
+  /**
+   * 같은 연기 지시의 **영어**(`Cut.actingEn`) — 「프롬프트 말로」 로 받아 둔 것.
+   *
+   * 있으면 영문 칸에 **이것을** 씁니다. 없으면 한국어를 그대로 실어 보내는데, 그러면
+   * 생성기가 그 부분을 통째로 무시하거나 글자로 그려 넣습니다.
+   */
+  actingEn?: string;
+  /** 컷 제목·설명 — 무슨 일이 일어나는가. */
+  title?: string;
+  description?: string;
+  /** 구도잡기 상태. 카메라 무빙과 길이를 여기서 읽습니다. */
+  composition?: CompositionState;
+  /** 프로젝트 인물 id → 이름. 여기 없는 사람은 엑스트라입니다. */
+  characterNames?: Record<string, string>;
+  /** 인물 이름 → 연기 기준 한 줄(캐릭터 특징에 적어 둔 연출 메모·성격·말투). */
+  characterActing?: Record<string, string>;
+  /** 배경 이름. 레퍼런스로 배경 시트를 함께 올릴 때 이름을 짚어 줍니다. */
+  backgroundName?: string;
+  /** VFX 서술 — 비·불꽃·연기처럼 그림만으로는 안 되는 것. */
+  vfx?: string;
+  /** 같은 효과 서술의 **영어**(`Cut.vfxEn`). `actingEn` 과 같은 까닭입니다. */
+  vfxEn?: string;
+  /** 구도잡기 레퍼런스 영상을 함께 올리는가. 올리면 카메라 설명을 줄입니다. */
+  hasRefVideo?: boolean;
+  /** 기획 단계에서 적어 둔 컷 길이(초). 구도잡기가 없을 때만 씁니다. */
+  plannedSeconds?: number;
+  /** 프로젝트 화면비(`"16:9"`·`"9:16"` …). 안 적으면 생성기가 제 기본값으로 갑니다. */
+  aspect?: string;
+  /** 이 컷에 나오는 인물 이름들 — 맨 뒤 «바꾸지 마세요» 문장에 이름으로 박습니다. */
+  lockNames?: string[];
+  /**
+   * 연출·질감 토글의 **영어 한 줄**(`cutTogglesEnglish` + `autoRealism`).
+   *
+   * 사용자 2026-09-18 점검에서 드러났습니다 — 켠 토글이 **영상 프롬프트에는 아예 안
+   * 실리고 있었습니다.** 키 이미지에만 붙고 영상은 그냥 지나갔습니다.
+   */
+  lookEn?: string;
+  /**
+   * 어느 모델로 보낼 것인가(`modelRules.ts` 의 id).
+   *
+   * 안 주면 **어느 모델에나 통하는 모양**으로
+   * 짓습니다 — 여태 하던 그대로라 옛 프로젝트가 달라지지 않습니다.
+   */
+  modelId?: string;
+}
+
+export interface CutVideoPrompt {
+  ko: string;
+  en: string;
+  /** 생성기에 넣을 **러닝타임**(초). 레퍼런스 영상 길이가 곧 이 값입니다. */
+  seconds: number;
+}
+
+/**
+ * 영상 길이 — **구도잡기 타임라인**이 정합니다.
+ *
+ * 무빙이 4초까지 있으면 4초짜리 컷입니다. 사람이 따로 적게 하면 구도잡기에서 4초로
+ * 맞춰 놓고 생성기에는 5초를 넣는 어긋남이 반드시 생깁니다. 무빙이 없으면 타임라인
+ * 전체 길이를 씁니다(고정 샷도 길이는 있어야 하니까요).
+ */
+export function cutVideoSeconds(
+  composition?: CompositionState,
+  /**
+   * 구도잡기가 없을 때 기댈 값 — 「AI 로 일괄 생성」 이 컷에 적어 둔 길이(`plannedSeconds`).
+   *
+   * **잰 값이 적어 둔 값보다 셉니다.** 구도를 잡은 뒤에는 타임라인이 진실이고, 기획
+   * 단계의 숫자는 그저 짐작이었습니다. 반대로 두면 구도를 4초로 고쳐도 생성기에는
+   * 계속 옛 숫자가 들어갑니다.
+   */
+  planned?: number,
+): number {
+  const clamp = (value: number) =>
+    Math.min(10, Math.max(1, Math.round(value * 2) / 2));
+  if (!composition) return planned ? clamp(planned) : 5;
+  const moves = cameraMovesOf(composition);
+  const end = moves.length ? cameraMovesEnd(moves) : 0;
+  const span = end > 0.1 ? end : timelineOf(composition).duration;
+  // 생성기는 대개 1~10초를 받습니다. 0.5초 눈금으로 맞춰 둡니다.
+  return clamp(span);
+}
+
+/**
+ * 쉼표로 이은 구절에서 **같은 구절을 한 번만** 남깁니다(대소문자 무시, 앞뒤 공백 무시).
+ *
+ * 사용자 2026-09-22 스크린샷: 영상 프롬프트에 「natural visible pores, …, fine film grain」 이 **두 번**
+ * 박혀 있었습니다. 일괄 생성이 컷의 `styleTags` 에 자동 질감 칩을 **이미 합쳐 넣고** 그 위에
+ * `autoRealism().en` 을 한 번 더 이어 붙였기 때문입니다(`projectBootstrap.buildCuts`). 부르는 쪽마다
+ * 고치면 또 한 곳이 남습니다 — 모든 호출이 지나는 여기서 걷어 냅니다.
+ */
+export function dedupePhrases(text: string): string {
+  const seen = new Set<string>();
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => {
+      if (!part) return false;
+      const key = part.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(", ");
+}
+
+export function buildCutVideoPrompt(
+  input: CutVideoPromptInput,
+): CutVideoPrompt {
+  const seconds = cutVideoSeconds(input.composition, input.plannedSeconds);
+  const moves = input.composition ? cameraMovesOf(input.composition) : [];
+  const camera = describeCameraMoves(moves);
+  const people = input.composition
+    ? describePeople(input.composition, input.characterNames ?? {}, input.characterActing ?? {})
+    : [];
+  const swaps = input.composition ? describeObjectSwaps(input.composition) : [];
+
+  const ko: string[] = [];
+  const en: string[] = [];
+
+  /*
+    맨 앞에 **무슨 일이 일어나는가**. 생성기는 앞쪽을 더 무겁게 읽으므로, 배우가 무엇을
+    하는지가 첫 줄이어야 합니다 — 카메라나 재질이 먼저 오면 그쪽만 지키고 연기는 흘립니다.
+  */
+  const what = [input.title, input.description].filter(Boolean).join(" — ");
+  if (what) {
+    ko.push(what);
+    en.push(what);
+  }
+
+  if (input.hasRefVideo) {
+    ko.push(
+      `첨부한 레퍼런스 영상의 카메라 움직임과 타이밍을 그대로 따르세요. ${seconds.toFixed(1)}초입니다. 영상 속 회색 인형은 자리와 동작만 알려 주는 것이니, 첨부한 인물 시트의 사람으로 바꿔 그리세요.`,
+    );
+    en.push(
+      `Follow the camera motion and timing of the attached reference video exactly. It is ${seconds.toFixed(1)} seconds long. The grey mannequins in it only mark position and action - replace them with the people from the attached character sheets.`,
+    );
+  } else if (camera) {
+    ko.push(`카메라: ${camera.ko}`);
+    en.push(`Camera: ${camera.en}`);
+  }
+
+  for (const line of people) {
+    ko.push(line.ko);
+    en.push(line.en);
+  }
+  /*
+    **호리존이 장소를 이깁니다** — 컷 프롬프트(`cutPrompt.ts`)와 같은 규칙 한 벌(`horizonOverridesLocation`).
+    활성 방이 호리존이면 «장소는 첨부한 배경 그대로» 줄을 빼고 아래 호리존 문장만 싣습니다. 둘 다 실으면 생성기가
+    긴 쪽(장소)을 골라 제품 컷이 카페 안에 섭니다(2026-09-22 검토 — 그림 쪽은 고쳐 두고 영상 쪽만 남아 있었습니다).
+    «구도 안 씀» 이면 `composition` 이 없어 호리존도 없고, 장소가 그대로 실립니다.
+  */
+  if (input.backgroundName && !horizonOverridesLocation(input.composition)) {
+    ko.push(
+      `장소는 첨부한 «${input.backgroundName}» 배경 그대로입니다. 벽·바닥·빛을 바꾸지 마세요.`,
+    );
+    en.push(
+      `The location is exactly the attached background "${input.backgroundName}". Do not change the walls, floor or lighting.`,
+    );
+  }
+  // 호리존 방이면 배경은 «단색 스튜디오» 라는 사실 — 컷 프롬프트와 같은 문장(`describeHorizonRoom`, 사용자 2026-09-22).
+  const horizon = describeHorizonRoom(input.composition);
+  if (horizon) {
+    ko.push(horizon.ko);
+    en.push(horizon.en);
+  }
+  for (const line of swaps) {
+    ko.push(line.ko);
+    en.push(line.en);
+  }
+  /*
+    대사·연기는 **효과보다 앞**에 둡니다. 생성기는 앞쪽 문장을 더 무겁게 읽는데, 이 컷에서 사람이 무엇을 하는지가
+    비·연기 같은 효과보다 중요합니다().
+  */
+  if (input.acting?.trim()) {
+    /*
+      **명령형만 조용히 바로잡습니다.**
+
+       답은 두 겹입니다 —
+      뜻을 알아야 하는 것은 「프롬프트 말로」 단추가 LLM 으로 바꿔 **영어판까지 저장**하고,
+      단추를 안 누른 사람을 위해 **틀릴 수 없는 것만** 여기서 말없이 고칩니다.
+
+      말꼬리만 만지고 낱말과 순서는 그대로 둡니다. 평서문 여덟 개로 오탐 시험을 만들어
+      두었습니다 — 「담배를 빼 문다」 같은 겹동사를 건드리면 안 됩니다.
+    */
+    const acting = plainify(input.acting.trim().split(/\s*\n+\s*/).join(" ")).text;
+    /*
+      **소리를 못 만드는 모델에는 대사를 보내지 않습니다**(Runway·Wan 2.2·Hailuo·
+      Kling 2.5 이하). 보내 봐야 소리는 안 나고 **자막으로 박히거나 그냥 버려집니다.**
+      그때는 「말하는 입 모양과 표정만」 이라고 덧붙여, 나중에 립싱크를 붙일 자리를 남깁니다.
+    */
+    // 영어판이 있으면 영문 칸에는 그것을 씁니다. 없으면 한국어가 그대로 갑니다.
+    const actingEn = input.actingEn?.trim() || acting;
+    if (modelRuleOf(input.modelId) && !speaksDialogue(modelRuleOf(input.modelId))) {
+      ko.push(`연기: ${acting}`);
+      ko.push("이 모델은 소리를 만들지 않습니다. 말하는 입 모양과 표정만 연기하고, 화면에 글자는 넣지 않습니다.");
+      en.push(`Acting: ${actingEn}`);
+      en.push(
+        "Perform the mouth movements and facial expression of speaking; the shot itself is silent and carries no on-screen text.",
+      );
+    } else {
+      ko.push(`대사·연기: ${acting}`);
+      /*
+        **영문은 그 모델의 대사 문법으로 고쳐 적습니다**(2026-09-18).
+
+        규칙 표에 모델마다의 모양을 적어 두고도(`modelRules.ts` 의 `dialogue.syntax`)
+        조립하는 쪽은 「소리가 나는가」 만 보고 모양은 흘려보내고 있었습니다. 그래서
+        Veo 에는 자막이 박히고(따옴표를 콜론으로 바꾸는 것이 회피법입니다), H3 는
+        `<d>` 태그가 없어 대사를 못 알아듣고, Kling 은 화자를 못 가렸습니다.
+
+        한국어 칸은 손대지 않습니다 — 사람이 읽는 자리라 원문 그대로가 낫고,
+        문법은 생성기에 가는 영문에서만 뜻이 있습니다.
+      */
+      const shaped = shapeDialogue(modelRuleOf(input.modelId), actingEn);
+      en.push(`Dialogue and acting: ${shaped.lines[0] ?? actingEn}`);
+      for (const line of shaped.lines.slice(1)) en.push(line);
+      // 못 가렸으면 고치는 대신 **모양을 알려 줍니다** — 잘못 고치는 것보다 낫습니다.
+      if (shaped.hint) ko.push(shaped.hint);
+      if (shaped.speakerWarning) ko.push(shaped.speakerWarning);
+    }
+  }
+
+  if (input.vfx?.trim()) {
+    // VFX 칸은 메모하듯 적기 쉬운 자리라 명령형이 특히 자주 섞입니다.
+    const vfx = plainify(input.vfx.trim()).text;
+    ko.push(`효과: ${vfx}`);
+    en.push(`Effects: ${input.vfxEn?.trim() || vfx}`);
+  }
+
+  // 연출·질감은 효과 뒤, 금지 앞. 화면이 «어떻게 보일지» 라 장면 서술 다음 자리입니다.
+  // 같은 구절이 두 번 들어오면 한 번만 — 까닭은 `dedupePhrases`.
+  if (input.lookEn?.trim()) en.push(dedupePhrases(input.lookEn));
+
+  /*
+    마지막은 **영상에서만 필요한 금지**입니다. 그림에는 없는 문제라 컷 프롬프트에는
+    안 적습니다 — 장면이 도중에 갈아엎히거나, 글자가 떠오르거나, 속도가 갑자기 바뀌는 것.
+  */
+  /*
+    금지 사항은 **모델마다 적는 자리가 다릅니다**(`modelRules.ts`). Runway 는 부정문
+    자체가 안 통해서 「~하지 마세요」 를 보내면 오히려 그것이 나옵니다 — 그래서
+    같은 뜻을 긍정으로 뒤집어 적습니다.
+  */
+  const rule = modelRuleOf(input.modelId);
+  /*
+    **금지는 «네거티브 칸이 있을 때만» 부정문으로 적습니다.**
+
+     「no text, no subtitles」 를 본문에 적으면
+    디퓨전 모델은 그 낱말을 **그리라는 말로** 읽는 일이 흔합니다 — 부정은 전용 칸에서만 제 구실을 합니다.
+    칸이 없는 모델(`inline`·`unsupported`)에는 같은 뜻을 긍정으로 뒤집어 적습니다.
+  */
+  if (negativeStyleOf(rule).where !== "field") {
+    ko.push(
+      "한 번에 이어지는 한 컷입니다. 화면은 처음부터 끝까지 한 장면이고, 가장자리까지 **찍힌 그림만으로** 채워집니다.",
+    );
+    en.push(
+      "One continuous shot, a single unbroken scene from start to finish, the entire frame filled edge to edge with photographed imagery alone, a clean picture with unmarked surfaces.",
+    );
+  } else {
+    ko.push(
+      "한 번에 이어지는 한 컷입니다. 중간에 다른 장면으로 바뀌지 않고, 화면이 잘리지 않으며, 글자·자막·로고가 나오지 않습니다.",
+    );
+    en.push(
+      "One continuous shot. No cut to another scene, no split screen, no text, no subtitles, no logo, no speed ramp.",
+    );
+  }
+
+  /*
+    ── 형식과 잠금은 **맨 뒤** ──────────────────────────────────────────
+    2026-09-18 에 공개 프롬프트 8,961개를 센 자료(vflow)를 보고 넣었습니다.
+
+    · **길이는 46%, 화면비는 24.9%** 만 적혀 있습니다. 그런데 화면비는 «가장 안 적으면서
+      없을 때 좋은 클립을 가장 자주 망치는» 항목입니다. 우리는 구도잡기가 길이를 알고
+      프로젝트가 화면비를 아는데도 **글에 안 실어 보내고 있었습니다.**
+    · **잠금 문장은 맨 뒤**에 둡니다 — 이미 묘사된 장면에 제약이 걸리도록. 그리고 하나만
+      잠그면(15%가 그렇습니다) 「얼굴은 같은데 옷이 바뀐다」 가 됩니다. 얼굴·의상·장소를
+      함께 잠급니다(우리 규칙 6 «정체성은 하나» 를 문장으로도 한 번 더 박는 것).
+  */
+  const format = [`${seconds.toFixed(1)}초`, input.aspect && `화면비 ${input.aspect}`]
+    .filter(Boolean)
+    .join(" · ");
+  ko.push(`형식: ${format}. 마지막 프레임까지 끊지 말고 채우세요.`);
+  en.push(
+    `Format: exactly ${seconds.toFixed(1)} seconds${input.aspect ? `, ${input.aspect} aspect ratio` : ""}. Run to the last frame.`,
+  );
+
+  const who = (input.lockNames ?? []).filter(Boolean);
+  ko.push(
+    `${who.length ? `${who.join("·")} 의 ` : ""}얼굴·머리·의상, 그리고 장소와 빛을 첨부한 레퍼런스 그대로 두세요. 컷이 끝날 때까지 바뀌면 안 됩니다.`,
+  );
+  en.push(
+    `Keep ${who.length ? `${who.join(" and ")}'s ` : "the character's "}face, hair and outfit, and the location and lighting, identical to the attached references throughout the entire shot.`,
+  );
+
+  return { ko: ko.join("\n\n"), en: en.join("\n\n"), seconds };
+}
+
+/**
+ * 이 컷의 **대표 그림** — 스토리보드에 실릴 한 장.
+ *
+ * 대표 표시는 **그림 선반의 별(`isPrimary`)** 하나만 씁니다. 컷에만 따로 «대표 id» 를
+ * 두려다 말았습니다 — 캐릭터·배경·에셋이 이미 별로 대표를 정하는데 컷만 다른 길을 쓰면,
+ * 별을 눌러도 스토리보드가 안 바뀌는 «두 개의 대표» 가 생깁니다(공통 규칙 1).
+ *
+ * 첫 장을 기본으로 두는 까닭: 선반은 **처음 들어온 그림에 자동으로 별을 답니다.**
+ * 옛 컷이나 손으로 별을 지운 경우만 여기서 첫 장으로 물러섭니다.
+ */
+export function heroImageOf(cut: Cut): GeneratedImageAsset | null {
+  if (!cut.images.length) return null;
+  // 합성 시트(격자)는 스토리보드 칸에 넣을 그림이 아닙니다.
+  const usable = cut.images.filter((image) => !image.isCompositeSheet);
+  const pool = usable.length ? usable : cut.images;
+  return pool.find((image) => image.isPrimary) ?? pool[0];
+}
+

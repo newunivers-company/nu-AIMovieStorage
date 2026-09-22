@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+/*
+  :root 의 색 변수를 Tailwind 유틸리티(bg-primary, text-muted-foreground …)로 승격합니다.
+
+  Tailwind 4 는 @theme 에 등록된 --color-* 만 클래스로 만듭니다. 이게 없어서
+  ui/button · ui/dialog 의 bg-primary·bg-background 가 CSS 를 한 줄도 만들지 않았고,
+  그래서 화면마다 인라인 style 로 배경을 다시 칠했습니다. (2026-09-05 검증)
+*/
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/*
+  원본 index.css 는 사고로 잃었습니다. 다시 세운 것입니다.
+
+  다행히 이 앱은 색을 대부분 컴포넌트 안에서 oklch() 로 직접 씁니다
+  (기록에서만 3,500번 넘게 나옵니다). 그래서 테마 변수에 기대는 곳이 적고,
+  여기서 꼭 있어야 하는 것은 셋뿐입니다.
+
+  - shadcn 컴포넌트가 참조하는 변수 몇 개 (sonner, dialog 등)
+  - gradient-primary / glow-sm  — 주요 실행 버튼의 보라색 그라디언트
+  - no-spinner — 숫자 입력칸의 위아래 화살표 감추기
+
+  실제 쓰이는 사용자 정의 클래스는 이 셋이 전부입니다. 기록을 뒤져 확인했습니다.
+*/
+
+@layer base {
+  :root {
+    --background: oklch(0.15 0.01 265);
+    --foreground: oklch(0.95 0.005 265);
+    --card: oklch(0.17 0.011 265);
+    --card-foreground: oklch(0.95 0.005 265);
+    --popover: oklch(0.18 0.012 265);
+    --popover-foreground: oklch(0.95 0.005 265);
+    --primary: oklch(0.62 0.22 290);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.24 0.015 265);
+    --secondary-foreground: oklch(0.95 0.005 265);
+    --muted: oklch(0.24 0.015 265);
+    --muted-foreground: oklch(0.62 0.01 265);
+    --accent: oklch(0.26 0.02 285);
+    --accent-foreground: oklch(0.95 0.005 265);
+    --destructive: oklch(0.62 0.22 25);
+    --destructive-foreground: oklch(0.99 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.62 0.22 290);
+    --radius: 0.625rem;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  /*
+    Tailwind 4 의 preflight 에는 button { cursor: pointer } 가 없습니다(3 에는 있었음).
+    이 앱의 <button> 240여 개 전부가 화살표 커서였습니다. 컴포넌트마다 붙이지 않고
+    여기서 한 번에 줍니다. (2026-09-05 검증)
+  */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  select:not(:disabled),
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    cursor: pointer;
+  }
+
+  /*
+    ── 드롭다운 목록의 글씨 ────────────────────────────────────────────
+    
+
+    맞습니다. `<select>` 자체는 컴포넌트마다 어두운 배경을 주는데, **펼친 목록(option)** 은 운영체제가 그립니다.
+    윈도에서는 그 목록이 흰 바탕인데 글자색만 우리가 준 밝은 색으로 따라가 흰 글씨가 흰 바탕에 놓입니다.
+    그래서 여기서 **앱 전체의 option** 을 어두운 바탕 · 밝은 글씨로 못 박습니다 — 칸마다 고치면 또 빠뜨립니다.
+  */
+  select option,
+  select optgroup {
+    background-color: oklch(0.16 0.01 265);
+    color: oklch(0.92 0.01 265);
+  }
+  select option:checked,
+  select option:hover {
+    background-color: oklch(0.34 0.10 265);
+    color: oklch(0.98 0 0);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-feature-settings: "tnum" 0;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* 주요 실행 버튼. 「시트 제작」 「프롬프트 만들기」 같은 것들이 이 옷을 입습니다. */
+.gradient-primary {
+  background-image: linear-gradient(
+    135deg,
+    oklch(0.62 0.22 290) 0%,
+    oklch(0.56 0.2 310) 100%
+  );
+}
+
+.glow-sm {
+  box-shadow: 0 0 12px oklch(0.62 0.22 290 / 35%);
+}
+
+/*
+  숫자 입력칸의 위아래 화살표를 감춥니다.
+
+  글자 크기처럼 손으로 정확한 값을 넣는 칸에 붙습니다. 화살표가 있으면
+  칸이 좁아지고, 실수로 눌러 값이 튀는 일도 생깁니다.
+*/
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* 어두운 화면에 밝은 기본 스크롤바가 뜨면 눈에 걸립니다. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(0.12 0.008 265);
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.015 265);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.38 0.02 265);
+}
+
+/*
+ * 구도잡기 패널의 스크롤바.
+ *
+ * 기본 스크롤바는 어두운 배경에서 너무 굵고 밝아 눈에 먼저 들어옵니다.
+ * 목록이 길어지는 자리라 계속 보이게 되니, 얇게 줄이고 배경에 묻힙니다.
+ */
+.composition-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.composition-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.composition-scroll::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 10%);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.composition-scroll::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 20%);
+  background-clip: content-box;
+}
+.composition-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 12%) transparent;
+}
+
+/* 숫자 입력란의 위아래 화살표. 좁은 칸에서 자리를 많이 먹습니다. */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/*
+  튜토리얼의 «여기를 누르세요» 점.
+
+   걸음이 «기다리는 중» 임을 글자만으로
+  적으면 눈에 안 들어옵니다. 작은 점 하나가 뛰면 시선이 거기로 갑니다.
+  움직임을 싫어하는 설정(prefers-reduced-motion)에서는 뛰지 않고 그대로 켜 둡니다.
+*/
+.tutorial-pulse {
+  animation: tutorial-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tutorial-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.72); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-pulse { animation: none; }
+}

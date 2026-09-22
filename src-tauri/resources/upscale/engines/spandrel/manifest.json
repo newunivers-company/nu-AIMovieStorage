@@ -1,0 +1,37 @@
+{
+  "id": "spandrel",
+  "name": "빠르고 가벼움 — RealPLKSR / SPAN",
+  "purpose": "미리보기·시트 칸 확대·영상 프레임 대량 처리. 4× 고정 후 목표 크기로 맞춤",
+  "version": "spandrel 0.4.2 · 가중치 2024-10-08",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "models_dir": "models",
+  "확인일": "2026-09-09",
+  "code": [],
+  "models": [
+    {
+      "id": "4xNomosWebPhoto_RealPLKSR",
+      "optional": false,
+      "path": "4xNomosWebPhoto_RealPLKSR.safetensors",
+      "url": "https://huggingface.co/Phips/4xNomosWebPhoto_RealPLKSR/resolve/main/4xNomosWebPhoto_RealPLKSR.safetensors",
+      "sha256": "9be0228f98156a100d6636d99b373ed2785b999723f9adc4cca504329ab157f2",
+      "size": 29590440,
+      "license": "CC-BY-4.0"
+    },
+    {
+      "id": "4xmssim_span_pretrain",
+      "optional": false,
+      "path": "4xmssim_span_pretrain.safetensors",
+      "url": "https://huggingface.co/Phips/4xSPAN_pretrains/resolve/main/4xmssim_span_pretrain.safetensors",
+      "sha256": "e0468355ee34977c73394d3068a98703aa9601e51f2ded6569f371b17d64fe68",
+      "size": 8965812,
+      "license": "CC-BY-4.0"
+    }
+  ],
+  "empty_files": [],
+  "notes": [
+    "원래 표의 «속도» 모델 4xNomos8k_span_otf_medium 은 구글 드라이브에만 있어 자동으로 받을 수 없습니다(2026-09-09 확인). 같은 SPAN 계열의 사전학습본으로 바꿨습니다.",
+    "spandrel_extra_arches 는 넣지 않습니다 — 비상업 아키텍처가 섞여 있고 우리가 쓰는 둘은 본체에 있습니다."
+  ]
+}

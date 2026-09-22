@@ -1,0 +1,19 @@
+{
+  "_설명": [
+    "앱의 «판» — private(비공개, 전부 들어감) / public(공개 배포, 상업 배포가 안 되는 엔진 제외).",
+    "",
+    "제외 목록은 **여기 한 곳**에만 있습니다. scripts/tauri.mjs(번들 리소스) · client/src/lib/edition.ts(화면 목록) ·",
+    "src-tauri/src/edition.rs(설치·실행 명령) 가 전부 이 파일을 읽습니다 — 세 곳에 따로 적으면 하나만 고치는 날이 옵니다.",
+    "id 는 src-tauri/src/upscale.rs 의 UPSCALE.ids · LOCAL.ids 와 같은 것입니다."
+  ],
+  "public": {
+    "excludeEngines": ["gvhmr", "nlf", "nvvfx", "upscayl", "anima"],
+    "_why": {
+      "gvhmr": "비상업 연구용(zju3dv/GVHMR LICENSE) — 상업 배포판에 실을 수 없음",
+      "nlf": "비상업 연구용(isarandi/nlf 라이선스) — 상업 배포판에 실을 수 없음",
+      "nvvfx": "NVIDIA 독점 SDK(Maxine Video Effects) — 재배포·브랜딩 조건이 SDK 약관에 묶여 있어 남에게 나눠 줄 수 없음",
+      "upscayl": "Upscayl 실행 파일이 AGPL-3.0 — 배포판에 묶으면 우리 소스도 AGPL 의무가 생김",
+      "anima": "Anima 가중치가 CircleStone Labs 비상업 조건 — 상업 배포판이 받게 할 수 없음"
+    }
+  }
+}

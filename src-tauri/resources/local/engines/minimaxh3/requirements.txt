@@ -1,0 +1,40 @@
+# torch 는 PyTorch 의 cu128 인덱스에서. 판은 업스케일 엔진과 같게 맞춰 두었습니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+# 미니맥스 두 모델은 diffusers 의 «모듈러 파이프라인» 으로 들어왔습니다. 아직 릴리스 판에
+# 다 실리지 않아 **커밋을 못 박아** 씁니다 — 판이 흐르면 우리 워커 코드와 어긋납니다.
+diffusers @ git+https://github.com/huggingface/diffusers@dafe3733fcfdbf3c48915fe77be3aef65b5d6a2d
+#
+# ── 아래 판들은 **직접 풀어서 적은 것**입니다(2026-09-16) ──────────────────────
+#
+# 처음에는 손으로 적당히 적어 두었는데(transformers 4.57.1 · hub 0.36.0 · safetensors 0.6.2) uv 가
+# 「해가 없다」 며 멈췄습니다. 못 박아 둔 diffusers 커밋(0.40.0.dev0)이 safetensors>=0.8.0 과
+# huggingface-hub>=1.23,<2 를 요구하는데, hub 1.x 를 받아들이는 transformers 는 5.x 뿐이라 사슬이 거기서
+# 끊깁니다. transformers 를 4.x 로 묶어 봤더니 2021년 판(4.12.2)까지 내려가 아예 못 씁니다.
+#
+# 그래서 `uv pip compile` 로 **한 번에 풀게 하고 그 결과를 그대로 적었습니다.** 판을 손으로 고칠 때는
+# 같은 방법으로 다시 풀어 전부 함께 옮기세요 — 한 줄만 올리면 또 「해가 없다」 가 됩니다.
+transformers==5.17.0
+huggingface-hub==1.31.0
+safetensors==0.8.0
+accelerate==1.15.0
+peft==0.21.0
+torchao==0.18.0
+numpy==2.5.3
+pillow==12.3.0
+# av 는 15.1.0 그대로 — 영상 쓰기(imageio-ffmpeg)와 맞춰 둔 판입니다.
+av==15.1.0
+imageio==2.37.4
+imageio-ffmpeg==0.6.0
+soundfile==0.14.0
+
+# ── 빠른 어텐션 ────────────────────────────────────────────────────────────
+# SageAttention 2.2 — 어텐션을 int8 QK + fp8 PV 로 계산합니다. 2026-09-18 실측(RTX PRO
+# 6000 Blackwell, sm_120): 길이 4k 에서 3.2배, 16k 에서 3.9배, 32k 에서 4.05배 빠릅니다.
+# 영상은 시퀀스가 길어 이득이 그대로 시간으로 돌아옵니다.
+#
+# **여기에는 적지 않습니다.** 휠 주소를 여기 못 박으면 엔비디아가 아니거나 sm_80 보다
+# 낮은 GPU, 윈도우가 아닌 PC 에서 **엔진 설치가 통째로 실패합니다**. 그래서 필수 꾸러미를 다 깐 뒤에
+# `resources/local/fast_attention.py` 가 그 PC 의 토치를 보고 맞는 휠을 고릅니다.
+# 맞는 것이 없으면 건너뛰고, 어텐션은 다음 순위로 내려갑니다 — 안 깔려도 돕니다.

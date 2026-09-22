@@ -1,0 +1,24 @@
+# 디테일 생성(실험) — VOSR 2.0. 저장소 requirements.txt 는 torch 2.5.1+cu121 을 박아
+# 두었는데 그 조합은 Blackwell(sm_120)에서 돌지 않습니다. 그래서 torch 만 cu128 로 올리고
+# 학습·평가용(basicsr·pyiqa·wandb·datasets·webdataset·fairscale·bitsandbytes)은 뺐습니다.
+# 추론 경로가 쓰는 것만 남깁니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+numpy==2.2.6
+pillow==11.3.0
+safetensors==0.6.2
+einops==0.8.2
+tqdm==4.70.0
+opencv-python==4.12.0.88
+diffusers==0.35.2
+transformers==4.57.6
+accelerate==1.14.0
+timm==1.0.19
+# fairscale — models/rmsnorm.py 가 import 합니다(2026-09-09 실측). 저장소 requirements 에 있지만
+# «학습용» 으로 보이길래 뺀 것이 추론에도 필요했습니다.
+fairscale==0.4.13
+loguru==0.7.3
+PyYAML==6.0.3
+# packaging — safetensors 가 import 하는데 스스로 의존성으로 적어 두지 않았습니다(2026-09-09 실측).
+packaging==26.3

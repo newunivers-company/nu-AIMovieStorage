@@ -1,0 +1,30 @@
+{
+  "id": "sam3dbody",
+  "name": "모션 캡처 — SAM 3D Body (Meta)",
+  "purpose": "한 장씩 몸·손·발 3D. 뒤돈 자세·가림에 가장 강합니다. 사람 찾기는 torchvision Faster R-CNN.",
+  "version": "sam-3d-body b5c765a (2025-11-19 체크포인트)",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "models_dir": "models",
+  "확인일": "2026-09-16",
+  "code": [
+    {
+      "id": "repo",
+      "url": "https://codeload.github.com/facebookresearch/sam-3d-body/zip/b5c765a0d89d789985e186d396315e7590887b94",
+      "commit": "b5c765a0d89d789985e186d396315e7590887b94",
+      "size": null,
+      "sha256": null,
+      "dest": "src",
+      "strip_root": true,
+      "license": "SAM License",
+      "note": "GitHub 생성 zip 이라 해시로 막지 않습니다. 고정점은 커밋 해시."
+    }
+  ],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "가중치(facebook/sam-3d-body-dinov3, 약 3.5 GB)는 첫 분석 때 받습니다. 허깅페이스에서 접근 승인을 받은 계정의 토큰이 있어야 받아집니다.",
+    "SAM License — 상업 이용 가능, 군사·무기 등 금지 용도가 있습니다."
+  ]
+}

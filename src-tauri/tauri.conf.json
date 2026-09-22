@@ -1,0 +1,66 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "AI 영상 스토리지",
+  "version": "0.1.0",
+  "identifier": "com.aivideostorage.local",
+  "build": {
+    "frontendDist": "../dist/public",
+    "devUrl": "http://127.0.0.1:3000",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build:client"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AI 영상 스토리지",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1100,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "resources": [
+      "resources/upscale/*.py",
+      "resources/upscale/tools.json",
+      "resources/upscale/engines/*.py",
+      "resources/upscale/engines/*/requirements.txt",
+      "resources/upscale/engines/*/manifest.json",
+      "resources/local/*.py",
+      "resources/local/engines/*.py",
+      "resources/local/engines/*/requirements.txt",
+      "resources/local/engines/*/manifest.json"
+    ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Korean",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# torch 는 PyTorch 의 cu128 인덱스에서. 판은 업스케일 엔진과 같게 맞춰 두었습니다 —
+# 같은 GPU 에 다른 판이 두 벌 깔리면 드라이버 문제를 가려내기가 어렵습니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+# Z-Image·Krea 2·LTX 2.5·Anima 는 0.36 에 **없습니다**(2026-09-17 에 wheel 을 열어 확인).
+diffusers==0.40.0
+# diffusers 0.40 은 huggingface-hub 1.23 이상을 못 박는데, transformers 4.57 은 1.0 미만을 못 박습니다 —
+# 둘이 한 환경에 못 삽니다(2026-09-18 uv 해석 원문: «diffusers>=0.40.0 and transformers<=4.57.6 are
+# incompatible»). 그래서 transformers 는 5 대, hub·safetensors 도 0.40 이 요구하는 판입니다.
+transformers==5.17.0
+accelerate==1.10.1
+safetensors==0.8.0
+sentencepiece==0.2.1
+protobuf==6.33.0
+peft==0.18.0
+huggingface-hub==1.32.0
+numpy==2.2.6
+pillow==11.3.0
+imageio==2.37.0
+
+# GPU 가 작을 때 **정말로 줄여서** 올리려고. int8·nf4 둘 다 이 패키지가 합니다.
+bitsandbytes==0.48.1

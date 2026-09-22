@@ -1,0 +1,19 @@
+# SAM 3D Body 추론에 필요한 것만 — 원래 설치 안내의 학습·시각화 꾸러미(detectron2·pyrender·wandb 등)는 뺐습니다.
+# detectron2 는 윈도에서 CUDA 툴킷으로 직접 빌드해야 해서, 사람 찾기는 torchvision 의 Faster R-CNN 으로 대신합니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+numpy==2.2.6
+opencv-python==4.12.0.88
+roma==1.5.3
+pytorch-lightning==2.5.5
+omegaconf==2.3.0
+yacs==0.1.8
+# DINOv3 백본을 torch.hub 로 읽을 때 그 저장소의 로깅이 씁니다. 빠져 있어 «No module named 'termcolor'» 로 죽었습니다(2026-09-16).
+termcolor==3.1.0
+timm==1.0.20
+einops==0.8.1
+braceexpand==0.1.7
+huggingface-hub==0.36.0
+trimesh==4.8.3
+pillow==11.3.0

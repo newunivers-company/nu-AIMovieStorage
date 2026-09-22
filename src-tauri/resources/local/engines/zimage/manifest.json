@@ -1,0 +1,20 @@
+{
+  "id": "zimage",
+  "name": "그림 — Z-Image Turbo (6B)",
+  "purpose": "8 스텝이면 한 장. 16 GB 카드에서도 도는 가장 가벼운 그림 엔진 — 컷을 여러 장 굴려 보며 고를 때.",
+  "version": "Tongyi-MAI/Z-Image-Turbo · diffusers 0.36",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "fast_attention": true,
+  "models_dir": "models",
+  "확인일": "2026-09-17",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "가중치(약 12 GB)는 첫 생성 때 huggingface_hub 가 받습니다. 게이트가 아니라 토큰이 필요 없습니다.",
+    "8 NFE 증류판이라 steps 는 9, guidance 는 1 쯤이 기본입니다 — 더 올리면 오히려 뭉갭니다.",
+    "Apache-2.0 — 상업 이용에 제한이 없습니다."
+  ]
+}

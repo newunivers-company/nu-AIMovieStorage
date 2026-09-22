@@ -1,0 +1,37 @@
+# 의존성·빌드 산출물 — 설치하면 다시 생깁니다
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 열쇠는 절대 올리지 않습니다. 한 번 들어가면 기록에서 지워지지 않습니다.
+.env
+.env.*
+!.env.example
+
+# 편집기·운영체제가 흘리는 것들
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# 마누스 시절 잔재
+.manus-logs/
+client/public/__manus__/
+
+# 대화 기록 원문 (24MB). 복원 근거이긴 하지만 저장소를 다섯 배로 불립니다.
+# D 드라이브 로컬에만 둡니다 — git 이력에 한번 들어가면 지워도 용량이 안 줍니다.
+docs/복원/기록/
+
+# 에이전트 작업 트리. 합치고 나면 지워집니다 — 저장소에 넣지 않습니다.
+.claude/worktrees/
+
+# 파이썬 바이트코드. 업스케일 워커 스크립트를 여기서 한 번 돌려 보면 리소스 폴더에 생기는데,
+# 번들에는 안 실리고(tauri.conf.json 이 *.py·*.json·requirements.txt 만 집음) 저장소만 더럽힙니다.
+# 소스를 고친 뒤 stale 한 .pyc 가 남으면 «고쳤는데 안 바뀐다» 를 만듭니다.
+__pycache__/
+*.pyc
+
+# 시험대가 흘리는 것들 — 결과 JSON·헤드리스 크롬 프로필. 다시 돌리면 또 생깁니다.
+scratch/

@@ -1,0 +1,98 @@
+{
+  "id": "vosr",
+  "name": "디테일 생성 (실험) — VOSR 2.0",
+  "purpose": "영웅 컷. 환각 적고 구조에 충실한 1스텝 확산형. 장마다 CLI 를 새로 띄워 한 장이 느림",
+  "version": "cswry/VOSR 커밋 516f292 (2026-09-08) · 가중치 2026-08-26",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": true,
+  "models_dir": "preset/ckpts",
+  "확인일": "2026-09-09",
+  "code": [
+    {
+      "id": "repo",
+      "url": "https://codeload.github.com/cswry/VOSR/zip/516f292b99cf23c76fdc33351e86dc4f97711fe8",
+      "commit": "516f292b99cf23c76fdc33351e86dc4f97711fe8",
+      "size": 9040530,
+      "sha256": null,
+      "sha256_seen": "057268cd3c4198024cbf97ac8dcf8274c8f6ccbd0b3c0d2bfa7f5633470a2cb5",
+      "dest": "src",
+      "strip_root": true,
+      "license": "Apache-2.0",
+      "note": "GitHub 생성 zip 이라 해시로 막지 않습니다. 고정점은 커밋 해시."
+    },
+    {
+      "id": "dinov2",
+      "url": "https://codeload.github.com/facebookresearch/dinov2/zip/7764ea0f912e53c92e82eb78a2a1631e92725fc8",
+      "commit": "7764ea0f912e53c92e82eb78a2a1631e92725fc8",
+      "size": null,
+      "sha256": null,
+      "dest": "preset/ckpts/torch_cache/facebookresearch_dinov2_main",
+      "strip_root": true,
+      "license": "Apache-2.0",
+      "note": "VOSR 이 torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14') 로 비전 인코더를 부릅니다. 인터넷 없이 돌게 hub 캐시 자리에 미리 풀어 둡니다."
+    }
+  ],
+  "models": [
+    {
+      "id": "vosr2_args",
+      "optional": false,
+      "path": "VOSR2/args.json",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/VOSR2/args.json",
+      "sha256": null,
+      "size": 816
+    },
+    {
+      "id": "vosr2",
+      "optional": false,
+      "path": "VOSR2/checkpoints/ema_model.safetensors",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/VOSR2/checkpoints/ema_model.safetensors",
+      "sha256": "bdcaa81e4c675b6074de643e27daafe73eb8125d4d0264d1bf30a004e9644b71",
+      "size": 5576385424
+    },
+    {
+      "id": "qwen_vae_config",
+      "optional": false,
+      "path": "Qwen-Image-vae-2d/config.json",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/Qwen-Image-vae-2d/config.json",
+      "sha256": null,
+      "size": 811
+    },
+    {
+      "id": "qwen_vae",
+      "optional": false,
+      "path": "Qwen-Image-vae-2d/diffusion_pytorch_model.safetensors",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/Qwen-Image-vae-2d/diffusion_pytorch_model.safetensors",
+      "sha256": "1dd2c67f3f29734d48709513ed181d4f351966d76ba95f77a5cff8e1daf547fa",
+      "size": 178418892
+    },
+    {
+      "id": "dinov2_vitl14",
+      "optional": false,
+      "path": "torch_cache/checkpoints/dinov2_vitl14_pretrain.pth",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/torch_cache/checkpoints/dinov2_vitl14_pretrain.pth",
+      "sha256": "d5383ea8f4877b2472eb973e0fd72d557c7da5d3611bd527ceeb1d7162cbf428",
+      "size": 1217586395,
+      "note": "VOSR2 의 args.json 이 enc_type=dinov2l 이라 이 가중치가 필요합니다. 원본은 dl.fbaipublicfiles.com 에도 같은 크기로 있습니다. 2026-09-09: 여기 적혀 있던 0b8b82f8… 은 **같은 폴더의 vitb14(346,378,731 바이트)** 해시였습니다 — 크기는 vitl14 것이라 받기는 다 받아 놓고 검증에서 반드시 실패했고, «설치» 가 늘 이 파일에서 멈췄습니다. HF API(/api/models/CSWRY/VOSR/tree/main/torch_cache/checkpoints)의 lfs oid 로 다시 확인해 고쳤습니다."
+    },
+    {
+      "id": "sd21_lwdecoder",
+      "optional": true,
+      "path": "sd21_lwdecoder.pth",
+      "url": "https://huggingface.co/CSWRY/VOSR/resolve/main/sd21_lwdecoder.pth",
+      "sha256": "a326a5e5c4a2445ce970987695979f3d5e5413d39b98c73a2ddac0055d2cdf59",
+      "size": 52086482,
+      "note": "가벼운 디코더 선택지. 없어도 Qwen VAE 로 디코드합니다."
+    }
+  ],
+  "empty_files": [
+    "torch_cache/trusted_list"
+  ],
+  "notes": [
+    "models_dir 이 preset/ckpts 인 이유: 저장소가 torch.hub.set_dir('preset/ckpts/torch_cache') 와 ae_path='preset/ckpts/Qwen-Image-vae-2d' 를 현재 폴더 기준 상대 경로로 박아 두었습니다. 워커가 엔진 폴더를 현재 폴더로 두고 CLI 를 부릅니다.",
+    "empty_files 는 models[].path 와 같은 models_dir(preset/ckpts) 기준입니다. 엔진 뿌리 기준인 것은 code[].dest 하나뿐입니다(upscale.rs 의 model_root.join / engine_root.join). 실제로 만들어지는 자리는 engines/vosr/preset/ckpts/torch_cache/trusted_list — torch.hub 가 trusted_list 를 «hub 폴더 안» 에서 찾고(torch/hub.py 의 os.path.join(get_dir(), 'trusted_list')), 여기서 hub 폴더는 set_dir 이 가리키는 preset/ckpts/torch_cache 라서 이 자리가 맞습니다.",
+    "2026-09-09 에 이 값을 preset/ckpts/torch_cache/trusted_list 로 «고친» 적이 있는데 틀렸습니다. 기준을 code[].dest 와 헷갈린 것으로, 그렇게 두면 engines/vosr/preset/ckpts/preset/ckpts/torch_cache/trusted_list 라는 쓰레기 경로가 생기고 정작 torch 가 보는 자리에는 파일이 없습니다. 되돌렸습니다.",
+    "실제로 물음이 뜨지 않는 진짜 이유는 따로 있습니다: torch.hub 는 hub 폴더의 «하위 폴더 이름» 도 신뢰 목록으로 칩니다(trusted_repos_legacy). 우리가 facebookresearch_dinov2_main 을 미리 풀어 두므로 이미 믿는 저장소가 됩니다. trusted_list 빈 파일은 그 위의 안전장치입니다.",
+    "2026-09-09 에 Windows·Blackwell 에서 4K·6K·8K 를 실제로 뽑았습니다(12번 문서 §5.2). 실험 배지를 유지하는 이유는 성능이 아니라 구조입니다 — 모델을 상주시키지 못하고 장마다 CLI 를 새로 띄웁니다."
+  ]
+}

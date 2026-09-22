@@ -1,0 +1,19 @@
+{
+  "id": "qwenimage",
+  "name": "그림 — Qwen-Image (20B)",
+  "purpose": "글자와 «세는 지시» 에 가장 강한 오픈 모델. 간판·표지판이 들어가는 컷에.",
+  "version": "Qwen-Image · diffusers 0.36",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "fast_attention": true,
+  "models_dir": "models",
+  "확인일": "2026-09-14",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "가중치(약 40 GB)는 첫 생성 때 huggingface_hub 가 받습니다 — 파일이 수십 개로 흩어져 있어 manifest 에 적어 둘 수가 없습니다. 받은 것은 engines/qwenimage/models 안에 남습니다.",
+    "Apache-2.0 — 상업 이용에 제한이 없습니다."
+  ]
+}

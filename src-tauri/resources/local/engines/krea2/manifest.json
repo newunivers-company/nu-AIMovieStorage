@@ -1,0 +1,21 @@
+{
+  "id": "krea2",
+  "name": "그림 — Krea 2 Turbo (12B)",
+  "purpose": "8 스텝에 사진 결. 화풍 로라 생태계가 가장 활발한 쪽 — 프로젝트의 그림체를 로라로 고정할 때.",
+  "version": "krea/Krea-2-Turbo · diffusers 0.36",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "fast_attention": true,
+  "models_dir": "models",
+  "확인일": "2026-09-17",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "**게이트 저장소입니다** — 허깅페이스에서 krea/Krea-2-Turbo 페이지의 라이선스에 동의하고 토큰을 넣어야 받습니다.",
+    "라이선스는 Krea 2 Community — 회사 연 매출 **100만 달러 미만**이면 상업 이용이 됩니다. 넘으면 별도 계약이 필요합니다.",
+    "증류판이라 8 스텝 · guidance 0 이 제작진이 정한 지점입니다. 올려도 좋아지지 않습니다.",
+    "가중치는 bf16 약 26 GB. 24 GB 카드는 fp8(약 13 GB)로 줄여야 편합니다."
+  ]
+}

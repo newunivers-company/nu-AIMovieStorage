@@ -1,0 +1,26 @@
+# 사실감·큰 배율 — SeedVR2 (numz inference_cli). 저장소 requirements.txt 의 목록을
+# 그대로 두되 판을 전부 고정했습니다(원본은 상한이 없어 어느 날 갑자기 깨집니다).
+# opencv 는 4.x 로 묶습니다 — 5.x 는 나온 지 얼마 안 돼 실측이 없습니다.
+# flash-attn·apex·sageattention 은 넣지 않습니다: sm_120(Blackwell) 빌드가 깨져 있고
+# SDPA 로 충분합니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+numpy==2.2.6
+pillow==11.3.0
+safetensors==0.6.2
+einops==0.8.2
+tqdm==4.70.0
+psutil==7.2.2
+omegaconf==2.3.1
+diffusers==0.35.2
+peft==0.17.1
+# transformers — 직접 쓰지는 않지만 diffusers·peft 가 끌어옵니다. 판을 안 박으면 5.x 가 딸려 와서
+# «cannot import name 'HybridCache' from transformers» 로 diffusers 가 죽습니다(2026-09-09 실측).
+transformers==4.57.6
+rotary_embedding_torch==0.8.9
+opencv-python==4.12.0.88
+gguf==0.17.1
+matplotlib==3.10.9
+# packaging — safetensors 가 import 하는데 스스로 의존성으로 적어 두지 않았습니다(2026-09-09 실측).
+packaging==26.3

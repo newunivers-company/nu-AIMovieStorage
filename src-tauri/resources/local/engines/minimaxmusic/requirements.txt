@@ -1,0 +1,21 @@
+# torch 는 PyTorch 의 cu128 인덱스에서. 판은 업스케일 엔진과 같게 맞춰 두었습니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+# 미니맥스 두 모델은 diffusers 의 «모듈러 파이프라인» 으로 들어왔습니다. 아직 릴리스 판에
+# 다 실리지 않아 **커밋을 못 박아** 씁니다 — 판이 흐르면 우리 워커 코드와 어긋납니다.
+diffusers @ git+https://github.com/huggingface/diffusers@dafe3733fcfdbf3c48915fe77be3aef65b5d6a2d
+#
+# 아래 판들은 **직접 풀어서 적은 것**입니다(2026-09-16). 까닭은 `engines/minimaxh3/requirements.txt` 에
+# 자세히 적어 두었습니다 — 요약하면 못 박은 diffusers 커밋이 hub 1.x 를 요구하고, 그것을 받아들이는
+# transformers 는 5.x 뿐이라 손으로 적은 판(4.57.1 · 0.36.0 · 0.6.2)으로는 «해가 없다» 가 됩니다.
+# 고칠 때는 `uv pip compile` 로 다시 풀어 **전부 함께** 옮기세요.
+transformers==5.17.0
+huggingface-hub==1.31.0
+safetensors==0.8.0
+accelerate==1.15.0
+peft==0.21.0
+numpy==2.5.3
+pillow==12.3.0
+soundfile==0.14.0
+librosa==0.11.0

@@ -1,0 +1,20 @@
+{
+  "id": "minimaxmusic",
+  "name": "음악 — MiniMax-Music3 (오픈 웨이트)",
+  "purpose": "BGM 을 바로. 한 번에 5분짜리 완곡을 내고, 가사를 비우면 연주곡입니다. 32kHz 스테레오.",
+  "version": "MiniMax-Music3 · 2026-08-13 공개",
+  "kind": "python",
+  "heavy": true,
+  "python": "3.12",
+  "experimental": false,
+  "models_dir": "models",
+  "확인일": "2026-09-14",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "2026-08-13 에 오픈 웨이트로 공개됐습니다.",
+    "가중치(약 20 GB)는 첫 생성 때 받습니다. 24 GB 면 넉넉하고, 8 GB 대는 언어 모델을 잎 단위로 흘려 보내며 돕니다.",
+    "상업 이용이 되지만 «MiniMax Music 3» 표기가 필요하고, 규모가 커지면 별도 협의가 필요합니다 — 모델 카드를 확인하세요."
+  ]
+}

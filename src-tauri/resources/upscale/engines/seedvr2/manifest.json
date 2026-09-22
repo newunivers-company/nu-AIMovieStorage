@@ -1,0 +1,70 @@
+{
+  "id": "seedvr2",
+  "name": "사실감·큰 배율 — SeedVR2 7B",
+  "purpose": "배경·캐릭터 4K~8K. 1스텝 DiT 라 4K 십수 초. AI 생성물에 강함",
+  "version": "numz v2.5.24 (커밋 4490bd1, 2025-12-24) · 가중치 2025-07",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "models_dir": "models",
+  "확인일": "2026-09-09",
+  "code": [
+    {
+      "id": "repo",
+      "url": "https://codeload.github.com/numz/ComfyUI-SeedVR2_VideoUpscaler/zip/4490bd1f482e026674543386bb2a4d176da245b9",
+      "commit": "4490bd1f482e026674543386bb2a4d176da245b9",
+      "tag": "v2.5.24 (태그 없음 — 그날 마지막 커밋)",
+      "size": 4864981,
+      "sha256": null,
+      "sha256_seen": "04c61842bc00fd8673e6bc9a3b1b1935955461f363791070ed14d67d2a2e77fb",
+      "dest": "src",
+      "strip_root": true,
+      "license": "Apache-2.0",
+      "note": "GitHub 가 만들어 주는 zip 은 같은 커밋이라도 바이트가 달라질 수 있어(압축기 판 차이) 해시로 막지 않습니다. 커밋 해시가 진짜 고정점이고, 위 sha256_seen 은 2026-09-09 에 받은 것의 값입니다."
+    }
+  ],
+  "models": [
+    {
+      "id": "vae",
+      "optional": false,
+      "path": "ema_vae_fp16.safetensors",
+      "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/ema_vae_fp16.safetensors",
+      "sha256": "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1",
+      "size": 501324814,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "7b",
+      "optional": false,
+      "path": "seedvr2_ema_7b_fp16.safetensors",
+      "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_fp16.safetensors",
+      "sha256": "7b8241aa957606ab6cfb66edabc96d43234f9819c5392b44d2492d9f0b0bbe4a",
+      "size": 16479334424,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "7b_sharp",
+      "optional": true,
+      "path": "seedvr2_ema_7b_sharp_fp16.safetensors",
+      "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_sharp_fp16.safetensors",
+      "sha256": "20a93e01ff24beaeebc5de4e4e5be924359606c356c9c51509fba245bd2d77dd",
+      "size": 16479334424,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "3b",
+      "optional": true,
+      "path": "seedvr2_ema_3b_fp16.safetensors",
+      "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_3b_fp16.safetensors",
+      "sha256": "2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304",
+      "size": 6783018808,
+      "license": "Apache-2.0"
+    }
+  ],
+  "empty_files": [],
+  "notes": [
+    "가중치 sha256 은 저장소의 src/utils/model_registry.py 에 적힌 값과 HuggingFace API 값이 일치함을 확인했습니다 — 우리가 미리 놓아 두면 저장소의 download_weight 가 그대로 받아들입니다.",
+    "fp8·GGUF·nvfp4 판은 넣지 않습니다: 96GB VRAM 이면 fp16 이 낫고, Comfy-Org 의 양자화본은 numz CLI 가 못 읽습니다.",
+    "워커는 코드의 _process_frames_core 를 직접 불러 dit/vae 를 프로세스에 남깁니다(상주). 서브프로세스 CLI 가 아닙니다."
+  ]
+}

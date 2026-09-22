@@ -1,0 +1,14 @@
+# 빠르고 가벼움 — spandrel. 전 패키지 고정(2026-09-09 확인).
+# torch 만 PyTorch 의 cu128 인덱스에서 옵니다 — cu128 Windows 휠 상한이 2.11.0 입니다.
+# spandrel_extra_arches 는 일부러 뺐습니다: 비상업 라이선스 아키텍처가 들어 있고
+# 우리가 쓰는 RealPLKSR·SPAN 은 본체 spandrel 에 있습니다.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+numpy==2.2.6
+pillow==11.3.0
+safetensors==0.6.2
+einops==0.8.2
+spandrel==0.4.2
+# packaging — safetensors 가 import 하는데 스스로 의존성으로 적어 두지 않았습니다(2026-09-09 실측).
+packaging==26.3

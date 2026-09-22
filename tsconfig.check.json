@@ -1,0 +1,57 @@
+{
+  "include": [
+    "client/src/**/*",
+    "shared/**/*"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "downlevelIteration": true,
+    "noEmit": true,
+    "incremental": false,
+    "module": "ESNext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable"
+    ],
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "types": [],
+    "paths": {
+      "@/*": [
+        "./client/src/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ],
+      "react": [
+        "/tmp/nm/@types/react"
+      ],
+      "react/*": [
+        "/tmp/nm/@types/react/*"
+      ],
+      "react-dom": [
+        "/tmp/nm/@types/react-dom"
+      ],
+      "react-dom/*": [
+        "/tmp/nm/@types/react-dom/*"
+      ],
+      "three": [
+        "/tmp/nm/@types/three"
+      ],
+      "three/*": [
+        "/tmp/nm/@types/three/*"
+      ],
+      "*": [
+        "/tmp/nm/*"
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "acestep",
+  "name": "음악 — ACE-Step v1 (3.5B)",
+  "purpose": "MiniMax-Music3 가 무거운 기계를 위한 가벼운 대안. 태그로 장르·악기·bpm 을 주고, 가사가 없으면 연주곡.",
+  "version": "ACE-Step-v1-3.5B",
+  "kind": "python",
+  "python": "3.12",
+  "experimental": false,
+  "models_dir": "models",
+  "확인일": "2026-09-14",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "사용자가 지목한 MiniMax-Music3 가 기본입니다. 이것은 그것이 무거운 기계를 위한 가벼운 대안입니다.",
+    "가중치(약 7 GB)는 첫 생성 때 받습니다.",
+    "Apache-2.0 — 상업 이용에 제한이 없습니다."
+  ]
+}

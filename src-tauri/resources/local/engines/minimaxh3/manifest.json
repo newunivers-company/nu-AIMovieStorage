@@ -1,0 +1,25 @@
+{
+  "id": "minimaxh3",
+  "name": "영상 — MiniMax-H3 (오픈 웨이트) · 멀티 로라",
+  "purpose": "영상과 사운드트랙을 한 번에. 구도잡기 레퍼런스 영상·인물 시트·배경을 통째로 물릴 수 있습니다(ref2va).",
+  "version": "MiniMax-H3 · 2026-08-03 공개",
+  "kind": "python",
+  "heavy": true,
+  "python": "3.12",
+  "experimental": false,
+  "fast_attention": true,
+  "prefetch": true,
+  "models_dir": "models",
+  "확인일": "2026-09-22",
+  "code": [],
+  "models": [],
+  "empty_files": [],
+  "notes": [
+    "맞습니다. 2026-08-03 에 오픈 웨이트로 공개됐고 diffusers 로 바로 돕니다. 컴피UI 를 거치지 않고 우리가 직접 돌립니다.",
+    "가중치(약 190 GB, bf16 — ref2va 용 transformer_ref 62 GB 포함)는 설치 때 통째로 미리 받습니다(prefetch: true → 워커 op prefetch). : 그전에는 첫 생성 때 그 워크플로 것만 받아서, 레퍼런스 영상을 처음 뽑는 날 «생성 중» 안에서 62 GB 를 말없이 받게 돼 있었습니다. 이미 깔린 엔진은 설정의 «가중치 미리 받기» 단추로 받습니다.",
+    "24~32 GB 카드는 int8 로 양자화해 올리며, 그때 호스트 RAM 이 75 GB 쯤 필요합니다.",
+    "guidance 증류판이라 네거티브 프롬프트와 guidance_scale 이 없습니다. 24fps 고정 5~15초이고, 프레임 수는 17n+5 로 올려 맞춥니다 — 5초보다 짧은 컷도 5.17초가 됩니다.",
+    "영상과 소리가 따로 나와서 워커가 한 파일로 합칩니다(encode_video). 합치지 않으면 소리 없는 mp4 가 남습니다.",
+    "라이선스는 모델 카드를 확인하세요."
+  ]
+}
