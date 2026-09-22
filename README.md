@@ -5,7 +5,7 @@
 A Windows desktop app for planning AI videos, managing character references, blocking shots in 3D,
 and preparing model-specific prompts. Keep each cut's prompts, references and generated assets in one project.
 
-**[Download for Windows](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [Installation](#installation) ·
+**[Release status](https://github.com/raonolje/AIMovieStorage/releases)** · [Installation](#installation) ·
 [Feature details](#what-it-does) · [Build from source](#build-from-source) ·
 [Report an issue](https://github.com/raonolje/AIMovieStorage/issues)
 
@@ -24,20 +24,19 @@ and preparing model-specific prompts. Keep each cut's prompts, references and ge
 
 ## Installation
 
-Download the installer or portable ZIP from the **[latest release](https://github.com/raonolje/AIMovieStorage/releases/latest)**.
-Both packages are available in [v0.1.0](https://github.com/raonolje/AIMovieStorage/releases/tag/v0.1.0).
+**The previously published build has been removed while an updated build is being prepared.**
+There is currently no packaged download. You can [build from source](#build-from-source), or check
+the [Releases page](https://github.com/raonolje/AIMovieStorage/releases) for the next published build.
 Prebuilt packages do not require Node, pnpm or Rust; those tools are only needed to [build from source](#build-from-source).
 
-Open the release's **Assets** section and choose:
+When a release is published, open its **Assets** section and choose:
 
 | Package | How to use it |
 | --- | --- |
 | Installer (`*-setup.exe`) | Run the installer and follow the setup steps. |
 | Portable (`*_portable.zip`) | Extract the entire archive, then run the included `.exe`. Keep the `resources` folder beside it. Settings and model downloads still use the user's app data folder. |
 
-In v0.1.0 the files are named `AI._0.1.0_x64-setup.exe` and `frameforge_portable.zip`.
 GitHub's automatic **Source code (zip/tar.gz)** archives contain source files, not a ready-to-run app.
-The existing v0.1.0 packages predate the rename and still display **AI 영상 스토리지 (공개판)**. New builds use **AIMovieStorage (공개판)**; existing settings and model storage locations are retained.
 
 - **Windows 10/11, x64.** macOS and Linux are not currently supported.
 - **NVIDIA GPU (CUDA):** needed only for local generation; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
@@ -188,7 +187,7 @@ For the same reason a few engines are not part of this build — `edition.json` 
 인물 레퍼런스, 3D 구도, 모델별 프롬프트와 생성 결과를 한 프로젝트에서 관리하는 Windows 데스크톱 앱입니다.
 시나리오를 씬과 컷으로 나누고, 각 컷의 인물·공간·카메라 구도를 준비하는 작업을 돕습니다.
 
-**[Windows 다운로드](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [설치 안내](#설치-안내) ·
+**[배포 상태](https://github.com/raonolje/AIMovieStorage/releases)** · [설치 안내](#설치-안내) ·
 [기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
 [오류 제보](https://github.com/raonolje/AIMovieStorage/issues)
 
@@ -207,20 +206,19 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ## 설치 안내
 
-**[최신 Release](https://github.com/raonolje/AIMovieStorage/releases/latest)** 페이지에서 설치본이나 무설치 ZIP을 받으세요.
-[v0.1.0](https://github.com/raonolje/AIMovieStorage/releases/tag/v0.1.0)에 두 파일이 모두 게시되어 있습니다.
+**기존 배포본을 내리고 수정된 빌드를 준비하고 있습니다.**
+현재 내려받을 수 있는 설치본·무설치본은 없습니다. [소스에서 실행](#소스에서-실행)하거나,
+[Releases](https://github.com/raonolje/AIMovieStorage/releases)에서 다음 배포본을 확인해 주세요.
 배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다. 이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
 
-Release의 **Assets**에서 원하는 형식을 선택합니다.
+새 Release가 게시되면 **Assets**에서 원하는 형식을 선택합니다.
 
 | 파일 | 실행 방법 |
 | --- | --- |
 | 설치본(`*-setup.exe`) | 파일을 실행하고 설치 안내를 따릅니다. |
 | 무설치본(`*_portable.zip`) | 압축을 모두 푼 뒤 안의 `.exe`를 실행합니다. `resources` 폴더를 실행 파일 옆에 유지하세요. 설정과 모델은 사용자 앱 데이터 폴더에 저장됩니다. |
 
-v0.1.0의 파일 이름은 `AI._0.1.0_x64-setup.exe`와 `frameforge_portable.zip`입니다.
 GitHub가 자동으로 제공하는 **Source code** 압축 파일(`zip`/`tar.gz`)은 바로 실행하는 앱이 아닌 소스 코드입니다.
-기존 v0.1.0 배포 파일에는 변경 전 이름인 **AI 영상 스토리지 (공개판)** 이 표시됩니다. 새 빌드부터 **AIMovieStorage (공개판)** 으로 표시하며, 기존 설정과 모델 저장 위치는 유지합니다.
 
 - **Windows 10/11, x64.** macOS·Linux는 아직 지원하지 않습니다.
 - **NVIDIA GPU(CUDA):** 로컬 생성에만 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
