@@ -54,6 +54,15 @@ def load(root, opts):
     # 정밀도 판단은 다른 엔진과 **같은 한 곳**입니다. 줄이는 길이 없는 엔진이라 규칙이
     # «줄여라» 라고 하면 그것이 곧 «언어 모델을 흘려라» 입니다.
     plan = common.plan_precision(BF16_GB, opts, loaded=_state["plan"], supported=SUPPORTED)
+    # 정밀도 이름이 같아도 **흘리기 방식이 바뀌면 다시 올려야 합니다.**
+    # 이 엔진은 `SUPPORTED=("bf16",)` 이라 `plan["mode"]` 가 늘 bf16 이고, 그래서
+    # `plan["reload"]` 만 보면 «바뀐 게 없다» 가 됩니다. 그런데 실제로 갈리는 값은
+    # `wanted`(규칙이 고른 값)이고, 그 값이 바뀌면 만들 때 넘기는 인자 자체가 달라집니다.
+    # 그대로 두면 VRAM 이 빠듯해져 흘려야 하는데 통째로 올라간 것을 계속 쓰다 터집니다.
+    was = (_state["plan"] or {}).get("wanted")
+    if was and was != plan["wanted"]:
+        common.log("흘리기 방식이 {} → {} 로 바뀝니다. 내리고 다시 올립니다.".format(was, plan["wanted"]))
+        unload()
     if _state["pipe"] is not None and not plan["reload"]:
         return
     import torch
