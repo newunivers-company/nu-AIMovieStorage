@@ -1,4 +1,49 @@
-# FrameForge
+# FrameForge — AI Video Production Workbench
+
+[English](#frameforge--ai-video-production-workbench) · [한국어](#한국어)
+
+A Windows desktop app for planning AI videos, managing character references, blocking shots in 3D,
+and preparing model-specific prompts. Keep each cut's prompts, references and generated assets in one project.
+
+**[Installation](#installation)** · [Releases](https://github.com/raonolje/AIStorage/releases) ·
+[Feature details](#what-it-does) · [Build from source](#build-from-source) ·
+[Report an issue](https://github.com/raonolje/AIStorage/issues)
+
+| Task | What FrameForge provides |
+| --- | --- |
+| Plan the story | Break a screenplay into characters, locations, scenes and cuts, with a prompt request for each card. |
+| Keep character references connected | Reference sheets, linked variants and `@tags` for reusing the same identity across cuts. |
+| Design the shot | 3D rooms, character poses, camera framing and movement, plus reference-video export. |
+| Prepare generation | Model-specific prompts, Magnific desktop integration and optional local image, video and music engines. |
+| Organize the results | Project folders, named assets and imported renders linked back to their cards. |
+
+**Workflow:** screenplay → characters & locations → 3D blocking → prompts & references → generation → import & reuse.
+
+> **Beta.** Local generation and model-specific prompts are still being verified. Check results and keep backups.
+> The interface defaults to Korean; English, Japanese and Chinese are available in Settings, with some screens still untranslated.
+
+## Installation
+
+**Release status (2026-09-22): no packaged release has been published yet.**
+For now, use the [source setup below](#build-from-source). The [Releases page](https://github.com/raonolje/AIStorage/releases)
+is the place to check for future Windows downloads.
+
+When a release is available, open its **Assets** section and choose:
+
+| Package | How to use it |
+| --- | --- |
+| Installer (`*-setup.exe`) | Run the installer and follow the setup steps. |
+| Portable (`*_portable.zip`) | Extract the entire archive, then run the included `.exe`. Keep the `resources` folder beside it. Settings and model downloads still use the user's app data folder. |
+
+GitHub's automatic **Source code (zip/tar.gz)** archives contain source files, not a ready-to-run app.
+The public build uses the product name **AI 영상 스토리지 (공개판)**, so the installer name may differ from FrameForge.
+
+- **Windows 10/11, x64.** macOS and Linux are not currently supported.
+- **NVIDIA GPU (CUDA):** needed only for local generation; requirements vary by engine. Model weights are downloaded separately and have [their own licenses](#license).
+- **OpenAI or Claude API key:** optional, for LLM-assisted prompt writing.
+- **WebView2 Runtime:** required by the desktop app. If missing when using the portable package, follow its included `읽어보세요.txt`.
+
+## Workflow and beta status
 
 > **⚠️ Beta — not everything here is verified yet.**
 >
@@ -86,22 +131,33 @@ your prompts all follow. Register something you generated outside and it is file
 attached to the right card. The folder is the source of truth: if a file is gone from disk it is gone
 from the app, and deleting in the app deletes the original — otherwise it would reappear on the next read.
 
-## Requirements
+## Build from source
 
-- **Windows 10/11** (macOS and Linux not yet)
-- **Node 22+ · pnpm 10+ · Rust (MSVC)** for development
-- An **NVIDIA GPU (CUDA)** only if you want the local generators; everything else works without one
-- An OpenAI or Claude API key if you want the LLM to write prompts (optional)
+Development requires **Windows 10/11**, **Git**, **Node 22+**, **pnpm 10+**, **Rust (MSVC)**,
+and **Visual Studio C++ Build Tools**. The GPU and API key requirements above apply only to their optional features.
 
 ```bash
-pnpm install
-pnpm dev:desktop   # run as a desktop app
-pnpm check         # type check
-pnpm test          # unit tests
-pnpm build:public  # installer + portable build
+git clone https://github.com/raonolje/AIStorage.git
+cd AIStorage
+pnpm install --frozen-lockfile
+pnpm dev:desktop --edition public  # run with public-edition engine restrictions
 ```
 
-Prebuilt downloads live in [Releases](../../releases) — an installer (`.exe`) and a portable (`.zip`).
+To check the code or create distributable packages:
+
+```bash
+pnpm check         # type check
+pnpm test          # unit tests
+pnpm build:public  # public installer + portable build
+```
+
+The installer is written to `src-tauri/target/release/bundle/nsis/` and the portable archive to
+`src-tauri/target/release/bundle/portable/` with the default build configuration.
+The public edition excludes the engines listed in [edition.json](edition.json).
+`pnpm dev:desktop` without `--edition public` defaults to the private edition; the engines' license terms still apply.
+
+For maintainers, the [release workflow](.github/workflows/release.yml) builds and uploads both packages
+to GitHub Releases when a `v*` tag is pushed. Manual workflow runs save build artifacts on the Actions run instead.
 
 ## Keys
 
@@ -110,7 +166,7 @@ made from inside the app — so keys are not visible to the web layer and CORS i
 
 ## Suggestions and bug reports
 
-Both are welcome, and wanted. Open an [Issue](../../issues) for anything at all —
+Both are welcome, and wanted. Open an [Issue](https://github.com/raonolje/AIStorage/issues) for anything at all —
 something crashed, something behaved oddly, a step was hard to follow, or a feature you need is missing.
 Korean or English is fine. If it is a bug, the app version, what you clicked and a screenshot make it
 much faster to track down; if it is an idea, just describe what you were trying to do.
@@ -124,7 +180,52 @@ For the same reason a few engines are not part of this build — `edition.json` 
 
 ---
 
-# FrameForge — AI 영상 스토리지
+## 한국어
+
+### FrameForge — AI 영상 제작 워크벤치
+
+인물 레퍼런스, 3D 구도, 모델별 프롬프트와 생성 결과를 한 프로젝트에서 관리하는 Windows 데스크톱 앱입니다.
+시나리오를 씬과 컷으로 나누고, 각 컷의 인물·공간·카메라 구도를 준비하는 작업을 돕습니다.
+
+**[설치 안내](#설치-안내)** · [Releases](https://github.com/raonolje/AIStorage/releases) ·
+[기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
+[오류 제보](https://github.com/raonolje/AIStorage/issues)
+
+| 작업 | 주요 기능 |
+| --- | --- |
+| 이야기 구성 | 시나리오에서 인물·장소·씬·컷을 정리하고 카드마다 프롬프트를 요청합니다. |
+| 인물 레퍼런스 관리 | 기준 시트, 연결된 변형, `@태그`로 컷마다 같은 인물의 레퍼런스를 재사용합니다. |
+| 구도 설계 | 3D 공간에서 인물 포즈·카메라·동선을 잡고 레퍼런스 영상을 내보냅니다. |
+| 생성 준비 | 모델별 프롬프트, 마그니픽 데스크톱 연동, 선택형 로컬 이미지·영상·음악 생성을 제공합니다. |
+| 결과 정리 | 프로젝트 폴더와 파일 이름을 관리하고, 외부 생성 결과를 해당 카드에 연결합니다. |
+
+**작업 흐름:** 시나리오 → 인물·장소 → 3D 구도 → 프롬프트·레퍼런스 → 생성 → 결과 등록·재사용.
+
+> **베타입니다.** 로컬 생성과 모델별 프롬프트는 검증 중입니다. 결과를 확인하고 중요한 자료는 백업해 주세요.
+> 기본 언어는 한국어이며 설정에서 English · 日本語 · 中文으로 바꿀 수 있습니다. 일부 화면은 아직 한국어로 표시됩니다.
+
+## 설치 안내
+
+**배포 상태(2026-09-22): 아직 공개된 Release와 설치 파일이 없습니다.**
+현재는 [소스에서 실행](#소스에서-실행)할 수 있습니다. 향후 Windows 배포 파일은
+[Releases](https://github.com/raonolje/AIStorage/releases)에서 확인하세요.
+
+Release가 게시되면 **Assets**에서 원하는 형식을 선택합니다.
+
+| 파일 | 실행 방법 |
+| --- | --- |
+| 설치본(`*-setup.exe`) | 파일을 실행하고 설치 안내를 따릅니다. |
+| 무설치본(`*_portable.zip`) | 압축을 모두 푼 뒤 안의 `.exe`를 실행합니다. `resources` 폴더를 실행 파일 옆에 유지하세요. 설정과 모델은 사용자 앱 데이터 폴더에 저장됩니다. |
+
+GitHub가 자동으로 제공하는 **Source code (zip/tar.gz)**는 바로 실행하는 앱이 아닌 소스 코드입니다.
+공개판 제품 이름은 **AI 영상 스토리지 (공개판)**이므로 설치 파일에는 FrameForge와 다른 이름이 표시될 수 있습니다.
+
+- **Windows 10/11, x64.** macOS·Linux는 아직 지원하지 않습니다.
+- **NVIDIA GPU(CUDA):** 로컬 생성에만 필요하며 요구 사양은 엔진마다 다릅니다. 모델 가중치는 별도로 내려받으며 [각자의 라이선스](#라이선스)를 따릅니다.
+- **OpenAI 또는 Claude API 키:** LLM 프롬프트 작성에만 필요한 선택 사항입니다.
+- **WebView2 런타임:** 데스크톱 앱에 필요합니다. 무설치본을 쓰는 컴퓨터에 없다면 동봉된 `읽어보세요.txt`를 참고하세요.
+
+## 작업 흐름과 베타 상태
 
 > **⚠️ 베타입니다 — 아직 전부 검증하지 못했습니다.**
 >
@@ -206,14 +307,26 @@ Seedance 는 중괄호. 금지 사항을 어디에 적는지도(네거티브 칸
 놓이고 카드에 붙습니다. **폴더가 진실입니다** — 디스크에 없으면 앱에도 없고, 앱에서 지우면 원본도
 지웁니다(안 그러면 폴더를 다시 읽을 때 되살아납니다).
 
-## 돌리려면
+## 소스에서 실행
 
-- **윈도 10/11** (맥·리눅스는 아직)
-- **Node 22+ · pnpm 10+ · Rust(MSVC)** — 개발용
-- 로컬 생성 모델을 쓰려면 **NVIDIA GPU**(CUDA). 안 써도 나머지 기능은 전부 돕니다
-- LLM 프롬프트 작성에는 OpenAI 또는 Claude API 키(선택)
+**Windows 10/11 · Git · Node 22+ · pnpm 10+ · Rust(MSVC) · Visual Studio C++ 빌드 도구**가 필요합니다.
+GPU와 API 키는 위에서 설명한 선택 기능에만 사용됩니다.
 
-설치본을 쓰실 분은 [Releases](../../releases) 에서 받으세요 — 설치본(`.exe`)과 무설치본(`.zip`)이 함께 올라갑니다.
+```bash
+git clone https://github.com/raonolje/AIStorage.git
+cd AIStorage
+pnpm install --frozen-lockfile
+pnpm dev:desktop --edition public  # 공개판 엔진 제한을 적용해 실행
+```
+
+`pnpm check`로 타입을 확인하고 `pnpm test`로 단위 테스트를 실행합니다.
+배포용 파일은 `pnpm build:public`으로 만듭니다. 기본 빌드 설정에서 설치본은
+`src-tauri/target/release/bundle/nsis/`, 무설치본은 `src-tauri/target/release/bundle/portable/`에 생성됩니다.
+
+공개판은 [edition.json](edition.json)에 명시된 엔진을 제외합니다.
+`--edition public` 없이 `pnpm dev:desktop`을 실행하면 기본값은 비공개판이며, 각 엔진의 라이선스 조건은 그대로 적용됩니다.
+관리자가 `v*` 태그를 푸시하면 [배포 워크플로](.github/workflows/release.yml)가 공개판 파일을 만들어 Releases에 올립니다.
+수동 실행 결과는 해당 Actions 실행의 빌드 산출물로 저장됩니다.
 
 ## 키
 
@@ -226,7 +339,7 @@ API 키는 브라우저가 아니라 **앱 설정 폴더에 파일로** 저장�
 
 ## 건의와 오류 제보
 
-둘 다 환영합니다. 무엇이든 [Issues](../../issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
+둘 다 환영합니다. 무엇이든 [Issues](https://github.com/raonolje/AIStorage/issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
 따라 하기 어려웠다거나, 필요한 기능이 없다거나. 한국어·영어 다 좋습니다.
 오류라면 앱 판과 «무엇을 눌렀는지», 화면 한 장이 있으면 훨씬 빨리 찾습니다.
 건의라면 «무엇을 하려고 했는지» 만 적어 주셔도 됩니다.
