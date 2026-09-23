@@ -33,7 +33,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/사용자/AIMovieStorage/releases/latest/download/latest.json"
+        "https://github.com/raonolje/AIMovieStorage/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCOEFGN0M0NjY5Rjc4N0MKUldSOGVKOW14UGVLaS8yVGR1MEN6OG5tQ0xoOHkzdWNoRFNJRFBpcEhXZGVYZm05eUQwdjhGMFoK",
       "windows": {

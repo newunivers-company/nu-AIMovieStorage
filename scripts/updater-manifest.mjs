@@ -89,7 +89,7 @@ const manifest = {
   platforms: {
     "windows-x86_64": {
       signature,
-      url: `https://github.com/사용자/AIMovieStorage/releases/download/${tag}/${setup}`,
+      url: `https://github.com/raonolje/AIMovieStorage/releases/download/${tag}/${setup}`,
     },
   },
 };
