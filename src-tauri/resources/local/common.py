@@ -831,6 +831,40 @@ def step_reporter(report, total_steps, base=10, span=85):
     return callback
 
 
+def check_motion_mask(opts):
+    """움직임 마스크를 **모델을 부르기 전에** 봅니다.
+
+    예전에는 mp4 로 쓰기 직전에야 마스크를 열었습니다. 그래서 경로가 틀렸거나 PNG 가
+    깨졌으면 **몇 분짜리 생성을 다 하고 나서** 터졌습니다 — 그림은 다 뽑아 놓고 파일로는
+    한 장도 안 남습니다(2026-09-23 검토).
+
+    여는 데 몇 ms 면 되는 일이니 앞에서 봅니다. 크기까지는 안 맞춰도 됩니다 —
+    `freeze_by_mask` 가 늘려 맞춥니다.
+    """
+    path = (opts or {}).get("motion_mask")
+    if not path:
+        return
+    if not os.path.isfile(path):
+        raise IOError("움직임 구역 파일을 찾지 못했습니다: {}".format(path))
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            image.verify()  # 통째로 읽지 않고 머리와 끝만 봅니다.
+        with Image.open(path) as image:
+            width, height = image.size
+    except Exception as exc:
+        raise IOError(
+            "움직임 구역 그림을 읽지 못했습니다({}): {}".format(os.path.basename(path), exc)
+        )
+    if width < 2 or height < 2:
+        raise IOError(
+            "움직임 구역 그림이 너무 작습니다({}×{}): {}".format(
+                width, height, os.path.basename(path)
+            )
+        )
+
+
 def freeze_by_mask(frames, mask_path):
     """**«여기만 움직인다»** — 흰 곳은 그대로 두고, 검은 곳은 첫 장면으로 되돌립니다.
 

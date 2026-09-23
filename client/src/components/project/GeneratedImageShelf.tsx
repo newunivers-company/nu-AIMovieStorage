@@ -23,6 +23,7 @@ import {
   assetSrc,
   copyImageWithNotice,
   deleteProjectMediaFile,
+  restoreProjectMediaFile,
   openProjectInbox,
   saveProjectMediaAsset,
   type ProjectAssetType,
@@ -185,7 +186,7 @@ export default function GeneratedImageShelf({
     const ok = await confirmDialog({
       title: `${image.name} 을 지울까요?`,
       description: image.filePath
-        ? "저장 폴더의 원본 파일도 함께 지워집니다. 되돌릴 수 없습니다."
+        ? "저장 폴더의 원본 파일도 함께 지워집니다."
         : "목록에서 빠집니다.",
       confirmLabel: "지우기",
       tone: "danger",
@@ -194,8 +195,37 @@ export default function GeneratedImageShelf({
     onChange((current) => current.filter((item) => item.id !== image.id));
     if (image.filePath) {
       const deleted = await deleteProjectMediaFile(projectName, image.filePath);
-      if (!deleted)
+      if (!deleted) {
         toast.error("폴더의 파일은 지우지 못했습니다. 직접 지워 주세요.");
+        return;
+      }
+      /*
+        **되돌리기는 지운 바로 그 자리에서.**
+
+        지운 것은 곧바로 없어지지 않고 프로젝트 폴더 안 휴지통에 한 단계 머뭅니다
+        (`src-tauri/src/trash.rs`). 그런데 그것을 부르는 화면이 없어서, 되돌릴 수 있는데도
+        되돌릴 길이 없었습니다(2026-09-23 검토). 사람이 「아차」 하는 순간은 **지운 그때**라,
+        되살리기 창을 따로 두기보다 여기 단추 하나를 두는 편이 실제로 닿습니다.
+      */
+      const path = image.filePath;
+      toast.success(`${image.name} 을 지웠습니다.`, {
+        action: {
+          label: "되돌리기",
+          onClick: () => {
+            void restoreProjectMediaFile(projectName, path).then((back) => {
+              if (!back) {
+                toast.error("되돌리지 못했습니다. 휴지통에서 이미 비워졌을 수 있습니다.");
+                return;
+              }
+              onChange((current) =>
+                // 이미 같은 파일이 다시 들어와 있으면 두 장이 되지 않게.
+                current.some((item) => item.filePath === path) ? current : [...current, image],
+              );
+              toast.success(`${image.name} 을 되돌렸습니다.`);
+            });
+          },
+        },
+      });
     }
   };
 

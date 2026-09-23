@@ -413,13 +413,26 @@ export function backgroundMotionHint(composition?: CompositionState | null): str
  */
 export function heroImageOf(cut: Cut): GeneratedImageAsset | null {
   if (!cut.images.length) return null;
-  // 합성 시트(격자)는 스토리보드 칸에 넣을 그림이 아닙니다.
-  // 움직임 마스크(흑백)도 아닙니다 — 선반은 처음 들어온 그림에 별을 달아 주므로,
-  // 그림 없는 컷에 마스크를 먼저 그리면 **새까만 판이 대표가 되어 첫 프레임으로** 들어갑니다.
-  const usable = cut.images.filter(
-    (image) => !image.isCompositeSheet && !isMotionMaskName(image.name || image.filePath || ""),
-  );
-  const pool = usable.length ? usable : cut.images;
+  /*
+    **움직임 마스크는 대표가 될 수 없습니다 — 물러서는 길에서도.**
+
+    마스크는 새까만 판입니다. 대표가 되면 스토리보드 칸에 들어가고, 로컬 영상의
+    **첫 프레임**으로도 들어갑니다. 한때 「걸러 내고 아무것도 안 남으면 원래 목록으로
+    물러선다」 로 두었는데, 그러면 **마스크 한 장만 남은 컷**에서 그대로 새까만 판이
+    첫 프레임이 됩니다. 마스크를 그린 뒤 원본 그림을 지우면 실제로 그 상태가 됩니다
+    (2026-09-23 검토 — 시험도 그 동작을 «정상» 으로 적어 두고 있었습니다).
+
+    그래서 마스크는 **어느 경우에도** 빼고, 쓸 것이 없으면 `null` 을 돌려줍니다.
+    부르는 쪽은 「대표 그림이 없다」 를 이미 다룰 줄 압니다(글만으로 뽑기 · 안내 문구).
+
+    합성 시트(격자)는 조금 다릅니다 — 그림이긴 해서, 그것뿐이면 없는 것보다 낫습니다.
+  */
+  const masks = (image: GeneratedImageAsset) =>
+    isMotionMaskName(image.name || image.filePath || "");
+  const pictures = cut.images.filter((image) => !masks(image));
+  if (!pictures.length) return null;
+  const usable = pictures.filter((image) => !image.isCompositeSheet);
+  const pool = usable.length ? usable : pictures;
   return pool.find((image) => image.isPrimary) ?? pool[0];
 }
 

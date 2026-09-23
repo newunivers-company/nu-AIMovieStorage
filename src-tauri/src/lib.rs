@@ -1379,6 +1379,7 @@ pub fn run() {
             // 앱 설정 거울 — 웹뷰 저장소는 설치본과 개발 서버가 따로 써서 설치하면 비어 있습니다.
             datafiles::read_app_settings,
             datafiles::write_app_settings,
+            datafiles::merge_app_settings,
             // 지운 원본은 곧바로 없애지 않고 프로젝트 폴더 안 휴지통으로 옮깁니다.
             trash::restore_project_media_file,
             trash::empty_project_trash,

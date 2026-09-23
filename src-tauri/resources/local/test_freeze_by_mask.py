@@ -34,6 +34,43 @@ def _mask():
     return path
 
 
+def test_mask_is_checked_before_the_model_runs():
+    """**모델을 부르기 전에** 마스크를 봅니다.
+
+    예전에는 mp4 로 쓰기 직전에야 열었습니다. 경로가 틀렸거나 PNG 가 깨졌으면 몇 분짜리
+    생성을 다 하고 나서 터졌고, 그림은 다 뽑아 놓고 파일로는 한 장도 안 남았습니다
+    (2026-09-23 검토).
+    """
+    import tempfile
+
+    # 없는 경로
+    try:
+        common.check_motion_mask({"motion_mask": os.path.join(tempfile.mkdtemp(), "없다.png")})
+    except IOError as error:
+        assert "찾지 못했습니다" in str(error)
+    else:
+        raise AssertionError("없는 파일을 지나쳤습니다")
+
+    # 깨진 PNG — 머리만 그럴듯하고 속이 없습니다.
+    broken = os.path.join(tempfile.mkdtemp(), "broken.png")
+    with open(broken, "wb") as out:
+        out.write(bytes([0x89]) + b"PNG" + bytes([0x0D, 0x0A, 0x1A, 0x0A]) + bytes(32))
+    try:
+        common.check_motion_mask({"motion_mask": broken})
+    except IOError as error:
+        assert "읽지 못했습니다" in str(error)
+    else:
+        raise AssertionError("깨진 PNG 를 지나쳤습니다")
+
+    # 멀쩡한 것은 그냥 지나갑니다.
+    good = os.path.join(tempfile.mkdtemp(), "good.png")
+    Image.fromarray(np.zeros((H, W), "uint8")).save(good)
+    common.check_motion_mask({"motion_mask": good})
+    # 마스크를 안 쓰는 생성도 막으면 안 됩니다.
+    common.check_motion_mask({})
+    common.check_motion_mask(None)
+
+
 def test_pil():
     frames = [
         Image.fromarray(np.full((H, W, 3), 10, "uint8")),

@@ -28,10 +28,22 @@ describe("움직임 마스크가 워커까지 닿는가", () => {
     expect(heroImageOf(cut)?.name).toBe("차_001");
   });
 
-  it("그림이 마스크뿐이면 대표는 없느니만 못하지 않게 — 그래도 한 장은 돌려줍니다", () => {
+  it("그림이 마스크뿐이면 대표는 **없습니다** — 물러서는 길에서도", () => {
+    /*
+      한때 「걸러 내고 아무것도 안 남으면 원래 목록으로 물러선다」 로 두었고, 이 시험도
+      그 동작을 «정상» 으로 적고 있었습니다. 그런데 마스크가 대표가 되면 스토리보드 칸과
+      로컬 영상의 **첫 프레임**으로 새까만 판이 들어갑니다. 마스크를 그린 뒤 원본 그림을
+      지우면 실제로 그 상태가 됩니다(2026-09-23 검토).
+    */
     const cut = { images: [asset("차_움직임_001")] } as unknown as Cut;
-    // 걸러 내고 아무것도 안 남으면 원래 목록으로 물러섭니다(`heroImageOf` 의 오래된 규칙).
-    expect(heroImageOf(cut)?.name).toBe("차_움직임_001");
+    expect(heroImageOf(cut)).toBeNull();
+  });
+
+  it("합성 시트뿐이면 그것이라도 씁니다 — 그림이긴 합니다", () => {
+    const cut = {
+      images: [asset("차_시트", { isCompositeSheet: true }), asset("차_움직임_001")],
+    } as unknown as Cut;
+    expect(heroImageOf(cut)?.name).toBe("차_시트");
   });
 
   it("그림 선반에서 마스크를 찾습니다 — 여럿이면 마지막 것", () => {

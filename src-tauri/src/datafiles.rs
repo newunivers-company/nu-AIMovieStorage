@@ -495,6 +495,132 @@ pub fn write_app_settings(app: tauri::AppHandle, contents: String) -> Res<()> {
     write_atomic(&path, &contents)
 }
 
+/// 거울 파일에 **한 칸만** 얹습니다 — 읽기·병합·쓰기가 한 덩어리입니다.
+///
+/// # 왜 프런트가 아니라 여기인가
+///
+/// 예전에는 프런트가 `read_app_settings` → 병합 → `write_app_settings` 로 **세 번** 불렀습니다.
+/// 그 사이가 열려 있어서, 앱을 두 벌 띄워 두면 둘이 **같은 옛 값을 동시에 읽고** 각자 얹어
+/// 쓰는 일이 났습니다. A 가 BGM 을 고치고 B 가 저장 폴더만 바꿨을 뿐인데 BGM 이 옛 값으로
+/// 되돌아갑니다. 프런트에서 다시 읽는 횟수를 늘려도 그 틈은 안 없어집니다 — **읽고 쓰는
+/// 사이를 잠글 수 있는 자리가 여기뿐**입니다(2026-09-23 검토).
+///
+/// `SAVE_LOCK` 안에서 읽고 얹고 씁니다. 프로세스 하나 안의 두 창은 이 자물쇠로 한 줄에 섭니다.
+///
+/// # 같은 칸을 동시에 고치면
+///
+/// 파일 쪽 도장(`savedAt`)이 더 나중이면 **그쪽을 둡니다.** 같은 칸을 같은 순간에 고치는 일은
+/// 드물고, 그때는 나중 것이 이기는 편이 덜 놀랍습니다. 다른 칸은 서로 건드리지 않습니다.
+///
+/// 얹은 뒤의 **파일 전체**를 돌려줍니다 — 부르는 쪽이 제 사본을 그것으로 갈아 끼우면
+/// 다음 쓰기가 남의 칸을 덮지 않습니다.
+#[tauri::command]
+pub fn merge_app_settings(
+    app: tauri::AppHandle,
+    section: String,
+    saved_at: f64,
+    value: serde_json::Value,
+) -> Res<String> {
+    use serde_json::{json, Value};
+
+    if section.trim().is_empty() {
+        return Err("칸 이름이 비었습니다.".into());
+    }
+    let path = app_settings_path(&app)?;
+    let _guard = SAVE_LOCK.lock().map_err(|_| "설정 자물쇠가 깨졌습니다.".to_string())?;
+
+    // 파일이 없거나 깨졌으면 빈 것에서 시작합니다 — 처음 켠 것뿐이라 오류가 아닙니다.
+    let on_disk: Value = match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| json!({})),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => return Err(err("앱 설정을 읽지 못했습니다", e)),
+    };
+    let merged = merge_one_entry(on_disk, &section, saved_at, value);
+    let text = serde_json::to_string(&merged).map_err(|e| err("앱 설정을 적지 못했습니다", e))?;
+    write_atomic(&path, &text)?;
+    Ok(text)
+}
+
+/// 거울 한 벌에 **한 칸만** 얹습니다 — 파일을 만지지 않는 순수한 부분입니다.
+///
+/// 파일 살림과 갈라 둔 까닭: 틀리기 쉬운 것은 «언제 덮고 언제 두는가» 이 규칙 하나인데,
+/// `AppHandle` 이 필요한 명령 안에 두면 시험할 수가 없습니다.
+fn merge_one_entry(
+    on_disk: serde_json::Value,
+    section: &str,
+    saved_at: f64,
+    value: serde_json::Value,
+) -> serde_json::Value {
+    use serde_json::json;
+
+    let mut root = if on_disk.is_object() { on_disk } else { json!({}) };
+    let object = root.as_object_mut().expect("바로 위에서 객체로 맞췄습니다");
+    let entries = object.entry("entries").or_insert_with(|| json!({}));
+    if !entries.is_object() {
+        *entries = json!({});
+    }
+    let entries = entries.as_object_mut().expect("바로 위에서 객체로 맞췄습니다");
+
+    // 파일 쪽 도장이 더 나중이면 **그쪽을 둡니다.** 다른 칸은 손대지 않습니다.
+    let theirs = entries
+        .get(section)
+        .and_then(|item| item.get("savedAt"))
+        .and_then(|stamp| stamp.as_f64());
+    if theirs.map_or(true, |stamp| stamp <= saved_at) {
+        entries.insert(
+            section.to_string(),
+            json!({ "savedAt": saved_at, "value": value }),
+        );
+    }
+    root
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::merge_one_entry;
+    use serde_json::json;
+
+    /// 얹은 칸의 값을 꺼내 봅니다.
+    fn value_of(root: &serde_json::Value, section: &str) -> serde_json::Value {
+        root["entries"][section]["value"].clone()
+    }
+
+    #[test]
+    fn 남의_칸은_건드리지_않습니다() {
+        // A 가 bgm 을 고친 파일에, B 가 저장 폴더만 얹습니다.
+        let on_disk = json!({"entries": {
+            "bgm": {"savedAt": 200.0, "value": "A 가 고친 것"},
+        }});
+        let merged = merge_one_entry(on_disk, "folder", 100.0, json!("새 폴더"));
+        assert_eq!(value_of(&merged, "bgm"), json!("A 가 고친 것"), "남의 칸이 되돌아갔습니다");
+        assert_eq!(value_of(&merged, "folder"), json!("새 폴더"));
+    }
+
+    #[test]
+    fn 파일_쪽이_더_나중이면_그쪽을_둡니다() {
+        let on_disk = json!({"entries": {"bgm": {"savedAt": 300.0, "value": "나중 것"}}});
+        let merged = merge_one_entry(on_disk, "bgm", 100.0, json!("먼저 것"));
+        assert_eq!(value_of(&merged, "bgm"), json!("나중 것"));
+    }
+
+    #[test]
+    fn 같은_도장이면_새것이_이깁니다() {
+        // «나중 것이 이긴다» 를 도장이 같을 때까지 밀면 저장이 안 먹는 것처럼 보입니다.
+        let on_disk = json!({"entries": {"bgm": {"savedAt": 100.0, "value": "옛것"}}});
+        let merged = merge_one_entry(on_disk, "bgm", 100.0, json!("새것"));
+        assert_eq!(value_of(&merged, "bgm"), json!("새것"));
+    }
+
+    #[test]
+    fn 깨진_파일에서도_시작합니다() {
+        // 파일이 배열이거나 entries 가 객체가 아니어도 설정이 통째로 막히면 안 됩니다.
+        for broken in [json!([1, 2, 3]), json!({"entries": "글자"}), json!(null)] {
+            let merged = merge_one_entry(broken, "bgm", 1.0, json!("값"));
+            assert_eq!(value_of(&merged, "bgm"), json!("값"));
+        }
+    }
+}
+
 /// 저장 폴더를 asset 프로토콜에 열어 줍니다.
 ///
 /// # 왜 실행 중에 여는가

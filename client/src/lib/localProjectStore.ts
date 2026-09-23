@@ -358,6 +358,7 @@ export async function loadProjects(): Promise<LocalProject[]> {
   await persistQueue.catch(() => undefined);
 
   let fromFiles: LocalProject[] = [];
+  const brokenFiles: string[] = [];
   try {
     const files = await readAllProjectFiles();
     fromFiles = files
@@ -371,15 +372,29 @@ export async function loadProjects(): Promise<LocalProject[]> {
           // 거쳐 가므로, 여기서 한 번 올려 두면 읽는 쪽마다 다시 보정할 일이 없습니다.
           // 여기서 올린 것을 곧바로 되쓰지는 않습니다(도장만 새로 찍는 쓰기는 상대 창의 다음
           // 편집을 버리게 합니다). 다음 진짜 저장이 나갈 때 판이 함께 파일로 갑니다.
+          if (!looksLikeProject(parsed)) {
+            // 문법은 맞는데 속이 빈 파일(`{}`)은 **id 없는 항목**으로 목록에 들어갑니다.
+            // 그러면 id 로 찾는 자리마다 엉뚱한 것을 집고, 그런 파일이 둘이면 서로 겹칩니다.
+            // 건너뛰되 **그 파일만** 건너뜁니다 — 나머지 작품은 그대로 열립니다.
+            console.warn(`프로젝트 파일의 모양이 아닙니다(건너뜁니다): ${file.relativePath}`);
+            brokenFiles.push(file.relativePath);
+            return null;
+          }
           return migrateSavedProject({ ...parsed, folder: folderOf(file) }, file.relativePath);
         } catch {
           console.warn(`프로젝트 파일을 읽지 못했습니다: ${file.relativePath}`);
+          brokenFiles.push(file.relativePath);
           return null;
         }
       })
       .filter((project): project is LocalProject => project !== null);
   } catch (error) {
     console.warn("프로젝트 폴더를 읽지 못했습니다.", error);
+  }
+  if (brokenFiles.length) {
+    // 조용히 사라지면 「작품이 없어졌다」 로 보입니다. 무엇을 건너뛰었는지는 남겨 둡니다.
+    console.warn(`읽지 못한 프로젝트 파일 ${brokenFiles.length}개:`, brokenFiles);
+    lastBrokenProjectFiles = brokenFiles;
   }
 
   /*
@@ -430,7 +445,7 @@ export async function loadProjects(): Promise<LocalProject[]> {
     console.info(`${project.folder}: 파일 ${moved.size}개를 새 폴더 구조로 옮겼습니다.`);
   }
 
-  cache = fromFiles.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  cache = fromFiles.sort(byNewest);
   // 방금 읽은 판이 이 창의 기준입니다. 옮기며 쓴 것도 같은 도장을 그대로 썼습니다.
   cache.forEach(markReadFromDisk);
 
@@ -570,9 +585,64 @@ function wouldWipe(previous: LocalProject | undefined, draft: DraftLike): boolea
 /** 미래 판이라 막았다고 **작품마다 한 번만** 말합니다 — 자동 저장이 돌 때마다 뜨면 안 됩니다. */
 const futureWarned = new Set<string>();
 
-let emptySaveExpected = false;
+/**
+ * 지금 이 창이 마지막으로 저장한 작품. «빈 저장 한 번 허용» 을 여기에 **묶습니다.**
+ *
+ * 지우는 화면(장면·인물 목록)은 작품 id 를 모릅니다 — 초안과 갱신 함수만 받습니다.
+ * 그래서 id 를 타고 내리는 대신, 저장소가 아는 «지금 다루는 작품» 에 묶습니다.
+ */
+let lastStagedId: string | null = null;
+
+/**
+ * 허용의 임자. `null` 이면 허용이 없는 것입니다.
+ *
+ * 예전에는 그냥 참/거짓 하나였습니다. A 에서 장면을 지우고 **곧바로 B 로 옮기면**,
+ * 그 허용이 B 의 첫 자동 저장을 통과시켜 B 를 빈 값으로 덮을 수 있었습니다 —
+ * 허용은 한 번만 쓰이지만 **누구의 한 번인지**가 없었기 때문입니다(2026-09-23 검토).
+ */
+let emptySaveFor: string | null = null;
+
 export function expectEmptyProjectSave(): void {
-  emptySaveExpected = true;
+  emptySaveFor = lastStagedId;
+}
+
+/**
+ * 작품 목록의 **차례** — 나중에 고친 것이 앞입니다.
+ *
+ * 세 곳이 같은 줄을 적고 있었습니다(`loadProjects` · `listLocalProjects` 둘). 그런데
+ * `updatedAt` 이 없는 항목이 하나라도 섞이면 `localeCompare` 가 **그 자리에서 터져**
+ * 목록 읽기가 통째로 실패합니다 — 작품 하나가 이상해서 **나머지 작품이 전부 안 보이는**
+ * 모양이 됩니다(2026-09-23 검토).
+ *
+ * 위쪽 관문(`looksLikeProject`)이 이미 이상한 파일을 거르지만, 정렬은 옛 저장본·손으로
+ * 고친 파일도 지납니다. 두 겹으로 둡니다 — 규칙은 한 벌로.
+ */
+function byNewest(a: { updatedAt?: string }, b: { updatedAt?: string }): number {
+  return String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? ""));
+}
+
+/**
+ * 이것이 **프로젝트 저장본의 모양인가.** 문법만 맞는 파일을 목록에 들이지 않습니다.
+ *
+ * `JSON.parse` 는 `{}` 도 통과시킵니다. 그걸 그대로 들이면 **id 없는 항목**이 목록에
+ * 앉고, id 로 찾는 자리마다 엉뚱한 것을 집습니다. 그런 파일이 둘이면 서로 겹칩니다
+ * (2026-09-23 검토).
+ *
+ * 무엇을 필수로 볼까 — **id 와 draft 둘뿐**입니다. 나머지(제목·폴더·판)는 없어도
+ * 채워 넣을 수 있지만, 이 둘이 없으면 «어느 작품인지» 와 «무엇이 들었는지» 가 없습니다.
+ * 필수를 넓게 잡으면 옛 저장본이 통째로 안 열립니다.
+ */
+function looksLikeProject(value: unknown): value is LocalProject {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Partial<LocalProject>;
+  if (typeof item.id !== "string" || !item.id.trim()) return false;
+  return Boolean(item.draft) && typeof item.draft === "object";
+}
+
+/** 마지막 폴더 읽기에서 건너뛴 파일들. 화면이 「이 파일들은 못 읽었습니다」 를 띄울 때 씁니다. */
+let lastBrokenProjectFiles: string[] = [];
+export function brokenProjectFiles(): string[] {
+  return [...lastBrokenProjectFiles];
 }
 
 /**
@@ -590,6 +660,16 @@ function stageLocalProject(
   const scenes = draft.scenes || [];
   const projects = currentProjects();
   const previous = projects.find(project => project.id === id);
+  /*
+    **작품이 바뀌면 남은 허용은 버립니다.**
+
+    A 에서 장면을 지워 놓고 저장이 나가기 전에 B 로 옮기면, 그 허용이 B 의 빈 저장을
+    통과시킵니다. 허용은 한 번만 쓰이지만 «누구의 한 번인가» 가 없었습니다.
+  */
+  if (lastStagedId !== id) {
+    emptySaveFor = null;
+    lastStagedId = id;
+  }
 
   /*
     **이 앱보다 새로운 판에는 쓰지 않습니다.**
@@ -614,8 +694,9 @@ function stageLocalProject(
   }
 
   if (wouldWipe(previous, draft)) {
-    if (emptySaveExpected) {
-      emptySaveExpected = false;
+    // 허용은 **그 작품의 다음 저장 한 번**에만 듭니다. 임자가 다르면 그냥 막습니다.
+    if (emptySaveFor !== null && emptySaveFor === lastStagedId && lastStagedId === id) {
+      emptySaveFor = null;
     } else {
       // 조용히 넘어갑니다. 알림을 띄우면 자동 저장이 돌 때마다 뜹니다.
       console.warn("[저장 막음] 내용이 있던 프로젝트를 빈 값으로 덮어쓰려 했습니다.", id);
@@ -698,7 +779,7 @@ export function listLocalProjects(): LocalProjectSummary[] {
   const hidden = new Set(prunedHidden(projects));
   return projects
     .filter(project => !hidden.has(project.id))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort(byNewest)
     .map(({ draft: _draft, ...summary }) => summary);
 }
 
@@ -708,7 +789,7 @@ export function listHiddenProjects(): LocalProjectSummary[] {
   const hidden = new Set(prunedHidden(projects));
   return projects
     .filter(project => hidden.has(project.id))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort(byNewest)
     .map(({ draft: _draft, ...summary }) => summary);
 }
 

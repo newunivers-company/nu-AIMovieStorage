@@ -350,6 +350,8 @@ def generate(output, opts, report):
     import torch
     from diffusers.utils.export_utils import encode_video
 
+    # 마스크는 **모델을 부르기 전에** 봅니다 — 까닭은 `common.check_motion_mask`.
+    common.check_motion_mask(opts)
     started = time.time()
     pipe = _state["pipe"]
     workflow = _state["workflow"]

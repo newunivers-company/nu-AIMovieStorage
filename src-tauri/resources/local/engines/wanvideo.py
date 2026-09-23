@@ -156,6 +156,8 @@ def _apply_loras(opts):
 
 
 def generate(output, opts, report):
+    # 마스크는 **모델을 부르기 전에** 봅니다 — 까닭은 `common.check_motion_mask`.
+    common.check_motion_mask(opts)
     started = time.time()
     pipe = _state["pipe"]
     fps = int(opts.get("fps") or 16)

@@ -141,35 +141,28 @@ export function queueMirrorWrite(section: string, value: unknown, savedAt = Date
     .then(() => appSettingsReady)
     .then(async () => {
       /*
-        **쓰기 직전에 파일을 다시 읽고 내 칸만 얹습니다.**
+        **읽고 얹고 쓰기를 Rust 한 명령으로 맡깁니다**(`merge_app_settings`).
 
-        앱을 두 벌 띄워 두면 각자 «읽던 때의 사본» 을 들고 있습니다. 그 사본을 통째로 쓰면
-        상대가 그 사이에 고친 **다른 칸**이 옛 값으로 되돌아갑니다 — A 가 BGM 을 고치고
-        B 가 저장 폴더만 바꿨을 뿐인데 BGM 이 되돌아가는 식입니다.
+        예전에는 여기서 읽고·얹고·쓰기를 세 번 불렀습니다. 그 사이가 열려 있어서, 앱을
+        두 벌 띄워 두면 둘이 **같은 옛 값을 동시에 읽고** 각자 얹어 쓰는 일이 났습니다 —
+        A 가 BGM 을 고치고 B 가 저장 폴더만 바꿨을 뿐인데 BGM 이 되돌아갑니다.
+        여기서 다시 읽는 횟수를 늘려도 그 틈은 안 없어집니다. **읽고 쓰는 사이를 잠글 수
+        있는 자리는 Rust 쪽뿐**입니다(2026-09-23 검토).
 
-        그래서 통째로 쓰지 않고, 지금 파일에 내 칸만 얹습니다. 내 칸이라도 파일 쪽이 더
-        나중이면 그쪽을 둡니다 — 같은 칸을 동시에 고치는 일은 드물고, 그때는 나중 것이
-        이기는 편이 덜 놀랍습니다.
+        돌려받은 것은 얹은 뒤의 **파일 전체**입니다. 제 사본을 그것으로 갈아 끼워야
+        다음 쓰기가 남의 칸을 덮지 않습니다.
       */
-      let onDisk: MirrorFile = { entries: {} };
+      const merged = await invoke<string>("merge_app_settings", {
+        section,
+        savedAt,
+        value,
+      });
       try {
-        const text = await invoke<string | null>("read_app_settings");
-        if (text) onDisk = JSON.parse(text) as MirrorFile;
+        const next = JSON.parse(merged) as MirrorFile;
+        if (next && next.entries) mirrorFile = next;
       } catch {
-        // 못 읽으면 내가 든 것으로 갑니다 — 첫 쓰기이거나 파일이 깨진 때입니다.
-        onDisk = { entries: { ...mirrorFile.entries } };
+        // 돌려받은 글이 이상해도 파일은 이미 쓰였습니다 — 제 사본만 그대로 둡니다.
       }
-      if (!onDisk.entries) onDisk.entries = {};
-      const theirs = onDisk.entries[section];
-      if (!theirs || theirs.savedAt <= savedAt) {
-        onDisk.entries[section] = { savedAt, value };
-      }
-      // 내가 아는 다른 칸 가운데 파일에 없는 것만 채웁니다(첫 올리기).
-      for (const [key, mine] of Object.entries(mirrorFile.entries)) {
-        if (key !== section && !onDisk.entries[key]) onDisk.entries[key] = mine;
-      }
-      mirrorFile = onDisk;
-      await invoke("write_app_settings", { contents: JSON.stringify(onDisk) });
     })
     .then(() => undefined)
     // 못 써도 앱은 그대로 돕니다. 거울이 낡을 뿐입니다.
@@ -683,6 +676,36 @@ export async function deleteProjectMediaFile(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 휴지통에 둔 파일을 **원래 자리로** 되돌립니다. 되돌린 경로, 없으면 `null`.
+ *
+ * 지운 것은 곧바로 없어지지 않고 프로젝트 폴더 안 `.휴지통/` 에 한 단계 머뭅니다
+ * (`src-tauri/src/trash.rs`). 그런데 그것을 **부르는 화면이 없어서**, 되돌릴 수 있는데도
+ * 되돌릴 길이 없었습니다(2026-09-23 검토).
+ *
+ * 되살리기 창을 따로 두지 않는 까닭: 사람이 「아차」 하는 순간은 **지운 바로 그때**입니다.
+ * 그때 말풍선에 단추 하나를 띄우는 편이, 어딘가 있는 창을 찾아가게 하는 것보다 낫습니다.
+ * (며칠 지난 것을 뒤지는 일은 탐색기에서 `.휴지통/` 을 열면 됩니다.)
+ */
+export async function restoreProjectMediaFile(
+  projectName: string,
+  filePath?: string | null,
+): Promise<string | null> {
+  const baseDirectory = getMediaLibrarySettings().baseDirectory.trim();
+  if (!isDesktopApp() || !baseDirectory || !projectName.trim() || !filePath) return null;
+  try {
+    return (
+      (await invoke<string | null>("restore_project_media_file", {
+        baseDirectory,
+        projectName,
+        path: filePath,
+      })) ?? null
+    );
+  } catch {
+    return null;
   }
 }
 

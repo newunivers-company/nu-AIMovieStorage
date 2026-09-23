@@ -132,36 +132,59 @@ fn resolve_original(root: &Path, original: &str) -> Option<PathBuf> {
 /// 그 자리를 잡는 것 사이가 벌어지면 둘이 같은 이름을 골라 한쪽이 다른 쪽을 덮어씁니다.
 static NAMING: Mutex<()> = Mutex::new(());
 
-/// 그 이름이 이미 쓰이고 있는가. **쪽지만 있어도 쓰인 것**으로 봅니다 —
-/// 옮기기 직전에 잡아 둔 자리라 비어 보일 뿐입니다.
-fn taken(path: &Path) -> bool {
-    path.exists() || record_path(path).exists()
-}
-
-/// 휴지통 안에서 겹치지 않는 이름을 고릅니다. 겹치면 번호를 붙입니다.
+/// 휴지통 안에서 겹치지 않는 이름을 골라 **그 자리를 잡습니다.**
+///
+/// 잡는 방법은 쪽지 파일을 **«없을 때만 만들기»(`create_new`)** 로 적는 것입니다.
+/// 이건 운영체제가 보장하는 한 걸음이라, 둘이 같은 이름을 고르면 **한쪽만 성공**합니다.
+///
+/// # 왜 «있나 보고 → 적기» 로는 안 되는가
+///
+/// 예전에는 `taken()` 으로 비었는지 보고 나서 적었습니다. 그 사이가 열려 있어서 둘이
+/// 같은 이름을 고를 수 있었고, 서로 다른 폴더의 같은 이름 파일(`같은그림.png`) 둘을
+/// 지우면 **하나만 남았습니다.** 프로세스 안의 자물쇠(`NAMING`)는 앱을 두 벌 띄우면
+/// 소용이 없습니다 — 자물쇠가 프로세스마다 따로이기 때문입니다(2026-09-23 검토).
 ///
 /// `next_numbered_path` 를 그대로 쓰지 않는 것은 폴더에는 확장자가 없어서입니다.
 /// (`냥이` 가 `냥이_001.` 로 들어가면 탐색기에서 열리지 않습니다.)
-fn unique_dest(bin: &Path, name: &str) -> PathBuf {
-    let first = bin.join(name);
-    if !taken(&first) {
-        return first;
-    }
+fn reserve_dest(bin: &Path, name: &str, note: &str) -> Res<PathBuf> {
     let (stem, ext) = match name.rsplit_once('.') {
         Some((stem, ext)) if !stem.is_empty() => (stem, Some(ext)),
         _ => (name, None),
     };
-    let numbered = |tail: String| match ext {
-        Some(ext) => bin.join(format!("{stem}_{tail}.{ext}")),
-        None => bin.join(format!("{stem}_{tail}")),
+    let numbered = |tail: Option<String>| match (tail, ext) {
+        (None, Some(ext)) => bin.join(format!("{stem}.{ext}")),
+        (None, None) => bin.join(stem.to_string()),
+        (Some(tail), Some(ext)) => bin.join(format!("{stem}_{tail}.{ext}")),
+        (Some(tail), None) => bin.join(format!("{stem}_{tail}")),
     };
-    for n in 2..10_000 {
-        let candidate = numbered(format!("{n:03}"));
-        if !taken(&candidate) {
-            return candidate;
+    let mut last: Option<std::io::Error> = None;
+    for n in 0..10_000u32 {
+        let candidate = numbered(if n == 0 { None } else { Some(format!("{:03}", n + 1)) });
+        // 옮길 자리에 이미 무엇이 있으면 다음 번호로 — 쪽지만 잡아 놓고 덮으면 안 됩니다.
+        if candidate.exists() {
+            continue;
+        }
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(record_path(&candidate))
+        {
+            Ok(mut handle) => {
+                use std::io::Write;
+                handle
+                    .write_all(note.as_bytes())
+                    .map_err(|e| err("휴지통 쪽지를 적지 못했습니다", e))?;
+                return Ok(candidate);
+            }
+            // 남이 먼저 잡았습니다. 다음 번호를 봅니다.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => last = Some(e),
         }
     }
-    numbered(std::process::id().to_string())
+    Err(match last {
+        Some(e) => err("휴지통에 자리를 잡지 못했습니다", e),
+        None => "휴지통에 빈 이름이 없습니다(10000개를 넘었습니다).".to_string(),
+    })
 }
 
 /// 프로젝트 폴더 안의 파일·폴더를 `.휴지통/` 으로 옮깁니다. 옮긴 자리를 돌려줍니다.
@@ -207,11 +230,11 @@ pub(crate) fn move_to_trash(root: &Path, target: &Path) -> Res<PathBuf> {
       - 쪽지가 곧 «이 이름은 내가 잡았다» 는 표시라, 동시에 도는 다른 지우기가
         같은 이름을 고르지 못합니다.
     */
+    // 자리 잡기와 쪽지 적기가 **한 걸음**입니다(`reserve_dest`). 프로세스 안의 자물쇠는
+    // 같은 앱 안의 두 창을 줄 세우는 값이 있어 그대로 둡니다 — 헛도는 번호 찾기를 줄입니다.
     let dest = {
         let _guard = NAMING.lock_safe();
-        let dest = unique_dest(&bin, &name);
-        fs::write(record_path(&dest), text).map_err(|e| err("휴지통 쪽지를 적지 못했습니다", e))?;
-        dest
+        reserve_dest(&bin, &name, &text)?
     };
     if let Err(e) = fs::rename(&target_real, &dest) {
         // 옮기지 못했으면 쪽지도 남기지 않습니다 — 짝 없는 쪽지가 쌓입니다.
@@ -351,6 +374,64 @@ pub fn empty_project_trash(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **서로 다른 폴더의 같은 이름 파일 둘을 지우면 둘 다 남아야 합니다.**
+    ///
+    /// 예전에는 「비었나 보고 → 적기」 였습니다. 그 사이가 열려 있어 둘이 같은 이름을
+    /// 고를 수 있었고, 하나가 다른 하나를 덮었습니다. 지금은 쪽지를 «없을 때만 만들기»
+    /// 로 적어 운영체제가 한쪽만 통과시킵니다(2026-09-23 검토).
+    #[test]
+    fn 같은_이름_둘을_지워도_둘_다_남습니다() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("trash-same-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let root = base.join("프로젝트");
+
+        // 폴더는 다르고 이름은 같습니다.
+        let mut moved = Vec::new();
+        for owner in ["냥이", "멍이"] {
+            let dir = root.join("character").join(owner);
+            fs::create_dir_all(&dir).unwrap();
+            let file = dir.join("같은그림.png");
+            fs::write(&file, owner.as_bytes()).unwrap();
+            moved.push((owner, move_to_trash(&root, &file).unwrap()));
+        }
+
+        assert_ne!(moved[0].1, moved[1].1, "둘이 같은 자리로 갔습니다");
+        for (owner, dest) in &moved {
+            assert!(dest.exists(), "{owner} 의 것이 사라졌습니다");
+            assert_eq!(
+                fs::read(dest).unwrap(),
+                owner.as_bytes(),
+                "{owner} 의 것이 남의 것으로 덮였습니다"
+            );
+            assert!(record_path(dest).exists(), "{owner} 의 쪽지가 없습니다");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// 자리를 잡는 일은 **한 걸음**이라, 같은 이름을 여럿이 노려도 서로 다른 자리를 받습니다.
+    #[test]
+    fn 자리_잡기는_한_번만_성공합니다() {
+        let bin = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("trash-reserve-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&bin);
+        fs::create_dir_all(&bin).unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..5 {
+            let dest = reserve_dest(&bin, "같은그림.png", "{}").unwrap();
+            assert!(seen.insert(dest.clone()), "같은 자리를 두 번 내줬습니다: {dest:?}");
+        }
+        // 확장자가 없는 폴더 이름도 같은 규칙으로.
+        let a = reserve_dest(&bin, "냥이", "{}").unwrap();
+        let b = reserve_dest(&bin, "냥이", "{}").unwrap();
+        assert_ne!(a, b);
+        assert!(!a.to_string_lossy().ends_with('.'), "폴더 이름 끝에 점이 붙었습니다: {a:?}");
+        let _ = fs::remove_dir_all(&bin);
+    }
 
     /// 지우기 → 되살리기 → 비우기 한 바퀴.
     #[test]
