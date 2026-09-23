@@ -241,5 +241,21 @@
       "ref_images.ref_image_{n}"
     ],
     "extra": []
+  },
+  "video_references": {
+    "max": 3,
+    "start": 0,
+    "input": [
+      "104",
+      "ref_videos.ref_video_{n}"
+    ]
+  },
+  "audio_references": {
+    "max": 3,
+    "start": 0,
+    "input": [
+      "104",
+      "ref_audios.ref_audio_{n}"
+    ]
   }
 }

@@ -10,6 +10,7 @@ import {
   comfyHostOf,
   isComfyCancelled,
   isComfyRemote,
+  loadComfyFleet,
   remoteOrder,
 } from "@/lib/comfyFleet";
 import { LOCAL_ENGINE_CATALOG, type LocalEngineId } from "@/lib/localEngines";
@@ -59,6 +60,14 @@ describe("사내 ComfyUI 엔진 목록", () => {
     expect(COMFY_MODEL_LABEL.qwenimage).toBe("Qwen-Image 2.1");
   });
 
+  it("H3 «빠르게» 는 첫 프레임·텍스트 영상에만 있고 레퍼런스 영상에는 없다", () => {
+    const has = (file: string) => JSON.parse(readFileSync(join(WORKFLOW_DIR, file), "utf8")).fast !== undefined;
+    expect(has("minimaxh3_t2v.json")).toBe(true);
+    expect(has("minimaxh3_i2v.json")).toBe(true);
+    expect(has("minimaxh3_r2v.json")).toBe(false);
+    expect(loadComfyFleet().speed).toBe("fast");
+  });
+
   it("사용자가 정한 기본: 그림은 Qwen-Image 2.1, 영상은 MiniMax H3", () => {
     expect(COMFY_PREFERRED.image).toBe("qwenimage");
     expect(COMFY_PREFERRED.video).toBe("minimaxh3");
@@ -81,9 +90,9 @@ describe("엔진 차례", () => {
 
   it("꺼져 있거나 주소가 없으면 원격으로 보내지 않는다", () => {
     expect(isComfyRemote("qwenimage")).toBe(true);
-    expect(isComfyRemote("qwenimage", { enabled: false, endpoints: ["http://a"] })).toBe(false);
-    expect(isComfyRemote("qwenimage", { enabled: true, endpoints: [] })).toBe(false);
-    expect(isComfyRemote("sam3dbody", { enabled: true, endpoints: ["http://a"] })).toBe(false);
+    expect(isComfyRemote("qwenimage", { enabled: false, endpoints: ["http://a"], speed: "fast" })).toBe(false);
+    expect(isComfyRemote("qwenimage", { enabled: true, endpoints: [], speed: "fast" })).toBe(false);
+    expect(isComfyRemote("sam3dbody", { enabled: true, endpoints: ["http://a"], speed: "fast" })).toBe(false);
   });
 });
 

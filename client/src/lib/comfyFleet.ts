@@ -63,15 +63,23 @@ export const DEFAULT_COMFY_ENDPOINTS = [
   "http://192.168.0.136:8193",
 ];
 
+/**
+ * **영상 속도.** «빠르게» 는 MiniMax H3 에 터보 로라를 얹어 8스텝으로 뽑습니다.
+ * 2026-09-24 측정(서버 한 대 단독, 3초 832×480): 20스텝 86초 → 44초, 화질 차이 뚜렷하지 않음.
+ * 레퍼런스(ref2va) 영상에는 이 로라가 맞지 않아 늘 고품질로 뽑습니다(`comfy_workflows/minimaxh3_*.json`).
+ */
+export type ComfySpeed = "fast" | "high";
+
 export interface ComfyFleetSettings {
   enabled: boolean;
   endpoints: string[];
+  speed: ComfySpeed;
 }
 
 const KEY = "frameforge.comfyFleet.v1";
 
 function read(): ComfyFleetSettings {
-  const fallback = { enabled: true, endpoints: [...DEFAULT_COMFY_ENDPOINTS] };
+  const fallback: ComfyFleetSettings = { enabled: true, endpoints: [...DEFAULT_COMFY_ENDPOINTS], speed: "fast" };
   if (typeof window === "undefined") return fallback;
   try {
     const saved = window.localStorage.getItem(KEY);
@@ -80,7 +88,7 @@ function read(): ComfyFleetSettings {
     const endpoints = Array.isArray(parsed.endpoints)
       ? parsed.endpoints.filter((item): item is string => typeof item === "string" && item.trim() !== "")
       : fallback.endpoints;
-    return { enabled: parsed.enabled !== false, endpoints };
+    return { enabled: parsed.enabled !== false, endpoints, speed: parsed.speed === "high" ? "high" : "fast" };
   } catch {
     return fallback;
   }
@@ -104,6 +112,7 @@ export function saveComfyFleet(next: ComfyFleetSettings): void {
   settings = {
     enabled: next.enabled,
     endpoints: next.endpoints.map((item) => item.trim()).filter(Boolean),
+    speed: next.speed === "high" ? "high" : "fast",
   };
   try {
     window.localStorage.setItem(KEY, JSON.stringify(settings));
@@ -150,6 +159,18 @@ export function checkComfyFleet(endpoints: string[] = settings.endpoints): Promi
   return invoke<ComfyEndpointStatus[]>("comfy_fleet_status", { endpoints });
 }
 
+/** 서버 하나에서 내장 워크플로가 도는가 — 빠진 노드·모델 파일 목록(Rust `comfy_fleet_check`). */
+export interface ComfyEndpointCheck {
+  url: string;
+  error: string | null;
+  workflows: { workflow: string; engine: LocalEngineId; missing: string[] }[];
+}
+
+/** 서버마다 내장 워크플로가 전부 도는지 봅니다. `/object_info` 를 받으므로 몇 초 걸립니다. */
+export function checkComfyWorkflows(endpoints: string[] = settings.endpoints): Promise<ComfyEndpointCheck[]> {
+  return invoke<ComfyEndpointCheck[]>("comfy_fleet_check", { endpoints });
+}
+
 export interface ComfyRunResult {
   output: string;
   seconds: number;
@@ -183,7 +204,8 @@ export async function runComfy(
     const raw = await invoke<ComfyRunResult>("comfy_generate", {
       engine,
       outputPath,
-      opts,
+      // 속도는 설정에 붙습니다. «빠르게» 갈래가 없는 워크플로는 이 값을 무시합니다.
+      opts: { ...(opts as Record<string, unknown>), speed: settings.speed },
       endpoints: settings.endpoints,
       timeoutSecs,
       jobId,

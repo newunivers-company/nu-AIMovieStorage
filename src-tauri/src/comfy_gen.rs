@@ -69,24 +69,47 @@ fn non_empty<'a>(opts: &'a Value, key: &str) -> Option<&'a str> {
     opts.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
 }
 
-/// 레퍼런스 중 **그림**만. 영상·소리 레퍼런스는 아직 싣지 않습니다(결과에 적어 알립니다).
-fn image_references(opts: &Value) -> Vec<String> {
-    opts.get("references")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter(|item| item.get("kind").and_then(Value::as_str) == Some("image"))
-                .filter_map(|item| non_empty(item, "path").map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
+/// 레퍼런스 — 종류별로 나눠 **차례를 지켜** 담습니다. H3 는 차례대로 `<Picture 1>`·`<Video 1>`·
+/// `<Audio 1>` 이라 부르므로, 같은 것을 다른 차례로 주면 다른 요청이 됩니다.
+#[derive(Default, Clone, Debug, PartialEq)]
+pub(crate) struct Refs {
+    pub images: Vec<String>,
+    pub videos: Vec<String>,
+    pub audios: Vec<String>,
+}
+
+impl Refs {
+    #[cfg(test)]
+    fn of_images(images: &[&str]) -> Self {
+        Refs { images: images.iter().map(|s| s.to_string()).collect(), ..Refs::default() }
+    }
+
+    fn total(&self) -> usize {
+        self.images.len() + self.videos.len() + self.audios.len()
+    }
+}
+
+/// 요청의 `references` 를 종류별로 가릅니다(로컬 파일 경로).
+fn references_of(opts: &Value) -> Refs {
+    let mut refs = Refs::default();
+    for item in opts.get("references").and_then(Value::as_array).into_iter().flatten() {
+        let Some(path) = non_empty(item, "path").map(str::to_string) else { continue };
+        match item.get("kind").and_then(Value::as_str) {
+            Some("image") => refs.images.push(path),
+            Some("video") => refs.videos.push(path),
+            Some("audio") => refs.audios.push(path),
+            _ => {}
+        }
+    }
+    refs
 }
 
 /// 엔진과 요청으로 워크플로를 고릅니다. 첫 프레임이 있으면 그림→영상, 레퍼런스가 있으면(H3) 레퍼런스→영상.
 pub(crate) fn pick_workflow(engine: &str, opts: &Value) -> Res<&'static str> {
     let has_image = non_empty(opts, "image").is_some();
-    let has_refs = !image_references(opts).is_empty();
+    // 소리만으로는 레퍼런스→영상을 돌리지 않습니다 — 볼 것(그림·영상)이 하나는 있어야 합니다.
+    let refs = references_of(opts);
+    let has_refs = !refs.images.is_empty() || !refs.videos.is_empty();
     Ok(match engine {
         "zimage" => "zimage",
         "krea2" => "krea2",
@@ -137,8 +160,8 @@ fn frames_for(defaults: &Value, seconds: f64, fps: f64) -> Option<u64> {
 /// 워크플로를 요청 값으로 채웁니다. 네트워크를 쓰지 않는 순수 함수라 시험으로 붙들어 둡니다.
 ///
 /// - `image` 는 서버에 올린 뒤의 이름(없으면 첫 프레임 없음)
-/// - `refs` 는 서버에 올린 레퍼런스 그림 이름들(차례가 곧 뜻입니다)
-pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &[String], prefix: &str, seed: u64) -> Res<Filled> {
+/// - `refs` 는 서버에 올린 레퍼런스 이름들(종류별, 차례가 곧 뜻입니다)
+pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &Refs, prefix: &str, seed: u64) -> Res<Filled> {
     let defaults = doc.get("defaults").cloned().unwrap_or_else(|| json!({}));
     let mut graph = doc
         .get("graph")
@@ -204,28 +227,43 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &[Strin
         return Err("이 워크플로는 첫 프레임 그림이 있어야 합니다.".into());
     }
 
-    if let (Some(spec), false) = (doc.get("references"), refs.is_empty()) {
-        let max = spec.get("max").and_then(Value::as_u64).unwrap_or(1) as usize;
-        let start = spec.get("start").and_then(Value::as_u64).unwrap_or(1) as usize;
-        let node = spec.pointer("/input/0").and_then(Value::as_str).ok_or("references.input 이 비었습니다.")?.to_string();
-        let pattern = spec.pointer("/input/1").and_then(Value::as_str).ok_or("references.input 이 비었습니다.")?.to_string();
-        for (offset, name) in refs.iter().take(max).enumerate() {
-            let n = start + offset;
-            let id = format!("ref{n}");
-            graph.insert(id.clone(), json!({ "class_type": "LoadImage", "inputs": { "image": name } }));
-            if let Some(inputs) = graph.get_mut(&node).and_then(|v| v.get_mut("inputs")).and_then(Value::as_object_mut) {
-                inputs.insert(pattern.replace("{n}", &n.to_string()), json!([id, 0]));
+    /*
+      **«빠르게»** — 워크플로가 `fast` 갈래를 선언했고 요청이 `speed: "fast"` 면 터보 로라를 얹고
+      스텝을 줄입니다. 사람이 고른 로라는 이 뒤에 잇습니다(`lora_after`).
+    */
+    let wants_fast = non_empty(opts, "speed") == Some("fast");
+    if let (true, Some(fast)) = (wants_fast, doc.get("fast")) {
+        let lora = fast.get("lora").and_then(Value::as_str).ok_or("fast.lora 가 비었습니다.")?;
+        let after = fast.get("after").and_then(Value::as_str).ok_or("fast.after 가 비었습니다.")?;
+        graph.insert(
+            "fastlora".into(),
+            json!({ "class_type": "LoraLoaderModelOnly", "inputs": { "model": [after, 0], "lora_name": lora, "strength_model": 1.0 } }),
+        );
+        for target in fast.get("into").and_then(Value::as_array).into_iter().flatten() {
+            let (Some(node), Some(input)) = (target.get(0).and_then(Value::as_str), target.get(1).and_then(Value::as_str)) else { continue };
+            if let Some(inputs) = graph.get_mut(node).and_then(|v| v.get_mut("inputs")).and_then(Value::as_object_mut) {
+                inputs.insert(input.to_string(), json!(["fastlora", 0]));
             }
         }
-        for extra in spec.get("extra").and_then(Value::as_array).into_iter().flatten() {
-            let (Some(n), Some(input), Some(value)) = (extra.get(0).and_then(Value::as_str), extra.get(1).and_then(Value::as_str), extra.get(2)) else {
-                continue;
-            };
-            if let Some(inputs) = graph.get_mut(n).and_then(|v| v.get_mut("inputs")).and_then(Value::as_object_mut) {
-                inputs.insert(input.to_string(), value.clone());
+        let steps = fast.get("step_count").and_then(Value::as_u64).unwrap_or(8);
+        for target in fast.get("steps").and_then(Value::as_array).into_iter().flatten() {
+            let (Some(node), Some(input)) = (target.get(0).and_then(Value::as_str), target.get(1).and_then(Value::as_str)) else { continue };
+            if let Some(inputs) = graph.get_mut(node).and_then(|v| v.get_mut("inputs")).and_then(Value::as_object_mut) {
+                inputs.insert(input.to_string(), json!(steps));
             }
         }
-        values.insert("references".into(), json!(refs.len().min(max)));
+        values.insert("speed".into(), json!("fast"));
+        values.insert("lora_after".into(), json!("fastlora"));
+    } else if doc.get("fast").is_some() {
+        values.insert("speed".into(), json!("high"));
+    }
+
+    let mut sent = 0;
+    sent += attach_refs(&mut graph, doc.get("references"), &refs.images, RefKind::Image)?;
+    sent += attach_refs(&mut graph, doc.get("video_references"), &refs.videos, RefKind::Video)?;
+    sent += attach_refs(&mut graph, doc.get("audio_references"), &refs.audios, RefKind::Audio)?;
+    if sent > 0 {
+        values.insert("references".into(), json!(sent));
     }
 
     let output_node = doc.pointer("/output/node").and_then(Value::as_str).ok_or("워크플로에 output.node 가 없습니다.")?.to_string();
@@ -233,18 +271,83 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &[Strin
     Ok(Filled { graph, values, output_node, output_key })
 }
 
+#[derive(Clone, Copy)]
+enum RefKind {
+    Image,
+    Video,
+    Audio,
+}
+
+/// 레퍼런스 한 종류를 그래프에 답니다. 워크플로가 그 종류의 자리를 선언하지 않았으면 싣지 않습니다(0개).
+///
+/// - 그림: `LoadImage`
+/// - 영상: `LoadVideo` → `GetVideoComponents` 의 프레임. H3 는 24fps 프레임을 받습니다
+///   (구도잡기 타임라인이 24fps 라 그대로 맞습니다). 영상의 소리는 싣지 않습니다.
+/// - 소리: `LoadAudio`
+fn attach_refs(graph: &mut Map<String, Value>, spec: Option<&Value>, names: &[String], kind: RefKind) -> Res<usize> {
+    let (Some(spec), false) = (spec, names.is_empty()) else { return Ok(0) };
+    let max = spec.get("max").and_then(Value::as_u64).unwrap_or(1) as usize;
+    let start = spec.get("start").and_then(Value::as_u64).unwrap_or(1) as usize;
+    let node = spec.pointer("/input/0").and_then(Value::as_str).ok_or("references.input 이 비었습니다.")?.to_string();
+    let pattern = spec.pointer("/input/1").and_then(Value::as_str).ok_or("references.input 이 비었습니다.")?.to_string();
+    let count = names.len().min(max);
+    for (offset, name) in names.iter().take(max).enumerate() {
+        let n = start + offset;
+        let link = match kind {
+            RefKind::Image => {
+                let id = format!("ref{n}");
+                graph.insert(id.clone(), json!({ "class_type": "LoadImage", "inputs": { "image": name } }));
+                json!([id, 0])
+            }
+            RefKind::Video => {
+                let (load, frames) = (format!("refvideo{n}"), format!("refframes{n}"));
+                graph.insert(load.clone(), json!({ "class_type": "LoadVideo", "inputs": { "file": name } }));
+                graph.insert(frames.clone(), json!({ "class_type": "GetVideoComponents", "inputs": { "video": [load, 0] } }));
+                json!([frames, 0])
+            }
+            RefKind::Audio => {
+                let id = format!("refaudio{n}");
+                graph.insert(id.clone(), json!({ "class_type": "LoadAudio", "inputs": { "audio": name } }));
+                json!([id, 0])
+            }
+        };
+        let inputs = graph
+            .get_mut(&node)
+            .and_then(|v| v.get_mut("inputs"))
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| format!("레퍼런스 자리가 없는 노드를 가리킵니다: {node}"))?;
+        inputs.insert(pattern.replace("{n}", &n.to_string()), link);
+    }
+    for extra in spec.get("extra").and_then(Value::as_array).into_iter().flatten() {
+        let (Some(n), Some(input), Some(value)) = (extra.get(0).and_then(Value::as_str), extra.get(1).and_then(Value::as_str), extra.get(2)) else {
+            continue;
+        };
+        if let Some(inputs) = graph.get_mut(n).and_then(|v| v.get_mut("inputs")).and_then(Value::as_object_mut) {
+            inputs.insert(input.to_string(), value.clone());
+        }
+    }
+    Ok(count)
+}
+
 /// 서버에 같은 이름이 있는 로라만 겁니다. `after` 노드의 모델 출력 뒤에 줄줄이 달고, `into` 가 그 끝을 받게 합니다.
 ///
 /// 로컬 로라는 이 컴퓨터의 파일 경로라 서버가 읽을 수 없습니다. 파일 이름이 서버의
 /// `models/loras` 목록에 있는 것만 싣고, 나머지는 이름을 돌려줘 «못 실었다» 고 알립니다.
-pub(crate) fn attach_loras(doc: &Value, graph: &mut Map<String, Value>, loras: &[(String, f64)], remote: &[String]) -> (Vec<String>, Vec<String>) {
+pub(crate) fn attach_loras(
+    doc: &Value,
+    graph: &mut Map<String, Value>,
+    loras: &[(String, f64)],
+    remote: &[String],
+    after_override: Option<&str>,
+) -> (Vec<String>, Vec<String>) {
     let mut used = Vec::new();
     let mut dropped = Vec::new();
     let Some(spec) = doc.get("loras") else {
         dropped.extend(loras.iter().map(|(name, _)| name.clone()));
         return (used, dropped);
     };
-    let Some(after) = spec.get("after").and_then(Value::as_str) else {
+    // «빠르게» 로 터보 로라를 얹었으면 그 뒤에 잇습니다 — 아니면 사람 로라가 터보 로라를 건너뜁니다.
+    let Some(after) = after_override.or_else(|| spec.get("after").and_then(Value::as_str)) else {
         return (used, dropped);
     };
     let base_name = |s: &str| s.rsplit(['/', '\\']).next().unwrap_or(s).to_ascii_lowercase();
@@ -436,6 +539,110 @@ pub async fn comfy_fleet_status(endpoints: Vec<String>) -> Res<Vec<EndpointStatu
     Ok(futures_util::future::join_all(endpoints.iter().map(|url| probe(&client, url))).await)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 사전 점검 — 워크플로가 요구하는 노드·모델이 서버에 있는가
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 서버의 모델 파일 이름이 바뀌거나 노드가 빠지면, 지금까지는 **생성을 눌러야** 알았습니다
+// (서버가 워크플로를 거절). «연결 확인» 에서 미리 봅니다. `/object_info` 한 번으로 노드 목록과
+// 각 선택지(모델 파일 목록 포함)를 다 받을 수 있습니다.
+
+/// 워크플로 하나가 서버에서 못 도는 까닭들. 비어 있으면 돕니다.
+///
+/// - 노드 종류가 서버에 없음
+/// - 선택지 입력(모델 파일 이름 등)의 값이 서버의 선택지에 없음
+///
+/// 앱이 채우는 자리(LoadImage 의 파일 이름 등)는 그때그때 올리는 것이라 보지 않습니다.
+pub(crate) fn missing_for(graph: &Map<String, Value>, object_info: &Value) -> Vec<String> {
+    const FILLED_AT_RUN: &[&str] = &["LoadImage", "LoadVideo", "LoadAudio"];
+    let mut missing = Vec::new();
+    for node in graph.values() {
+        let Some(class) = node.get("class_type").and_then(Value::as_str) else { continue };
+        let Some(info) = object_info.get(class) else {
+            missing.push(format!("노드 {class}"));
+            continue;
+        };
+        if FILLED_AT_RUN.contains(&class) {
+            continue;
+        }
+        for (name, value) in node.get("inputs").and_then(Value::as_object).into_iter().flatten() {
+            let Some(value) = value.as_str() else { continue };
+            let spec = info
+                .pointer(&format!("/input/required/{name}"))
+                .or_else(|| info.pointer(&format!("/input/optional/{name}")));
+            let Some(spec) = spec else { continue };
+            // 선택지는 두 꼴입니다: `[[값...], {...}]` 또는 `["COMBO", {"options": [값...]}]`.
+            let options = spec
+                .get(0)
+                .and_then(Value::as_array)
+                .or_else(|| (spec.get(0).and_then(Value::as_str) == Some("COMBO")).then(|| spec.pointer("/1/options")).flatten().and_then(Value::as_array));
+            let Some(options) = options else { continue };
+            // 동적 선택지(`{"key": ...}` 목록)는 값이 문자열 목록이 아니라 따로 셉니다.
+            let listed = options.iter().any(|o| o.as_str() == Some(value) || o.get("key").and_then(Value::as_str) == Some(value));
+            if !listed {
+                missing.push(format!("{class}.{name} = {value}"));
+            }
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    missing
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowCheck {
+    pub workflow: String,
+    pub engine: String,
+    pub missing: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointCheck {
+    pub url: String,
+    /// 서버에 닿지 못했으면 그 까닭. 그때 `workflows` 는 비어 있습니다.
+    pub error: Option<String>,
+    pub workflows: Vec<WorkflowCheck>,
+}
+
+async fn check_endpoint(client: &reqwest::Client, url: &str) -> EndpointCheck {
+    let base = comfy_base(url);
+    let fetched = client.get(format!("{base}/object_info")).timeout(Duration::from_secs(60)).send().await;
+    let object_info: Value = match fetched {
+        Ok(response) if response.status().is_success() => match response.json().await {
+            Ok(value) => value,
+            Err(e) => return EndpointCheck { url: base, error: Some(err("object_info 를 읽지 못했습니다", e)), workflows: vec![] },
+        },
+        Ok(response) => return EndpointCheck { url: base, error: Some(format!("ComfyUI 가 {} 로 답했습니다.", response.status())), workflows: vec![] },
+        Err(e) => {
+            let why = comfy_net_err(&base, e);
+            return EndpointCheck { url: base, error: Some(why), workflows: vec![] };
+        }
+    };
+    let workflows = WORKFLOWS
+        .iter()
+        .filter_map(|(name, _)| {
+            let doc = workflow_doc(name).ok()?;
+            let graph = doc.get("graph")?.as_object()?.clone();
+            Some(WorkflowCheck {
+                workflow: name.to_string(),
+                engine: doc.get("engine").and_then(Value::as_str).unwrap_or("").to_string(),
+                missing: missing_for(&graph, &object_info),
+            })
+        })
+        .collect();
+    EndpointCheck { url: base, error: None, workflows }
+}
+
+/// 서버마다 내장 워크플로가 전부 도는지 봅니다(설정의 «연결 확인»).
+#[tauri::command]
+pub async fn comfy_fleet_check(endpoints: Vec<String>) -> Res<Vec<EndpointCheck>> {
+    let client = http_client()?;
+    let endpoints = normalize_endpoints(&endpoints);
+    Ok(futures_util::future::join_all(endpoints.iter().map(|url| check_endpoint(&client, url))).await)
+}
+
 /// 사내 ComfyUI 로 뽑을 수 있는 엔진 id.
 #[tauri::command]
 pub fn comfy_remote_engines() -> Vec<String> {
@@ -461,21 +668,32 @@ pub(crate) fn rank(statuses: &[EndpointStatus]) -> Vec<EndpointStatus> {
 // 올리기 · 받기
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// 그림 하나를 서버의 input 폴더에 올리고 워크플로에 넣을 이름을 돌려줍니다.
+/// 로컬 파일을 못 읽은 것 — 서버를 바꿔도 같으니 다음 서버로 넘기지 않습니다.
+const READ_FAILED: &str = "파일을 읽지 못했습니다";
+
+/// 파일 하나(그림·영상·소리)를 서버의 input 폴더에 올리고 워크플로에 넣을 이름을 돌려줍니다.
 ///
 /// 이름은 **작업 번호로 새로 짓습니다** — 프로젝트 파일 이름은 한글이고, 서버 input 폴더는
 /// 여러 사람이 같이 쓰므로 같은 이름(`소녀_001.png`)을 올리면 남의 그림을 덮습니다.
-async fn upload_image(client: &reqwest::Client, base: &str, path: &str, tag: &str) -> Res<String> {
+async fn upload_file(client: &reqwest::Client, base: &str, path: &str, tag: &str) -> Res<String> {
     let source = PathBuf::from(path);
-    let bytes = fs::read(&source).map_err(|e| err(&format!("그림을 읽지 못했습니다 ({path})"), e))?;
+    let bytes = fs::read(&source).map_err(|e| err(&format!("{READ_FAILED} ({path})"), e))?;
     let ext = source
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_else(|| "png".into());
+    // 이름이 `/upload/image` 이지만 영상·소리도 같은 input 폴더로 받습니다(LoadVideo·LoadAudio 가 거기서 읽음).
     let mime = match ext.as_str() {
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "flac" => "audio/flac",
+        "ogg" => "audio/ogg",
         _ => "image/png",
     };
     let part = reqwest::multipart::Part::bytes(bytes)
@@ -491,7 +709,7 @@ async fn upload_image(client: &reqwest::Client, base: &str, path: &str, tag: &st
         .await
         .map_err(|e| comfy_net_err(base, e))?;
     if !response.status().is_success() {
-        return Err(format!("그림 올리기를 ComfyUI 가 거절했습니다 ({}).", response.status()));
+        return Err(format!("파일 올리기를 ComfyUI 가 거절했습니다 ({}).", response.status()));
     }
     let uploaded: Value = response.json().await.map_err(|e| err("업로드 응답을 읽지 못했습니다", e))?;
     let name = uploaded.get("name").and_then(Value::as_str).ok_or("업로드 응답에 파일 이름이 없습니다.")?;
@@ -576,7 +794,7 @@ struct Submission<'a> {
     doc: &'a Value,
     opts: &'a Value,
     image_path: Option<&'a str>,
-    reference_paths: &'a [String],
+    reference_paths: &'a Refs,
     loras: &'a [(String, f64)],
     prefix: &'a str,
     tag: &'a str,
@@ -587,19 +805,27 @@ struct Submission<'a> {
 async fn submit(client: &reqwest::Client, base: &str, request: &Submission<'_>) -> Res<(String, Filled, Vec<String>, Vec<String>)> {
     let tag = request.tag;
     let image = match request.image_path {
-        Some(path) => Some(upload_image(client, base, path, &format!("{tag}_first")).await?),
+        Some(path) => Some(upload_file(client, base, path, &format!("{tag}_first")).await?),
         None => None,
     };
-    let mut refs = Vec::new();
-    for (index, path) in request.reference_paths.iter().enumerate() {
-        refs.push(upload_image(client, base, path, &format!("{tag}_ref{index}")).await?);
+    let local = request.reference_paths;
+    let mut refs = Refs::default();
+    for (index, path) in local.images.iter().enumerate() {
+        refs.images.push(upload_file(client, base, path, &format!("{tag}_ref{index}")).await?);
+    }
+    for (index, path) in local.videos.iter().enumerate() {
+        refs.videos.push(upload_file(client, base, path, &format!("{tag}_video{index}")).await?);
+    }
+    for (index, path) in local.audios.iter().enumerate() {
+        refs.audios.push(upload_file(client, base, path, &format!("{tag}_audio{index}")).await?);
     }
     let mut filled = fill(request.doc, request.opts, image.as_deref(), &refs, request.prefix, request.seed)?;
     let (used, dropped) = if request.loras.is_empty() {
         (Vec::new(), Vec::new())
     } else {
         let remote = remote_loras(client, base).await;
-        attach_loras(request.doc, &mut filled.graph, request.loras, &remote)
+        let after = filled.values.get("lora_after").and_then(Value::as_str).map(str::to_string);
+        attach_loras(request.doc, &mut filled.graph, request.loras, &remote, after.as_deref())
     };
     let response = client
         .post(format!("{base}/prompt"))
@@ -754,7 +980,13 @@ pub async fn comfy_generate(
     }) % 1_125_899_906_842_624;
     let prefix = format!("aimoviestorage/{engine}_{tag}");
     let image_path = non_empty(&opts, "image").map(str::to_string);
-    let reference_paths = if doc.get("references").is_some() { image_references(&opts) } else { Vec::new() };
+    // 워크플로가 자리를 선언한 종류만 올립니다 — 받을 곳 없는 파일은 올리지 않고 «못 실음» 으로 셉니다.
+    let asked = references_of(&opts);
+    let reference_paths = Refs {
+        images: if doc.get("references").is_some() { asked.images } else { Vec::new() },
+        videos: if doc.get("video_references").is_some() { asked.videos } else { Vec::new() },
+        audios: if doc.get("audio_references").is_some() { asked.audios } else { Vec::new() },
+    };
     let loras: Vec<(String, f64)> = opts
         .get("loras")
         .and_then(Value::as_array)
@@ -798,7 +1030,7 @@ pub async fn comfy_generate(
             }
             Err(e) => {
                 // 파일을 못 읽은 것은 서버를 바꿔도 같습니다 — 바로 돌려줍니다.
-                if e.starts_with("그림을 읽지 못했습니다") || e == "보낼 프롬프트가 없습니다." {
+                if e.starts_with(READ_FAILED) || e == "보낼 프롬프트가 없습니다." {
                     return Err(e);
                 }
                 rejections.push(format!("{} — {e}", host_of(&base)));
@@ -932,10 +1164,11 @@ pub async fn comfy_generate(
     if opts.get("control").is_some_and(|v| !v.is_null()) {
         ignored.push("동작 기준(포즈)");
     }
-    let all_refs = opts.get("references").and_then(Value::as_array).map(|a| a.len()).unwrap_or(0);
+    let all_refs = references_of(&opts).total();
     let sent_refs = filled.values.get("references").and_then(Value::as_u64).unwrap_or(0) as usize;
     let mut meta = filled.values.clone();
     meta.remove("prefix");
+    meta.remove("lora_after");
     meta.insert("backend".into(), json!("comfy"));
     meta.insert("endpoint".into(), json!(base));
     meta.insert("prompt_id".into(), json!(prompt_id));
@@ -958,7 +1191,7 @@ pub async fn comfy_generate(
 mod tests {
     use super::*;
 
-    fn filled(name: &str, opts: Value, image: Option<&str>, refs: &[String]) -> Filled {
+    fn filled(name: &str, opts: Value, image: Option<&str>, refs: &Refs) -> Filled {
         fill(&workflow_doc(name).unwrap(), &opts, image, refs, "aimoviestorage/test", 7).unwrap()
     }
 
@@ -982,7 +1215,11 @@ mod tests {
         for (name, _) in WORKFLOWS {
             let doc = workflow_doc(name).unwrap();
             let needs_image = doc["bind"].get("image").is_some();
-            let refs = if doc.get("references").is_some() { vec!["a.png".to_string()] } else { vec![] };
+            let refs = Refs {
+                images: if doc.get("references").is_some() { vec!["a.png".into()] } else { vec![] },
+                videos: if doc.get("video_references").is_some() { vec!["a.mp4".into()] } else { vec![] },
+                audios: if doc.get("audio_references").is_some() { vec!["a.wav".into()] } else { vec![] },
+            };
             let result = fill(&doc, &opts, needs_image.then_some("first.png"), &refs, "p", 1).unwrap();
             assert_links_resolve(&result.graph);
             assert!(result.graph.contains_key(&result.output_node), "{name} 의 출력 노드가 없습니다");
@@ -1013,7 +1250,7 @@ mod tests {
 
     #[test]
     fn prompt_size_and_seed_land_in_graph() {
-        let result = filled("qwenimage", json!({ "prompt": "hello", "width": 1000, "height": 563 }), None, &[]);
+        let result = filled("qwenimage", json!({ "prompt": "hello", "width": 1000, "height": 563 }), None, &Refs::default());
         assert_eq!(result.graph["452"]["inputs"]["prompt"], "hello");
         assert_eq!(result.graph["456"]["inputs"]["width"], 1008);
         assert_eq!(result.graph["456"]["inputs"]["height"], 560);
@@ -1025,7 +1262,7 @@ mod tests {
 
     #[test]
     fn qwen_references_become_numbered_image_inputs() {
-        let refs = vec!["x.png".to_string(), "y.png".to_string()];
+        let refs = Refs::of_images(&["x.png", "y.png"]);
         let result = filled("qwenimage", json!({ "prompt": "p" }), None, &refs);
         assert_eq!(result.graph["452"]["inputs"]["images.image_1"], json!(["ref1", 0]));
         assert_eq!(result.graph["452"]["inputs"]["images.image_2"], json!(["ref2", 0]));
@@ -1035,65 +1272,119 @@ mod tests {
 
     #[test]
     fn h3_references_start_at_zero_and_frames_follow_17n_plus_5() {
-        let refs = vec!["x.png".to_string()];
+        let refs = Refs::of_images(&["x.png"]);
         let result = filled("minimaxh3_r2v", json!({ "prompt": "p", "seconds": 3, "fps": 16 }), None, &refs);
         assert_eq!(result.graph["104"]["inputs"]["ref_images.ref_image_0"], json!(["ref0", 0]));
         // 3초 × 24fps = 72 → 17n+5 로 올리면 73. fps 는 H3 가 24 로 고정합니다.
         assert_eq!(result.graph["104"]["inputs"]["length"], 73);
         assert_eq!(result.values["fps"], 24);
-        let five = filled("minimaxh3_t2v", json!({ "prompt": "p", "seconds": 5 }), None, &[]);
+        let five = filled("minimaxh3_t2v", json!({ "prompt": "p", "seconds": 5 }), None, &Refs::default());
         assert_eq!(five.graph["104"]["inputs"]["length"], 124);
+    }
+
+    /// H3 레퍼런스: 영상은 LoadVideo → 프레임, 소리는 LoadAudio 로 각 자리에 0번부터 붙습니다.
+    #[test]
+    fn h3_takes_video_and_audio_references() {
+        let refs = Refs {
+            images: vec!["pic.png".into()],
+            videos: vec!["layout.mp4".into(), "motion.mp4".into()],
+            audios: vec!["voice.wav".into()],
+        };
+        let result = filled("minimaxh3_r2v", json!({ "prompt": "p" }), None, &refs);
+        let h3 = &result.graph["104"]["inputs"];
+        assert_eq!(h3["ref_images.ref_image_0"], json!(["ref0", 0]));
+        assert_eq!(h3["ref_videos.ref_video_0"], json!(["refframes0", 0]));
+        assert_eq!(h3["ref_videos.ref_video_1"], json!(["refframes1", 0]));
+        assert_eq!(h3["ref_audios.ref_audio_0"], json!(["refaudio0", 0]));
+        assert_eq!(result.graph["refvideo1"]["inputs"]["file"], "motion.mp4");
+        assert_eq!(result.graph["refframes0"]["class_type"], "GetVideoComponents");
+        assert_eq!(result.values["references"], 4);
+        assert_links_resolve(&result.graph);
+        // 영상 레퍼런스만 있어도 레퍼런스→영상입니다. 소리만 있으면 아닙니다.
+        let video_only = json!({ "references": [{ "kind": "video", "path": "a.mp4" }] });
+        assert_eq!(pick_workflow("minimaxh3", &video_only).unwrap(), "minimaxh3_r2v");
+        // Qwen 은 영상·소리 자리가 없습니다 — 그림만 싣습니다.
+        let qwen = filled("qwenimage", json!({ "prompt": "p" }), None, &refs);
+        assert_eq!(qwen.values["references"], 1);
+    }
+
+    /// «빠르게»: 터보 로라를 얹고 8스텝으로 줄이며, 사람 로라는 그 뒤에 잇습니다. 레퍼런스 모델에는 없습니다.
+    #[test]
+    fn h3_fast_mode_adds_turbo_lora_and_fewer_steps() {
+        let high = filled("minimaxh3_t2v", json!({ "prompt": "p" }), None, &Refs::default());
+        assert_eq!(high.graph["9"]["inputs"]["steps"], 20);
+        assert!(!high.graph.contains_key("fastlora"));
+        assert_eq!(high.values["speed"], "high");
+
+        let doc = workflow_doc("minimaxh3_i2v").unwrap();
+        let mut fast = fill(&doc, &json!({ "prompt": "p", "speed": "fast" }), Some("f.png"), &Refs::default(), "p", 1).unwrap();
+        assert_eq!(fast.graph["9"]["inputs"]["steps"], 8);
+        assert_eq!(fast.graph["16"]["inputs"]["model"], json!(["fastlora", 0]));
+        assert_eq!(fast.graph["fastlora"]["inputs"]["model"], json!(["6", 0]));
+        assert_eq!(fast.values["speed"], "fast");
+        let after = fast.values["lora_after"].as_str().map(str::to_string);
+        let remote = vec!["minimax_h3/Minimax_H3_Cinematic_Look_v01.safetensors".to_string()];
+        let loras = vec![("D:\\loras\\Minimax_H3_Cinematic_Look_v01.safetensors".to_string(), 0.7)];
+        attach_loras(&doc, &mut fast.graph, &loras, &remote, after.as_deref());
+        assert_eq!(fast.graph["lora0"]["inputs"]["model"], json!(["fastlora", 0]));
+        assert_eq!(fast.graph["16"]["inputs"]["model"], json!(["lora0", 0]));
+        assert_links_resolve(&fast.graph);
+
+        // 레퍼런스 모델(ref2va)에는 «빠르게» 갈래가 없어 그대로 20스텝입니다.
+        let r2v = filled("minimaxh3_r2v", json!({ "prompt": "p", "speed": "fast" }), None, &Refs::of_images(&["a.png"]));
+        assert_eq!(r2v.graph["9"]["inputs"]["steps"], 20);
+        assert!(!r2v.graph.contains_key("fastlora"));
     }
 
     #[test]
     fn video_frames_follow_model_step() {
-        let wan = filled("wanvideo_t2v", json!({ "prompt": "p", "seconds": 3 }), None, &[]);
+        let wan = filled("wanvideo_t2v", json!({ "prompt": "p", "seconds": 3 }), None, &Refs::default());
         assert_eq!(wan.graph["74"]["inputs"]["length"], 49);
-        let ltx = filled("ltx25_t2v", json!({ "prompt": "p", "seconds": 3, "width": 1024, "height": 576 }), None, &[]);
+        let ltx = filled("ltx25_t2v", json!({ "prompt": "p", "seconds": 3, "width": 1024, "height": 576 }), None, &Refs::default());
         assert_eq!(ltx.graph["356"]["inputs"]["length"], 73);
         assert_eq!(ltx.graph["366"]["inputs"]["frames_number"], 73);
         // 절반 크기로 뽑고 두 배로 올립니다.
         assert_eq!(ltx.graph["356"]["inputs"]["width"], 512);
         assert_eq!(ltx.graph["356"]["inputs"]["height"], 288);
         // 길이는 워크플로의 상한에서 자릅니다.
-        let long = filled("wanvideo_t2v", json!({ "prompt": "p", "seconds": 60 }), None, &[]);
+        let long = filled("wanvideo_t2v", json!({ "prompt": "p", "seconds": 60 }), None, &Refs::default());
         assert_eq!(long.graph["74"]["inputs"]["length"], 161);
     }
 
     #[test]
     fn first_frame_is_required_for_i2v() {
         let doc = workflow_doc("wanvideo_i2v").unwrap();
-        assert!(fill(&doc, &json!({ "prompt": "p" }), None, &[], "p", 1).is_err());
-        let ok = fill(&doc, &json!({ "prompt": "p" }), Some("first.png"), &[], "p", 1).unwrap();
+        assert!(fill(&doc, &json!({ "prompt": "p" }), None, &Refs::default(), "p", 1).is_err());
+        let ok = fill(&doc, &json!({ "prompt": "p" }), Some("first.png"), &Refs::default(), "p", 1).unwrap();
         assert_eq!(ok.graph["97"]["inputs"]["image"], "first.png");
     }
 
     #[test]
     fn empty_prompt_is_refused() {
         let doc = workflow_doc("zimage").unwrap();
-        assert!(fill(&doc, &json!({ "prompt": "   " }), None, &[], "p", 1).is_err());
+        assert!(fill(&doc, &json!({ "prompt": "   " }), None, &Refs::default(), "p", 1).is_err());
     }
 
     #[test]
     fn music_uses_lyrics_or_instrumental() {
-        let inst = filled("acestep", json!({ "prompt": "lofi", "seconds": 20 }), None, &[]);
+        let inst = filled("acestep", json!({ "prompt": "lofi", "seconds": 20 }), None, &Refs::default());
         assert_eq!(inst.graph["94"]["inputs"]["lyrics"], "[inst]");
         assert_eq!(inst.graph["94"]["inputs"]["duration"], 20.0);
         assert_eq!(inst.graph["98"]["inputs"]["seconds"], 20.0);
-        let sung = filled("acestep", json!({ "prompt": "pop", "lyrics": "[verse]\nhi" }), None, &[]);
+        let sung = filled("acestep", json!({ "prompt": "pop", "lyrics": "[verse]\nhi" }), None, &Refs::default());
         assert_eq!(sung.graph["94"]["inputs"]["lyrics"], "[verse]\nhi");
     }
 
     #[test]
     fn loras_attach_only_when_server_has_them() {
         let doc = workflow_doc("qwenimage").unwrap();
-        let mut result = fill(&doc, &json!({ "prompt": "p" }), None, &[], "p", 1).unwrap();
+        let mut result = fill(&doc, &json!({ "prompt": "p" }), None, &Refs::default(), "p", 1).unwrap();
         let loras = vec![
             ("C:\\loras\\Qwen-Image-Lightning-4steps-V1.0.safetensors".to_string(), 0.8),
             ("C:\\loras\\mine.safetensors".to_string(), 1.0),
         ];
         let remote = vec!["Lunark/image/Qwen-Image-Lightning-4steps-V1.0.safetensors".to_string()];
-        let (used, dropped) = attach_loras(&doc, &mut result.graph, &loras, &remote);
+        let (used, dropped) = attach_loras(&doc, &mut result.graph, &loras, &remote, None);
         assert_eq!(used, remote);
         assert_eq!(dropped, vec!["mine.safetensors".to_string()]);
         assert_eq!(result.graph["lora0"]["inputs"]["model"], json!(["37", 0]));
@@ -1173,6 +1464,33 @@ mod tests {
         let anonymous = JobEntry::register(None);
         assert!(!anonymous.cancelled());
         assert!(!tauri::async_runtime::block_on(comfy_cancel("no-such-job".into())).unwrap());
+    }
+
+    /// 사전 점검: 없는 노드·없는 모델 파일을 짚고, 앱이 채우는 자리는 보지 않습니다.
+    #[test]
+    fn preflight_spots_missing_nodes_and_models() {
+        let object_info = json!({
+            "UNETLoader": { "input": { "required": {
+                "unet_name": [["qwen_image_2.1_int8_convrot.safetensors"], {}],
+                "weight_dtype": [["default", "fp8"], {}]
+            } } },
+            "CLIPLoader": { "input": { "required": {
+                "clip_name": ["COMBO", { "options": ["qwen3vl_8b_int8_convrot.safetensors"] }],
+                "type": [["qwen_image"], {}]
+            }, "optional": { "device": [["default"], {}] } } },
+            "LoadImage": { "input": { "required": { "image": [["only-this.png"], {}] } } },
+            "SaveVideo": { "input": { "required": { "format": ["COMFY_DYNAMICCOMBO_V3", { "options": [{ "key": "mp4" }] }] } } }
+        });
+        let graph: Map<String, Value> = serde_json::from_value(json!({
+            "1": { "class_type": "UNETLoader", "inputs": { "unet_name": "qwen_image_2.1_int8_convrot.safetensors", "weight_dtype": "default" } },
+            "2": { "class_type": "CLIPLoader", "inputs": { "clip_name": "renamed_encoder.safetensors", "type": "qwen_image", "device": "default" } },
+            "3": { "class_type": "LoadImage", "inputs": { "image": "" } },
+            "4": { "class_type": "SaveVideo", "inputs": { "format": "mp4", "video": ["9", 0] } },
+            "5": { "class_type": "TextEncodeQwenImage21", "inputs": { "prompt": "" } }
+        }))
+        .unwrap();
+        let missing = missing_for(&graph, &object_info);
+        assert_eq!(missing, vec!["CLIPLoader.clip_name = renamed_encoder.safetensors".to_string(), "노드 TextEncodeQwenImage21".to_string()]);
     }
 
     #[test]

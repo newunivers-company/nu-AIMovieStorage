@@ -3,12 +3,14 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   checkComfyFleet,
+  checkComfyWorkflows,
   COMFY_MODEL_LABEL,
   COMFY_PREFERRED,
   COMFY_REMOTE_ENGINES,
   DEFAULT_COMFY_ENDPOINTS,
   saveComfyFleet,
   useComfyFleet,
+  type ComfyEndpointCheck,
   type ComfyEndpointStatus,
 } from "@/lib/comfyFleet";
 import { LOCAL_ENGINE_IDS } from "@/lib/localEngines";
@@ -20,11 +22,35 @@ import { isDesktopApp } from "@/lib/llm";
  * 켜 두면 카드의 «뽑기»·일괄 생성·BGM 이 이 컴퓨터 대신 사내 ComfyUI 에서 돕니다.
  * 서버는 가장 한가한 곳을 그때그때 고르므로 여기서는 주소만 적습니다.
  */
+/**
+ * 서버 한 대에서 내장 워크플로가 몇 개 도는가. 빠진 것이 있으면 무엇이 빠졌는지 적습니다 —
+ * 서버의 모델 파일 이름이 바뀌면 생성을 누르기 전에 여기서 먼저 알 수 있습니다.
+ */
+function WorkflowReadiness({ check }: { check: ComfyEndpointCheck }) {
+  if (check.error) return <span style={{ color: "oklch(0.7 0.12 25)" }}>· 워크플로 점검 실패: {check.error}</span>;
+  const broken = check.workflows.filter((item) => item.missing.length > 0);
+  const total = check.workflows.length;
+  if (!broken.length)
+    return <span style={{ color: "oklch(0.75 0.15 160)" }}>· 워크플로 {total}개 모두 준비됨</span>;
+  return (
+    <div className="w-full pl-4 text-[10.5px]" style={{ color: "oklch(0.75 0.14 60)" }}>
+      워크플로 {total - broken.length}/{total} 준비됨 — 이 서버로는 아래가 거절되고 다른 서버로 넘어갑니다.
+      {broken.map((item) => (
+        <div key={item.workflow} className="font-mono">
+          {item.workflow}: {item.missing.join(", ")}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ComfyFleetPanel() {
   const settings = useComfyFleet();
   const [draft, setDraft] = useState(() => settings.endpoints.join("\n"));
   const [checking, setChecking] = useState(false);
   const [statuses, setStatuses] = useState<ComfyEndpointStatus[] | null>(null);
+  /** 서버마다 내장 워크플로가 도는가(빠진 노드·모델). 상태 확인과 함께 받습니다. */
+  const [checks, setChecks] = useState<Record<string, ComfyEndpointCheck>>({});
   const desktop = isDesktopApp();
 
   const endpointsOf = (text: string) =>
@@ -41,8 +67,13 @@ export default function ComfyFleetPanel() {
   const check = async () => {
     setChecking(true);
     try {
-      const result = await checkComfyFleet(endpointsOf(draft));
+      const list = endpointsOf(draft);
+      const [result, workflowChecks] = await Promise.all([
+        checkComfyFleet(list),
+        checkComfyWorkflows(list).catch(() => [] as ComfyEndpointCheck[]),
+      ]);
       setStatuses(result);
+      setChecks(Object.fromEntries(workflowChecks.map((item) => [item.url, item])));
       const alive = result.filter((item) => item.ok).length;
       if (alive) toast.success(`${result.length}대 중 ${alive}대가 응답합니다.`);
       else toast.error("응답하는 서버가 없습니다. 주소와 사내망 연결을 확인하세요.");
@@ -73,6 +104,27 @@ export default function ComfyFleetPanel() {
         />
         사내 ComfyUI 로 생성하기
       </label>
+
+      <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: "oklch(0.8 0.01 265)" }}>
+        <span className="font-semibold">MiniMax H3 영상</span>
+        {(
+          [
+            ["fast", "빠르게 — 8스텝, 약 2배 빠름"],
+            ["high", "고품질 — 20스텝"],
+          ] as const
+        ).map(([value, label]) => (
+          <label key={value} className="flex items-center gap-1">
+            <input
+              type="radio"
+              name="comfy-speed"
+              checked={settings.speed === value}
+              onChange={() => saveComfyFleet({ ...settings, speed: value })}
+            />
+            {label}
+          </label>
+        ))}
+        <span style={muted}>(레퍼런스로 뽑는 영상은 늘 고품질)</span>
+      </div>
 
       <div className="space-y-1.5">
         <p className="text-[11px] font-semibold" style={{ color: "oklch(0.72 0.01 265)" }}>
@@ -141,6 +193,7 @@ export default function ComfyFleetPanel() {
               ) : (
                 <span style={{ color: "oklch(0.7 0.12 25)" }}>{item.error}</span>
               )}
+              {item.ok && checks[item.url] && <WorkflowReadiness check={checks[item.url]} />}
             </div>
           ))}
         </div>

@@ -227,5 +227,26 @@
   "output": {
     "node": "92",
     "key": "images"
+  },
+  "fast": {
+    "lora": "minimax_h3/minimax_h3_fl2v_lightx2v_turbo_8step_v1.0_rank24_bf16.safetensors",
+    "after": "6",
+    "into": [
+      [
+        "16",
+        "model"
+      ],
+      [
+        "9",
+        "model"
+      ]
+    ],
+    "steps": [
+      [
+        "9",
+        "steps"
+      ]
+    ],
+    "step_count": 8
   }
 }
