@@ -52,6 +52,29 @@ describe("업데이터 설정", () => {
   });
 });
 
+describe("언제 보는가", () => {
+  it("켤 때 봅니다 — 설정을 열어야 아는 건 「자동 감지」 가 아닙니다", () => {
+    /*
+       처음에는 설정 화면에만 두었는데
+      그러면 설정을 열어야 알게 됩니다. 앱을 켤 때 한 번 봅니다.
+    */
+    const app = read("client/src/App.tsx");
+    expect(app).toContain("checkForUpdate()");
+  });
+
+  it("없으면 아무 말도 안 합니다", () => {
+    // 켤 때마다 「최신입니다」 가 뜨면 잔소리입니다.
+    const app = read("client/src/App.tsx");
+    expect(app).toContain("if (!alive || !found) return;");
+  });
+
+  it("말풍선이 저절로 사라지지 않습니다", () => {
+    // 몇 초 만에 사라지면 자리를 비운 사이에 지나가 「감지가 안 된다」 가 됩니다.
+    const app = read("client/src/App.tsx");
+    expect(app).toContain("duration: Infinity");
+  });
+});
+
 describe("판 가르기", () => {
   it("업데이터는 공개판에서만 등록됩니다", () => {
     /*

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { syncPromptDefaults } from "@/lib/promptLibrary";
@@ -13,6 +13,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { PromptDialogHost } from "@/components/PromptDialog";
 import TutorialOverlay from "@/components/tutorial/TutorialOverlay";
 import { allowStorageDirectory } from "@/lib/mediaLibrary";
+import { checkForUpdate } from "@/lib/appUpdate";
 
 /**
  * 화면 배치.
@@ -22,6 +23,7 @@ import { allowStorageDirectory } from "@/lib/mediaLibrary";
  * 만질 수 있으면 어느 쪽이 맞는지 알 수 없어집니다.
  */
 export default function App() {
+  const [, navigate] = useLocation();
   /*
     저장 폴더를 asset 프로토콜에 열어 둡니다.
 
@@ -34,6 +36,42 @@ export default function App() {
     // 요청마다 쓴 토큰을 받아 적습니다 — 「API 기록」이 얼마 썼는지 보여 주는 근거입니다.
     void hookLlmUsage();
   }, []);
+
+  /*
+    **켤 때 새 판이 있는지 봅니다.**
+
+     처음에는 설정 화면에만 두었는데, 그러면 **설정을 열어야** 알게
+    됩니다 — 「자동으로 감지」 가 아닙니다.
+
+    새 판이 있을 때만 말풍선을 띄웁니다. 없으면 아무 말도 안 합니다 — 켤 때마다
+    「최신입니다」 가 뜨면 잔소리입니다. 실패해도 조용합니다(네트워크가 없는 자리에서
+    켤 때마다 우는 것도 같습니다).
+
+    말풍선은 **손으로 닫을 때까지** 둡니다. 몇 초 만에 사라지면 자리를 비운 사이에
+    지나가 버려 「감지가 안 된다」 가 됩니다.
+  */
+  useEffect(() => {
+    let alive = true;
+    void checkForUpdate()
+      .then((found) => {
+        if (!alive || !found) return;
+        toast.info(`새 판 ${found.version} 이 나왔습니다 (지금 ${found.current})`, {
+          duration: Infinity,
+          description: "설정 화면에서 받을 수 있습니다.",
+          action: {
+            label: "설정 열기",
+            onClick: () => {
+              window.location.hash = "";
+              navigate("/settings");
+            },
+          },
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [navigate]);
 
   /*
     **앱이 고친 프롬프트 문구를 폴더에 흘려보냅니다.**
