@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isDesktopApp } from "@/lib/llm";
 import { isEngineIncluded } from "@/lib/edition";
+import { loadComfyFleet, subscribeComfyFleet } from "@/lib/comfyFleet";
 
 /**
  * 업스케일 엔진 체계 — 프런트 쪽.
@@ -122,7 +123,8 @@ export const UPSCALE_ENGINE_CATALOG: Record<UpscaleEngineId, UpscaleEngineInfo> 
   comfy: {
     id: "comfy",
     name: "외부 — ComfyUI (API)",
-    purpose: "직접 만든 ComfyUI 워크플로(API 형식 JSON)로 돌림. ComfyUI 가 켜져 있어야 함",
+    purpose:
+      "직접 만든 ComfyUI 워크플로(API 형식 JSON)로 돌림. 워크플로를 고르지 않았고 «사내 ComfyUI» 가 켜져 있으면 사내 서버의 SeedVR2 3B 로 돌림",
     license: "— (ComfyUI 와 워크플로의 노드에 따름)",
     sizeHint: "설치 없음",
     external: true,
@@ -375,11 +377,18 @@ export function saveComfySettings(patch: Partial<ComfySettings>): ComfySettings 
 }
 
 /**
- * ComfyUI 다리를 쓸 수 있는 상태인가 — 데스크톱 + 워크플로 경로가 잡힘.
+ * ComfyUI 다리를 쓸 수 있는 상태인가 — 데스크톱이고, 워크플로 경로가 잡혔거나 **사내 ComfyUI 가 켜져 있음**.
+ * 사내 ComfyUI 는 앱에 내장한 SeedVR2 워크플로를 써서 고를 파일이 없습니다(`comfy_upscale_fleet`).
  * 연결이 실제로 되는지는 여기서 안 봅니다(동기 함수 — 렌더 중에 부릅니다).
  */
 export function isComfyConfigured(): boolean {
-  return isDesktopApp() && Boolean(getComfySettings().workflowPath.trim());
+  return isDesktopApp() && (Boolean(getComfySettings().workflowPath.trim()) || usesComfyFleet());
+}
+
+/** 워크플로 파일 없이 사내 ComfyUI 로 업스케일하는가. 사람이 고른 워크플로가 있으면 그것이 먼저입니다. */
+function usesComfyFleet(): boolean {
+  const fleet = loadComfyFleet();
+  return !getComfySettings().workflowPath.trim() && fleet.enabled && fleet.endpoints.length > 0;
 }
 
 /* ────────────────────────── 엔진 상태 (Rust 캐시 + 구독) ────────────────────────── */
@@ -499,6 +508,9 @@ let snapshot: UpscaleSnapshot = {
   statusError: "",
 };
 const listeners = new Set<() => void>();
+
+// 사내 ComfyUI 를 켜고 끄면 «외부 — ComfyUI» 엔진을 쓸 수 있는지가 달라집니다.
+subscribeComfyFleet(() => publish());
 
 function publish(patch: Partial<UpscaleSnapshot> = {}) {
   // comfy 의 «설치됨» 은 설정에서 나오므로 설정이 바뀔 때도 다시 계산합니다.
@@ -920,6 +932,28 @@ async function runComfy(
   onProgress?: (message: string, percent?: number | null) => void,
 ): Promise<UpscaleResult> {
   const settings = getComfySettings();
+  if (usesComfyFleet()) {
+    // 사내 ComfyUI — 내장 SeedVR2 워크플로로, 대기열이 가장 짧은 서버에서.
+    onProgress?.("사내 ComfyUI 에 보내는 중", null);
+    const started = Date.now();
+    const result = await invoke<{ path: string; seedvr2Resolution: number | null }>("comfy_upscale_fleet", {
+      imagePath,
+      outPath,
+      targetSize,
+      numbered,
+      endpoints: loadComfyFleet().endpoints,
+      timeoutSecs,
+    });
+    onProgress?.("받았습니다", 100);
+    return {
+      path: result.path,
+      width: 0,
+      height: 0,
+      seconds: (Date.now() - started) / 1000,
+      engine: "comfy",
+      seedvr2Resolution: result.seedvr2Resolution,
+    };
+  }
   if (!settings.workflowPath.trim()) {
     throw new Error("ComfyUI 워크플로가 설정돼 있지 않습니다. 설정 → 업스케일 엔진 → 외부 엔진에서 고르세요.");
   }

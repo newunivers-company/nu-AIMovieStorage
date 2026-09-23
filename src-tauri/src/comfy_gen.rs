@@ -53,15 +53,22 @@ const WORKFLOWS: &[(&str, &str)] = &[
     ("acestep", include_str!("comfy_workflows/acestep.json")),
 ];
 
+/// 사내 SeedVR2 업스케일(3B fp8). 생성 엔진이 아니라서 `WORKFLOWS` 와 따로 둡니다.
+const UPSCALE_WORKFLOW: &str = include_str!("comfy_workflows/upscale/seedvr2.json");
+
 /// 사내 ComfyUI 로 뽑을 수 있는 엔진. 프런트가 «원격으로 쓸 수 있는가» 를 이것으로 압니다.
 pub const REMOTE_ENGINES: &[&str] = &["qwenimage", "zimage", "krea2", "minimaxh3", "wanvideo", "ltx25", "acestep"];
 
 fn workflow_doc(name: &str) -> Res<Value> {
-    let text = WORKFLOWS
-        .iter()
-        .find(|(id, _)| *id == name)
-        .map(|(_, text)| *text)
-        .ok_or_else(|| format!("워크플로가 없습니다: {name}"))?;
+    let text = if name == "seedvr2_upscale" {
+        UPSCALE_WORKFLOW
+    } else {
+        WORKFLOWS
+            .iter()
+            .find(|(id, _)| *id == name)
+            .map(|(_, text)| *text)
+            .ok_or_else(|| format!("워크플로가 없습니다: {name}"))?
+    };
     serde_json::from_str(text).map_err(|e| err("내장 워크플로를 읽지 못했습니다", e))
 }
 
@@ -169,9 +176,19 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &Refs, 
         .cloned()
         .ok_or("워크플로에 graph 가 없습니다.")?;
 
-    let prompt = non_empty(opts, "prompt").ok_or("보낼 프롬프트가 없습니다.")?;
+    let bind = doc.get("bind").and_then(Value::as_object).ok_or("워크플로에 bind 가 없습니다.")?;
     let mut values = Map::new();
-    values.insert("prompt".into(), json!(prompt));
+    // 프롬프트는 워크플로가 받을 때만 필수입니다(업스케일은 글을 받지 않습니다).
+    match non_empty(opts, "prompt") {
+        Some(prompt) => {
+            values.insert("prompt".into(), json!(prompt));
+        }
+        None if bind.contains_key("prompt") => return Err("보낼 프롬프트가 없습니다.".into()),
+        None => {}
+    }
+    if let Some(long_edge) = num(opts.get("long_edge")) {
+        values.insert("long_edge".into(), json!(long_edge.round() as u64));
+    }
     if let Some(negative) = non_empty(opts, "negative").or_else(|| non_empty(&defaults, "negative")) {
         values.insert("negative".into(), json!(negative));
     }
@@ -209,7 +226,6 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &Refs, 
         values.insert("image".into(), json!(image));
     }
 
-    let bind = doc.get("bind").and_then(Value::as_object).ok_or("워크플로에 bind 가 없습니다.")?;
     for (key, targets) in bind {
         let Some(value) = values.get(key) else { continue };
         for target in targets.as_array().into_iter().flatten() {
@@ -622,7 +638,9 @@ async fn check_endpoint(client: &reqwest::Client, url: &str) -> EndpointCheck {
     };
     let workflows = WORKFLOWS
         .iter()
-        .filter_map(|(name, _)| {
+        .map(|(name, _)| *name)
+        .chain(std::iter::once("seedvr2_upscale"))
+        .filter_map(|name| {
             let doc = workflow_doc(name).ok()?;
             let graph = doc.get("graph")?.as_object()?.clone();
             Some(WorkflowCheck {
@@ -755,9 +773,11 @@ pub(crate) fn flac_to_wav(bytes: &[u8]) -> Res<Vec<u8>> {
     Ok(wav)
 }
 
-fn emit_progress(app: &AppHandle, engine: &str, message: &str) {
+/// 진행 줄. 생성은 로컬 모델과 같은 이벤트(`local-progress`)라 카드의 진행 문구가 그대로 움직입니다.
+/// 업스케일은 설정 화면(업스케일) 쪽 이벤트로 보냅니다 — 로컬 모델 화면의 진행 줄이 움직이면 안 됩니다.
+fn emit_progress_on(app: &AppHandle, event: &str, engine: &str, message: &str) {
     let _ = app.emit(
-        LOCAL.event,
+        event,
         json!({
             "engine": engine,
             "stage": "run",
@@ -921,43 +941,41 @@ pub async fn comfy_cancel(job_id: String) -> Res<bool> {
     Ok(true)
 }
 
-/// 파일 하나를 사내 ComfyUI 로 만듭니다 — `local_run` 과 같은 인자·같은 결과 꼴입니다.
-///
-/// `endpoints` 는 설정에 등록한 서버 주소들입니다. 결과는 `output_path` 자리(이미 있으면 번호를
-/// 올린 새 자리)에 놓고, 어느 서버에서 어떤 값으로 뽑았는지를 `meta` 에 담습니다.
-#[tauri::command]
-pub async fn comfy_generate(
-    app: AppHandle,
-    engine: String,
-    output_path: String,
-    opts: Option<Value>,
-    endpoints: Vec<String>,
+/// 원격 작업 하나의 결과 — 받은 파일과, 어디서 무엇으로 뽑았는지.
+struct Remote {
+    base: String,
+    prompt_id: String,
+    filled: Filled,
+    lora_used: Vec<String>,
+    lora_dropped: Vec<String>,
+    /// 받아 주기 전에 거절한 서버와 그 까닭.
+    rejections: Vec<String>,
+    tag: String,
+    /// 서버가 붙인 결과 파일 이름(확장자로 flac 등을 가립니다).
+    filename: String,
+    bytes: Vec<u8>,
+}
+
+/// **서버 고르기 → 올리기 → 제출 → 기다리기 → 받기.** 생성(`comfy_generate`)과
+/// 업스케일(`comfy_upscale_fleet`)이 같이 씁니다. 결과를 어디에 놓을지는 부르는 쪽이 정합니다
+/// — 생성은 새 번호 자리, 업스케일은 원본 곁(덮어쓰기 또는 번호).
+#[allow(clippy::too_many_arguments)]
+async fn run_remote(
+    app: &AppHandle,
+    event: &str,
+    engine: &str,
+    doc: &Value,
+    opts: &Value,
+    endpoints: &[String],
     timeout_secs: Option<u64>,
-    job_id: Option<String>,
-) -> Res<GenerateResult> {
-    let started = Instant::now();
-    // 프런트가 번호를 주면 «멈추기»(`comfy_cancel`)로 찾을 수 있게 표에 올립니다.
-    let job = JobEntry::register(job_id);
-    let engine = known_engine(&engine)?.to_string();
-    let opts = opts.unwrap_or_else(|| json!({}));
-    let workflow = pick_workflow(&engine, &opts)?;
-    let doc = workflow_doc(workflow)?;
-
-    let out = PathBuf::from(&output_path);
-    let out_ext = out.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_default();
-    if out_ext.is_empty() {
-        return Err("결과 자리에 확장자가 없습니다.".into());
-    }
-    let Some(out_dir) = out.parent().filter(|p| p.is_dir()).map(Path::to_path_buf) else {
-        return Err("결과를 놓을 폴더가 없습니다.".into());
-    };
-
+    job: &JobEntry,
+) -> Res<Remote> {
     let endpoints = normalize_endpoints(&endpoints);
     if endpoints.is_empty() {
         return Err("사내 ComfyUI 주소가 없습니다. 설정 → 사내 ComfyUI 에서 주소를 넣으세요.".into());
     }
     let client = http_client()?;
-    emit_progress(&app, &engine, "사내 ComfyUI 서버 상태를 확인하는 중…");
+    emit_progress_on(app, event, engine, "사내 ComfyUI 서버 상태를 확인하는 중…");
     let statuses = futures_util::future::join_all(endpoints.iter().map(|url| probe(&client, url))).await;
     // 1순위는 여기서 바로 예약됩니다 — 동시에 들어온 다른 요청이 같은 서버로 몰리지 않게(`rank_and_reserve`).
     let (ranked, mut first_reservation) = rank_and_reserve(&statuses);
@@ -979,9 +997,9 @@ pub async fn comfy_generate(
         nanos ^ (std::process::id() as u64).rotate_left(32)
     }) % 1_125_899_906_842_624;
     let prefix = format!("aimoviestorage/{engine}_{tag}");
-    let image_path = non_empty(&opts, "image").map(str::to_string);
+    let image_path = non_empty(opts, "image").map(str::to_string);
     // 워크플로가 자리를 선언한 종류만 올립니다 — 받을 곳 없는 파일은 올리지 않고 «못 실음» 으로 셉니다.
-    let asked = references_of(&opts);
+    let asked = references_of(opts);
     let reference_paths = Refs {
         images: if doc.get("references").is_some() { asked.images } else { Vec::new() },
         videos: if doc.get("video_references").is_some() { asked.videos } else { Vec::new() },
@@ -1012,10 +1030,10 @@ pub async fn comfy_generate(
         let base = status.url.clone();
         // 1순위는 이미 예약해 두었습니다. 거절당해 다음 서버로 넘어갈 때는 그 서버를 새로 예약합니다.
         let reservation = first_reservation.take().unwrap_or_else(|| Reservation::take(&base));
-        emit_progress(&app, &engine, &format!("{} 에 요청을 올리는 중…", host_of(&base)));
+        emit_progress_on(app, event, engine, &format!("{} 에 요청을 올리는 중…", host_of(&base)));
         let request = Submission {
-            doc: &doc,
-            opts: &opts,
+            doc,
+            opts,
             image_path: image_path.as_deref(),
             reference_paths: &reference_paths,
             loras: &loras,
@@ -1106,7 +1124,7 @@ pub async fn comfy_generate(
         } else {
             format!("사내 ComfyUI({host})에서 마무리하는 중…")
         };
-        emit_progress(&app, &engine, &message);
+        emit_progress_on(app, event, engine, &message);
     };
 
     let item = outputs
@@ -1116,7 +1134,7 @@ pub async fn comfy_generate(
     let filename = item.get("filename").and_then(Value::as_str).ok_or("결과에 파일 이름이 없습니다.")?.to_string();
     let subfolder = item.get("subfolder").and_then(Value::as_str).unwrap_or("").to_string();
     let kind = item.get("type").and_then(Value::as_str).unwrap_or("output").to_string();
-    emit_progress(&app, &engine, &format!("사내 ComfyUI({host})에서 결과를 받는 중…"));
+    emit_progress_on(app, event, engine, &format!("사내 ComfyUI({host})에서 결과를 받는 중…"));
     let response = client
         .get(format!("{base}/view"))
         .query(&[("filename", filename.as_str()), ("subfolder", subfolder.as_str()), ("type", kind.as_str())])
@@ -1127,10 +1145,47 @@ pub async fn comfy_generate(
     if !response.status().is_success() {
         return Err(format!("결과 파일을 받지 못했습니다 ({}).", response.status()));
     }
-    let mut bytes = response.bytes().await.map_err(|e| err("결과 파일을 받지 못했습니다", e))?.to_vec();
+    let bytes = response.bytes().await.map_err(|e| err("결과 파일을 받지 못했습니다", e))?.to_vec();
     if bytes.is_empty() {
         return Err("결과 파일이 비어 있습니다.".into());
     }
+    Ok(Remote { base, prompt_id, filled, lora_used, lora_dropped, rejections, tag, filename, bytes })
+}
+
+/// 파일 하나를 사내 ComfyUI 로 만듭니다 — `local_run` 과 같은 인자·같은 결과 꼴입니다.
+///
+/// `endpoints` 는 설정에 등록한 서버 주소들입니다. 결과는 `output_path` 자리(이미 있으면 번호를
+/// 올린 새 자리)에 놓고, 어느 서버에서 어떤 값으로 뽑았는지를 `meta` 에 담습니다.
+#[tauri::command]
+pub async fn comfy_generate(
+    app: AppHandle,
+    engine: String,
+    output_path: String,
+    opts: Option<Value>,
+    endpoints: Vec<String>,
+    timeout_secs: Option<u64>,
+    job_id: Option<String>,
+) -> Res<GenerateResult> {
+    let started = Instant::now();
+    // 프런트가 번호를 주면 «멈추기»(`comfy_cancel`)로 찾을 수 있게 표에 올립니다.
+    let job = JobEntry::register(job_id);
+    let engine = known_engine(&engine)?.to_string();
+    let opts = opts.unwrap_or_else(|| json!({}));
+    let workflow = pick_workflow(&engine, &opts)?;
+    let doc = workflow_doc(workflow)?;
+
+    let out = PathBuf::from(&output_path);
+    let out_ext = out.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_default();
+    if out_ext.is_empty() {
+        return Err("결과 자리에 확장자가 없습니다.".into());
+    }
+    let Some(out_dir) = out.parent().filter(|p| p.is_dir()).map(Path::to_path_buf) else {
+        return Err("결과를 놓을 폴더가 없습니다.".into());
+    };
+
+    let remote = run_remote(&app, LOCAL.event, &engine, &doc, &opts, &endpoints, timeout_secs, &job).await?;
+    let Remote { base, prompt_id, filled, lora_used, lora_dropped, rejections, tag, filename, bytes } = remote;
+    let mut bytes = bytes;
     let remote_ext = Path::new(&filename)
         .extension()
         .and_then(|e| e.to_str())
@@ -1184,6 +1239,41 @@ pub async fn comfy_generate(
         output: final_path.to_string_lossy().to_string(),
         seconds: started.elapsed().as_secs_f64(),
         meta: Value::Object(meta),
+    })
+}
+
+/// 그림 한 장을 **사내 ComfyUI 의 SeedVR2** 로 업스케일합니다.
+///
+/// 설정의 «외부 — ComfyUI» 엔진이 워크플로 파일 없이 사내 ComfyUI 가 켜져 있을 때 이리로 옵니다
+/// (`upscale.ts` 의 `runComfy`). 사용자가 워크플로 파일을 고를 필요가 없습니다.
+/// 결과를 놓는 규칙은 기존 다리(`comfy::comfy_upscale_image`)와 같은 한 벌입니다 — 원본과 같은 폴더,
+/// `numbered` 면 새 번호, 아니면 덮어쓰기.
+///
+/// 2026-09-24 사내 서버 실측(768×1024 → 긴 변 2048: 31초, 4096: 46초).
+#[tauri::command]
+pub async fn comfy_upscale_fleet(
+    app: AppHandle,
+    image_path: String,
+    out_path: String,
+    target_size: u32,
+    numbered: Option<bool>,
+    endpoints: Vec<String>,
+    timeout_secs: Option<u64>,
+) -> Res<crate::comfy::ComfyUpscaleResult> {
+    let source = PathBuf::from(&image_path);
+    if !source.is_file() {
+        return Err("업스케일할 원본 그림을 찾지 못했습니다.".into());
+    }
+    let out = PathBuf::from(&out_path);
+    let (out_ext, out_dir) = crate::comfy::check_upscale_target(&source, &out)?;
+    let doc = workflow_doc("seedvr2_upscale")?;
+    let opts = json!({ "image": image_path, "long_edge": target_size.clamp(256, 8192) });
+    let job = JobEntry::register(None);
+    let remote = run_remote(&app, crate::upscale::UPSCALE.event, "seedvr2", &doc, &opts, &endpoints, timeout_secs, &job).await?;
+    let final_path = crate::comfy::place_upscaled(&remote.bytes, &out, &out_dir, &out_ext, numbered.unwrap_or(false))?;
+    Ok(crate::comfy::ComfyUpscaleResult {
+        path: final_path.to_string_lossy().to_string(),
+        seedvr2_resolution: Some(target_size),
     })
 }
 
@@ -1491,6 +1581,19 @@ mod tests {
         .unwrap();
         let missing = missing_for(&graph, &object_info);
         assert_eq!(missing, vec!["CLIPLoader.clip_name = renamed_encoder.safetensors".to_string(), "노드 TextEncodeQwenImage21".to_string()]);
+    }
+
+    /// 업스케일: 프롬프트 없이 채워지고, 목표 긴 변이 크기 조절 노드에 들어갑니다.
+    #[test]
+    fn upscale_workflow_fills_without_prompt() {
+        let doc = workflow_doc("seedvr2_upscale").unwrap();
+        let result = fill(&doc, &json!({ "long_edge": 4096 }), Some("src.png"), &Refs::default(), "p", 3).unwrap();
+        assert_eq!(result.graph["1"]["inputs"]["image"], "src.png");
+        assert_eq!(result.graph["57"]["inputs"]["resize_type.longer_size"], 4096);
+        assert_eq!(result.graph["57"]["inputs"]["resize_type"], "scale longer dimension");
+        assert_links_resolve(&result.graph);
+        // 생성 워크플로는 여전히 프롬프트가 필수입니다.
+        assert!(fill(&workflow_doc("zimage").unwrap(), &json!({}), None, &Refs::default(), "p", 1).is_err());
     }
 
     #[test]
