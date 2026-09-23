@@ -109,9 +109,15 @@ class ImageEngine(object):
             path = item["path"]
             if not os.path.isfile(path):
                 raise IOError("로라 파일을 찾지 못했습니다: {}".format(path))
+            common.guard_lora_family(path)
             name = "lora{}".format(index)
             folder, filename = os.path.split(path)
-            self.pipe.load_lora_weights(folder, weight_name=filename, adapter_name=name)
+            dora = common.lora_has_dora(path)
+            try:
+                self._load_one(path, folder, filename, name, dora)
+            except Exception as error:
+                # 키 수백 개가 쏟아지는 대신 「무엇이 문제고 무엇을 하면 되는가」 한 줄로.
+                raise common.lora_load_error(error, path, dora)
             names.append(name)
             weights.append(float(item.get("weight", 1.0)))
         if names:
@@ -124,6 +130,19 @@ class ImageEngine(object):
             )
             common.log("로라 {}개를 먹였습니다.".format(got))
         self.loaded_loras = signature
+
+    def _load_one(self, path, folder, filename, name, dora):
+        """로라 한 개를 올립니다. DoRA 일 때만 손수 읽어 이름을 맞춥니다."""
+        if dora:
+            # DoRA 는 키 이름만 어긋납니다. **그럴 때만** 손수 읽어 맞춥니다 — 잘 되는 길
+            # (파일 자리를 그대로 넘기기)은 건드리지 않습니다. 까닭은 `common.fix_dora_keys`.
+            from safetensors.torch import load_file
+
+            self.pipe.load_lora_weights(
+                common.fix_dora_keys(load_file(path, device="cpu")), adapter_name=name
+            )
+        else:
+            self.pipe.load_lora_weights(folder, weight_name=filename, adapter_name=name)
 
     # ── 생성 ────────────────────────────────────────────────────────────
     def generate(self, output, opts, report):

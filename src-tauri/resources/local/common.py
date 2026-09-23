@@ -182,6 +182,278 @@ def plain_attention(pipe):
         log("전역 어텐션을 되돌리지 못했습니다: {}".format(error))
 
 
+DORA_TAIL = ".magnitude"
+
+"""«로라» 라고 부르지만 속은 여러 갈래입니다 — 갈래마다 붙이는 법이 다릅니다.
+
+받아 오는 파일이 전부 LoRA 인 줄 알고 있다가, 안 붙는 것을 만나면 「맞는 자리가 하나도
+없습니다」 라는 말만 나옵니다(2026-09-23 Anima 실측 — 실은 LoKr 이었습니다). 그 말로는
+**무엇을 하면 되는지**를 알 수 없습니다. 그래서 갈래를 먼저 알아보고 이름을 불러 줍니다.
+"""
+LORA_TAILS = (".lora_A.weight", ".lora_B.weight", ".lora_down.weight", ".lora_up.weight")
+"""**쓸 수 있는 로라 키**의 꼬리. 이게 하나라도 있으면 로라입니다.
+
+한때 «못 쓰는 꼬리가 보이면 막는다» 로 적었다가, 진짜 로라를 막았습니다 — Wan 2.2 의
+4스텝 증류 로라는 `lora_down`/`lora_up` 810개에 편향·노름 차분(`.diff`·`.diff_b`)이
+얹혀 있습니다. 차분은 ComfyUI 가 따로 얹는 덤이지 «로라가 아니라는 증거» 가 아닙니다.
+그래서 **있는 것**을 먼저 보고, 없을 때만 «그럼 무엇인가» 를 봅니다.
+"""
+
+LORA_FAMILIES = (
+    # (꼬리, 갈래 이름) — 쓸 수 있는 로라 키가 **하나도 없을 때만** 봅니다.
+    (".lokr_w1", "LoKr"),
+    (".lokr_w2", "LoKr"),
+    (".hada_w1_a", "LoHa"),
+    (".oft_blocks", "OFT"),
+    (".diff", "차분(diff)만 든 파일"),
+)
+
+
+def lora_head(path):
+    """safetensors 머리말(JSON)만 읽습니다 — 수 GB 짜리를 통째로 올리지 않습니다."""
+    try:
+        import json
+        import struct
+
+        with open(path, "rb") as handle:
+            raw = handle.read(8)
+            if len(raw) < 8:
+                return {}
+            (size,) = struct.unpack("<Q", raw)
+            if size <= 0 or size > os.path.getsize(path):
+                return {}
+            return json.loads(handle.read(size).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def lora_family(path):
+    """이 파일이 어떤 갈래인가 — `(갈래이름, 올릴 수 있는가)`.
+
+    보통 LoRA 면 `("LoRA", True)`. 모르는 것이면 `(None, True)` 로 두고 그냥 시도합니다 —
+    아는 갈래만 막고, 나머지는 실제로 올려 보는 편이 낫습니다(우리가 모르는 것도 있습니다).
+    """
+    keys = [key for key in lora_head(path) if key != "__metadata__"]
+    if not keys:
+        return None, True
+    # **쓸 수 있는 키가 있으면 로라입니다.** 곁다리가 얹혀 있어도 그건 덤입니다.
+    if any(key.endswith(tail) for key in keys for tail in LORA_TAILS):
+        if any(key.endswith(DORA_TAIL) for key in keys):
+            return "DoRA", True
+        return "LoRA", True
+    for tail, label in LORA_FAMILIES:
+        if any(key.endswith(tail) for key in keys):
+            return label, False
+    return None, True
+
+
+def lora_has_dora(path):
+    """이 로라가 **DoRA** 인가 — 파일 머리말만 읽어 봅니다(통째로 올리지 않습니다).
+
+    DoRA 는 로라에 «크기(magnitude)» 한 벌을 더 붙인 것입니다. 받아 오는 파일 가운데
+    제법 있는데, 그 키 이름이 학습 도구마다 다릅니다. ComfyUI 계열은 `<모듈>.magnitude`
+    로 적고, peft 는 `<모듈>.lora_magnitude_vector.weight` 를 기대합니다.
+
+    이름이 어긋나면 diffusers 가 `lora_A`·`lora_B` 만 먹고 `.magnitude` 를 남긴 채
+    **「state_dict should be empty at this point」 로 생성을 통째로 실패**시킵니다
+    (2026-09-23 Krea 2 로라 실측). 화면에는 키 이름 수백 개가 쏟아집니다.
+    """
+    return any(
+        key.endswith(DORA_TAIL) for key in lora_head(path) if key != "__metadata__"
+    )
+
+
+def fix_dora_keys(state_dict):
+    """`<모듈>.magnitude` → `<모듈>.lora_magnitude_vector.weight`.
+
+    diffusers 는 키에 `lora_magnitude_vector` 가 하나라도 있으면 `use_dora` 를 스스로
+    켭니다(`diffusers.utils.peft_utils.get_peft_kwargs`). 그러니 **이름만** 맞춰 주면
+    나머지는 알아서 됩니다.
+
+    이미 맞는 이름으로 온 파일은 손대지 않습니다.
+    """
+    if not any(key.endswith(DORA_TAIL) for key in state_dict):
+        return state_dict
+    out, moved = {}, 0
+    for key, tensor in state_dict.items():
+        if key.endswith(DORA_TAIL):
+            key = key[: -len(DORA_TAIL)] + ".lora_magnitude_vector.weight"
+            moved += 1
+        out[key] = tensor
+    log("DoRA 로라입니다 — 크기 값 {}개의 이름을 맞췄습니다.".format(moved))
+    return out
+
+
+def lora_load_error(error, path, dora):
+    """로딩이 터졌을 때 **사람이 읽을 수 있는 말**로 바꿉니다.
+
+    diffusers 의 변환기는 아는 키를 하나씩 꺼내 쓰고 **하나라도 남으면** 남은 키 이름을
+    통째로 적어 던집니다. 화면에는 키 수백 개가 쏟아지고, 정작 「이 로라는 이 모델에
+    안 맞는다」 라는 한 줄이 없습니다(2026-09-23 Krea 2 · DoRA 실측 — 120줄이 쏟아졌습니다).
+
+    고칠 수 있는 것이 아니라 **고를 때 알아야 하는 것**이라, 무엇을 하면 되는지까지 적습니다.
+    """
+    text = str(error)
+    name = os.path.basename(path)
+    if "should be empty at this point" not in text:
+        return error
+    if dora:
+        return IOError(
+            "«{}» 는 DoRA 로라입니다 — 지금 이 모델의 로더가 받지 못합니다. "
+            "같은 로라의 보통 로라(LoRA) 판이 있으면 그것을 쓰세요.".format(name)
+        )
+    return IOError(
+        "«{}» 는 이 모델에 맞지 않습니다 — 로더가 모르는 칸이 남았습니다. "
+        "다른 모델용으로 만들어진 로라일 수 있습니다(밑모델을 확인해 주세요).".format(name)
+    )
+
+
+def fit_lora_keys(state_dict):
+    """로라 키를 **이 모델이 아는 이름**으로 맞춥니다.
+
+    받아 온 로라마다 키 앞머리가 다릅니다 — 하나는 `diffusion_model.blocks.…`,
+    다른 하나는 `transformer_blocks.…`·`token_refiner.…` 로 시작합니다. diffusers 에
+    `prefix="transformer"` 로 넘기면 둘 다 한 개도 안 맞아 **조용히 아무 일도 안 일어납니다.**
+    그런데도 겉보기에는 성공이라, 뽑은 영상이 로라 없는 것과 바이트까지 같았습니다.
+
+    그래서 앞머리를 떼어 맞춥니다. `lora_A.default.weight` 처럼 중간에 낀 어댑터 이름도
+    뗍니다 — 그 이름은 저장할 때 붙은 것이고, 올릴 때는 우리가 다시 붙입니다.
+    """
+    out = {}
+    for key, tensor in state_dict.items():
+        # 곁다리는 버립니다 — 편향·노름 «차분»(`.diff`·`.diff_b`·`.diff_m`)과 알파입니다.
+        # ComfyUI 가 따로 얹는 덤이라 diffusers 로더는 모르고, 그대로 넘기면 「남은 키가
+        # 있다」 며 생성을 통째로 실패시킵니다(2026-09-23 Wan 2.2 증류 로라 실측 —
+        # 쓸 수 있는 키 810개 옆에 덤이 690개 있었습니다).
+        if key.endswith((".diff", ".diff_b", ".diff_m", ".alpha")):
+            continue
+        name = key
+        for head in ("diffusion_model.", "transformer.", "model.diffusion_model."):
+            if name.startswith(head):
+                name = name[len(head):]
+                break
+        name = name.replace(".lora_A.default.weight", ".lora_A.weight")
+        name = name.replace(".lora_B.default.weight", ".lora_B.weight")
+        name = name.replace(".lora_A.default_0.weight", ".lora_A.weight")
+        name = name.replace(".lora_B.default_0.weight", ".lora_B.weight")
+        # `lora_down`·`lora_up` 은 `lora_A`·`lora_B` 의 옛 이름입니다(kohya 계열).
+        name = name.replace(".lora_down.weight", ".lora_A.weight")
+        name = name.replace(".lora_up.weight", ".lora_B.weight")
+        out[name] = tensor
+    # DoRA 의 «크기» 이름도 여기서 같이 맞춥니다 — 길이 둘이면 한쪽을 빠뜨립니다.
+    return fix_dora_keys(out)
+
+
+def lora_fits(model, state_dict):
+    """이 로라의 키가 모델의 모듈 이름과 **실제로 만나는가.**
+
+    diffusers 는 한 개도 안 맞아도 예외를 던지지 않고 경고만 찍고 넘어갑니다. 그래서
+    «먹였습니다» 라고 적어 놓고 아무 일도 안 한 채 돌던 것입니다. 여기서 미리 셉니다.
+    """
+    names = {name for name, _ in model.named_modules()}
+    hit = 0
+    for key in state_dict:
+        base = key.split(".lora_A")[0].split(".lora_B")[0]
+        if base in names:
+            hit += 1
+    return hit
+
+
+def fit_kohya_keys(model, state_dict):
+    """**kohya 식 이름**을 이 모델의 모듈 이름으로 되돌립니다.
+
+    Civitai 에서 가장 흔한 모양입니다:
+
+        lora_unet_blocks_0_adaln_modulation_cross_attn_1.lora_down.weight
+        lora_unet_blocks_0_adaln_modulation_cross_attn_1.lora_up.weight
+        lora_unet_blocks_0_adaln_modulation_cross_attn_1.alpha
+
+    점을 밑줄로 바꿔 한 덩이로 만든 이름이라, 글자만 봐서는 어디가 점이었는지 되돌릴 수
+    없습니다(`cross_attn_1` 이 `cross_attn.1` 인지 `cross.attn.1` 인지 모릅니다). 그래서
+    **모델에게 물어봅니다** — 모듈 이름의 점을 밑줄로 바꿔 사전을 만들어 두고 맞춰 봅니다.
+    짐작이 아니라 대조라, 맞으면 확실히 맞고 안 맞으면 확실히 안 맞습니다.
+
+    `lora_down`·`lora_up` 은 `lora_A`·`lora_B` 의 옛 이름입니다. 알파는 버립니다 —
+    랭크가 텐서 모양에 들어 있어 peft 가 스스로 읽고, 알파를 함께 넘기면 diffusers 가
+    거절합니다(까닭은 `minimaxh3` 의 로라 대목에).
+    """
+    table = {}
+    for name, _module in model.named_modules():
+        if name:
+            table[name.replace(".", "_")] = name
+    out, hit = {}, 0
+    for key, tensor in state_dict.items():
+        if key.endswith(".alpha"):
+            continue
+        for head in ("lora_unet_", "lora_transformer_"):
+            if key.startswith(head):
+                key = key[len(head):]
+                break
+        else:
+            # 글 인코더 쪽(`lora_te_…`)은 우리가 거는 부품이 아닙니다.
+            if key.startswith("lora_te"):
+                continue
+        if ".lora_down.weight" in key:
+            stem, tail = key.split(".lora_down.weight")[0], ".lora_A.weight"
+        elif ".lora_up.weight" in key:
+            stem, tail = key.split(".lora_up.weight")[0], ".lora_B.weight"
+        else:
+            continue
+        real = table.get(stem)
+        if real is None:
+            continue
+        out[real + tail] = tensor
+        hit += 1
+    if hit:
+        log("kohya 식 이름입니다 — {}개를 이 모델의 이름으로 맞췄습니다.".format(hit))
+    return out
+
+
+def lora_mismatch(model, state_dict, path):
+    """맞는 자리가 없을 때 **무엇이 어긋났는지 보여 주는** 오류를 만듭니다.
+
+    「맞는 자리가 하나도 없습니다」 만으로는 고칠 길이 없습니다. 모델이 쓰는 이름과 파일이
+    들고 온 이름을 한 줄씩 나란히 보여 주면, 다른 판(ComfyUI 단일파일용 · 다른 밑모델)을
+    받아 왔다는 것이 바로 보입니다.
+
+    **짐작으로 이어 붙이지 않는 까닭**: 이름이 비슷하다고 아무 데나 붙이면 100% 붙은 것처럼
+    보이면서 엉뚱한 층에 얹힙니다. 그러면 「로라가 이상하게 먹는다」 가 되는데, 그건
+    안 붙는 것보다 찾기 어렵습니다(2026-09-23 Anima 실측에서 그렇게 하지 않기로 했습니다).
+    """
+    mods = [name for name, _ in model.named_modules() if name and "." in name]
+    theirs = sorted({key.split(".lora_")[0] for key in state_dict})[:2]
+    return IOError(
+        "«{}» 는 이 모델에 맞지 않습니다 — 맞는 자리가 하나도 없습니다.\n"
+        "  이 모델이 쓰는 이름: {}\n"
+        "  이 파일이 들고 온 이름: {}\n"
+        "같은 그림이라도 ComfyUI 단일파일용으로 만든 로라는 이름이 달라 안 붙습니다.".format(
+            os.path.basename(path),
+            ", ".join(mods[:2]) if mods else "(못 읽음)",
+            ", ".join(theirs) if theirs else "(못 읽음)",
+        )
+    )
+
+
+def prepare_lora(model, path):
+    """로라 한 개를 **올릴 수 있는 모양**으로 만들어 돌려줍니다 — `(state_dict, 맞는 자리 수)`.
+
+    이름 규칙이 세 갈래입니다(앞머리만 다른 것 · DoRA · kohya). 엔진마다 적으면 한 곳만
+    틀리고, 그 엔진에서만 로라가 조용히 안 먹습니다 — 이 저장소가 반복해 겪은 모양입니다.
+    그래서 **여기 한 벌**만 둡니다.
+    """
+    from safetensors.torch import load_file
+
+    raw = load_file(path, device="cpu")
+    state_dict = fit_lora_keys(raw)
+    hit = lora_fits(model, state_dict)
+    if not hit:
+        # 앞머리만 떼어서는 안 맞았습니다. kohya 식인지 모델에게 물어봅니다.
+        kohya = fit_kohya_keys(model, raw)
+        if kohya:
+            state_dict, hit = kohya, lora_fits(model, kohya)
+    return state_dict, hit
+
+
 def lora_adapter_count(model):
     """이 모델에 **실제로 붙어 있는** 로라 어댑터 수.
 
@@ -202,6 +474,21 @@ def lora_adapter_count(model):
         if hasattr(names, "keys"):
             found.update(names.keys())
     return len(found)
+
+
+def guard_lora_family(path):
+    """못 올리는 갈래면 **올리기 전에** 막습니다.
+
+    모델을 다 올린 뒤에 실패하면 몇 분을 버리고, 나오는 말도 「맞는 자리가 없다」 뿐입니다.
+    갈래 이름을 불러 주면 사람이 «같은 그림의 LoRA 판» 을 찾아 쓸 수 있습니다.
+    """
+    label, usable = lora_family(path)
+    if usable:
+        return
+    raise IOError(
+        "«{}» 은 {} 입니다 — 로라(LoRA)가 아니라 다른 갈래라 이 앱이 올리지 못합니다. "
+        "같은 그림의 LoRA 판이 있으면 그것을 쓰세요.".format(os.path.basename(path), label)
+    )
 
 
 def check_loras(model, wanted, where=""):

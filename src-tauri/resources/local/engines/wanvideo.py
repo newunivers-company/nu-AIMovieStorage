@@ -141,6 +141,7 @@ def _apply_loras(opts):
         path = item["path"]
         if not os.path.isfile(path):
             raise IOError("로라 파일을 찾지 못했습니다: {}".format(path))
+        common.guard_lora_family(path)
         folder, filename = os.path.split(path)
         name = "lora{}".format(index)
         pipe.load_lora_weights(folder, weight_name=filename, adapter_name=name)

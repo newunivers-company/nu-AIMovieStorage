@@ -265,47 +265,6 @@ def unload():
     common.free_vram()
 
 
-def _fit_keys(state_dict):
-    """로라 키를 **이 모델이 아는 이름**으로 맞춥니다.
-
-    받아 온 로라마다 키 앞머리가 다릅니다 — 하나는 `diffusion_model.blocks.…`,
-    다른 하나는 `transformer_blocks.…`·`token_refiner.…` 로 시작합니다. diffusers 에
-    `prefix="transformer"` 로 넘기면 둘 다 한 개도 안 맞아 **조용히 아무 일도 안 일어납니다.**
-    그런데도 겉보기에는 성공이라, 뽑은 영상이 로라 없는 것과 바이트까지 같았습니다.
-
-    그래서 앞머리를 떼어 맞춥니다. `lora_A.default.weight` 처럼 중간에 낀 어댑터 이름도
-    뗍니다 — 그 이름은 저장할 때 붙은 것이고, 올릴 때는 우리가 다시 붙입니다.
-    """
-    out = {}
-    for key, tensor in state_dict.items():
-        name = key
-        for head in ("diffusion_model.", "transformer.", "model.diffusion_model."):
-            if name.startswith(head):
-                name = name[len(head):]
-                break
-        name = name.replace(".lora_A.default.weight", ".lora_A.weight")
-        name = name.replace(".lora_B.default.weight", ".lora_B.weight")
-        name = name.replace(".lora_A.default_0.weight", ".lora_A.weight")
-        name = name.replace(".lora_B.default_0.weight", ".lora_B.weight")
-        out[name] = tensor
-    return out
-
-
-def _lora_fits(model, state_dict):
-    """이 로라의 키가 모델의 모듈 이름과 **실제로 만나는가.**
-
-    diffusers 는 한 개도 안 맞아도 예외를 던지지 않고 경고만 찍고 넘어갑니다. 그래서
-    «먹였습니다» 라고 적어 놓고 아무 일도 안 한 채 돌던 것입니다. 여기서 미리 셉니다.
-    """
-    names = {name for name, _ in model.named_modules()}
-    hit = 0
-    for key in state_dict:
-        base = key.split(".lora_A")[0].split(".lora_B")[0]
-        if base in names:
-            hit += 1
-    return hit
-
-
 def _apply_loras(opts):
     """`opts.loras = [{"path": …, "weight": 0.8}, …]` — 여러 개를 한꺼번에(멀티 로라)."""
     pipe = _state["pipe"]
@@ -313,8 +272,6 @@ def _apply_loras(opts):
     signature = [(item["path"], float(item.get("weight", 1.0))) for item in wanted]
     if signature == _state["loras"]:
         return
-
-    from safetensors.torch import load_file
 
     for method in ("unload_lora", "unload_lora_weights", "disable_lora"):
         if hasattr(pipe.transformer, method):
@@ -329,16 +286,10 @@ def _apply_loras(opts):
         path = item["path"]
         if not os.path.isfile(path):
             raise IOError("로라 파일을 찾지 못했습니다: {}".format(path))
-        state_dict = _fit_keys(load_file(path, device="cpu"))
-        hit = _lora_fits(pipe.transformer, state_dict)
+        common.guard_lora_family(path)
+        state_dict, hit = common.prepare_lora(pipe.transformer, path)
         if not hit:
-            # 한 개도 안 만나면 올려 봤자 아무 일도 안 일어납니다. 조용히 넘기면
-            # «먹였습니다» 라고 적어 놓고 로라 없는 것과 똑같은 결과가 나옵니다.
-            raise IOError(
-                "이 로라는 이 모델에 맞지 않습니다(맞는 자리가 하나도 없습니다): {}".format(
-                    os.path.basename(path)
-                )
-            )
+            raise common.lora_mismatch(pipe.transformer, state_dict, path)
         name = "lora{}".format(index)
         pipe.transformer.load_lora_adapter(
             state_dict,
