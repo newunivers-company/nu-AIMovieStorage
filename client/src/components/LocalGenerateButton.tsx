@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Cpu, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Cpu, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import { findFillerWords } from "@/lib/modelRules";
 import {
@@ -14,7 +14,13 @@ import {
 import { localSize, tuneForLocal, type LocalPromptInput } from "@/lib/localPrompt";
 import type { ProjectAssetType } from "@/lib/mediaLibrary";
 import { runLocalToProject } from "@/lib/localOutput";
-import { COMFY_MODEL_LABEL, comfyDroppedNote, comfyHostOf, isComfyRemote } from "@/lib/comfyFleet";
+import {
+  COMFY_MODEL_LABEL,
+  comfyDroppedNote,
+  comfyHostOf,
+  isComfyCancelled,
+  isComfyRemote,
+} from "@/lib/comfyFleet";
 import { lorasToRun, useLoraFiles, withLoraTriggers } from "@/lib/localLoras";
 import LoraPicker from "@/components/LoraPicker";
 import PoseControlPicker from "@/components/PoseControlPicker";
@@ -81,6 +87,9 @@ export default function LocalGenerateButton({
   const [engineId, setEngineId] = useState<LocalEngineId | "">("");
   const engine = engines.find((item) => item.id === engineId) ?? engines[0];
   const [busy, setBusy] = useState(false);
+  /** «멈추기» 를 눌렀는가. 사내 ComfyUI 작업이 1초마다 이 값을 봅니다(`runComfy`). */
+  const stopRef = useRef(false);
+  const [stopping, setStopping] = useState(false);
   const [status, setStatus] = useState("");
   /*
     ── 이번에 쓸 로라 ────────────────────────────────────────────────────
@@ -115,6 +124,8 @@ export default function LocalGenerateButton({
       return;
     }
     setBusy(true);
+    stopRef.current = false;
+    setStopping(false);
     setStatus("모델을 올리는 중…");
     const off = onLocalProgress((event) => {
       setStatus(event.message || "");
@@ -192,6 +203,7 @@ export default function LocalGenerateButton({
 
       const size = localSize(engine.id, aspect);
       const result = await runLocalToProject({
+        shouldStop: () => stopRef.current,
         engine: engine.id,
         extension: engine.extension,
         kind,
@@ -258,11 +270,14 @@ export default function LocalGenerateButton({
             : ""),
       });
     } catch (error) {
-      toast.error(String(error));
+      // 사람이 멈춘 것은 실패가 아닙니다.
+      if (isComfyCancelled(error)) toast.message(`${engineName} 작업을 멈췄습니다.`);
+      else toast.error(String(error));
     } finally {
       off();
       setStatus("");
       setBusy(false);
+      setStopping(false);
     }
   };
 
@@ -323,6 +338,23 @@ export default function LocalGenerateButton({
         )}
         {busy ? status || "만드는 중…" : label || (remote ? "사내 ComfyUI로 뽑기" : "로컬로 뽑기")}
       </button>
+      {/* 사내 ComfyUI 작업만 멈출 수 있습니다 — 서버에서 이 작업만 거둡니다. */}
+      {busy && remote && (
+        <button
+          type="button"
+          onClick={() => {
+            stopRef.current = true;
+            setStopping(true);
+          }}
+          disabled={stopping}
+          title="사내 ComfyUI 에서 이 작업만 거둡니다(대기 중이면 빼고, 돌고 있으면 멈춤)"
+          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-semibold disabled:opacity-50"
+          style={{ background: "oklch(0.7 0.18 25 / 14%)", color: "oklch(0.8 0.14 25)" }}
+        >
+          <Square className="h-3 w-3" />
+          {stopping ? "멈추는 중…" : "멈추기"}
+        </button>
+      )}
       </div>
 
       {/* 받아 둔 로라가 있을 때만 뜹니다. 없으면 이 줄 자체가 없습니다. */}

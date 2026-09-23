@@ -156,21 +156,47 @@ export interface ComfyRunResult {
   meta: Record<string, unknown>;
 }
 
-/** 파일 하나를 사내 ComfyUI 로 만듭니다. `runLocal` 이 원격일 때 이리로 옵니다. */
+/**
+ * 파일 하나를 사내 ComfyUI 로 만듭니다. `runLocal` 이 원격일 때 이리로 옵니다.
+ *
+ * `shouldStop` 을 주면 1초마다 물어, 참이 되는 순간 **이 작업만** 서버에서 거둡니다
+ * (`comfy_cancel` — 대기열에서 빼거나 실행을 멈춤). 일괄 생성의 «멈추기»(`isStopping`)와
+ * 카드의 «멈추기» 단추가 같은 모양으로 씁니다.
+ */
 export async function runComfy(
   engine: LocalEngineId,
   outputPath: string,
   opts: unknown,
   timeoutSecs?: number,
+  shouldStop?: () => boolean,
 ): Promise<ComfyRunResult> {
-  const raw = await invoke<ComfyRunResult>("comfy_generate", {
-    engine,
-    outputPath,
-    opts,
-    endpoints: settings.endpoints,
-    timeoutSecs,
-  });
-  return { output: raw.output, seconds: Number(raw.seconds) || 0, meta: raw.meta ?? {} };
+  const jobId = `aims-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let asked = false;
+  const watch = shouldStop
+    ? setInterval(() => {
+        if (asked || !shouldStop()) return;
+        asked = true;
+        void invoke<boolean>("comfy_cancel", { jobId }).catch(() => undefined);
+      }, 1000)
+    : null;
+  try {
+    const raw = await invoke<ComfyRunResult>("comfy_generate", {
+      engine,
+      outputPath,
+      opts,
+      endpoints: settings.endpoints,
+      timeoutSecs,
+      jobId,
+    });
+    return { output: raw.output, seconds: Number(raw.seconds) || 0, meta: raw.meta ?? {} };
+  } finally {
+    if (watch) clearInterval(watch);
+  }
+}
+
+/** Rust 가 «멈췄습니다» 로 끝낸 것인가 — 실패 알림 대신 조용히 넘기려고. */
+export function isComfyCancelled(error: unknown): boolean {
+  return String(error).includes("멈췄습니다");
 }
 
 /** 원격 결과에서 «못 실은 것» 을 사람 말로. 없으면 빈 문자열. */

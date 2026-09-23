@@ -623,6 +623,78 @@ async fn submit(client: &reqwest::Client, base: &str, request: &Submission<'_>) 
     Ok((prompt_id, filled, used, dropped))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 취소
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 원격 작업은 앱이 꺼져도 서버에서 계속 돕니다(2026-09-23 시험 중 앱이 메모리 부족으로 꺼졌을 때
+// H3 영상 넷이 끝까지 돌았습니다). 사람이 «멈추기» 를 누르면 **우리가 보낸 그 작업만** 대기열에서
+// 빼거나 실행을 멈춥니다. 서버를 같이 쓰는 다른 사람의 작업은 건드리지 않습니다.
+
+#[derive(Default)]
+struct JobState {
+    /// 받아 준 서버와 그 작업 번호. 제출 전이면 비어 있습니다.
+    submitted: Option<(String, String)>,
+    cancelled: bool,
+}
+
+fn jobs() -> &'static Mutex<HashMap<String, JobState>> {
+    static JOBS: OnceLock<Mutex<HashMap<String, JobState>>> = OnceLock::new();
+    JOBS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 작업 하나를 표에 올려 두고, 끝나면(성공·실패·취소) 저절로 내립니다.
+struct JobEntry(Option<String>);
+
+impl JobEntry {
+    fn register(job_id: Option<String>) -> Self {
+        if let (Some(id), Ok(mut map)) = (&job_id, jobs().lock()) {
+            map.insert(id.clone(), JobState::default());
+        }
+        JobEntry(job_id)
+    }
+
+    fn cancelled(&self) -> bool {
+        let Some(id) = &self.0 else { return false };
+        jobs().lock().map(|m| m.get(id).map(|j| j.cancelled).unwrap_or(false)).unwrap_or(false)
+    }
+
+    fn submitted(&self, base: &str, prompt_id: &str) {
+        let Some(id) = &self.0 else { return };
+        if let Ok(mut map) = jobs().lock() {
+            if let Some(job) = map.get_mut(id) {
+                job.submitted = Some((base.to_string(), prompt_id.to_string()));
+            }
+        }
+    }
+}
+
+impl Drop for JobEntry {
+    fn drop(&mut self) {
+        if let (Some(id), Ok(mut map)) = (&self.0, jobs().lock()) {
+            map.remove(id);
+        }
+    }
+}
+
+const CANCELLED: &str = "멈췄습니다.";
+
+/// «멈추기» — 그 작업을 표시하고, 이미 서버에 올라갔으면 곧바로 거둡니다.
+/// 돌려주는 값은 «그런 작업이 아직 있었는가» 입니다(이미 끝났으면 false).
+#[tauri::command]
+pub async fn comfy_cancel(job_id: String) -> Res<bool> {
+    let submitted = {
+        let mut map = jobs().lock().map_err(|_| "작업 표를 읽지 못했습니다.".to_string())?;
+        let Some(job) = map.get_mut(&job_id) else { return Ok(false) };
+        job.cancelled = true;
+        job.submitted.clone()
+    };
+    if let Some((base, prompt_id)) = submitted {
+        withdraw(&http_client()?, &base, &prompt_id).await;
+    }
+    Ok(true)
+}
+
 /// 파일 하나를 사내 ComfyUI 로 만듭니다 — `local_run` 과 같은 인자·같은 결과 꼴입니다.
 ///
 /// `endpoints` 는 설정에 등록한 서버 주소들입니다. 결과는 `output_path` 자리(이미 있으면 번호를
@@ -635,8 +707,11 @@ pub async fn comfy_generate(
     opts: Option<Value>,
     endpoints: Vec<String>,
     timeout_secs: Option<u64>,
+    job_id: Option<String>,
 ) -> Res<GenerateResult> {
     let started = Instant::now();
+    // 프런트가 번호를 주면 «멈추기»(`comfy_cancel`)로 찾을 수 있게 표에 올립니다.
+    let job = JobEntry::register(job_id);
     let engine = known_engine(&engine)?.to_string();
     let opts = opts.unwrap_or_else(|| json!({}));
     let workflow = pick_workflow(&engine, &opts)?;
@@ -699,6 +774,9 @@ pub async fn comfy_generate(
     let mut rejections: Vec<String> = Vec::new();
     let mut accepted: Option<(String, String, Filled, Vec<String>, Vec<String>, Reservation)> = None;
     for status in &ranked {
+        if job.cancelled() {
+            return Err(CANCELLED.into());
+        }
         let base = status.url.clone();
         // 1순위는 이미 예약해 두었습니다. 거절당해 다음 서버로 넘어갈 때는 그 서버를 새로 예약합니다.
         let reservation = first_reservation.take().unwrap_or_else(|| Reservation::take(&base));
@@ -731,6 +809,12 @@ pub async fn comfy_generate(
         return Err(format!("어느 사내 ComfyUI 도 요청을 받지 않았습니다.\n{}", rejections.join("\n")));
     };
     let host = host_of(&base).to_string();
+    job.submitted(&base, &prompt_id);
+    // 올리는 사이에 멈추기를 눌렀으면 방금 올린 것을 바로 거둡니다.
+    if job.cancelled() {
+        withdraw(&client, &base, &prompt_id).await;
+        return Err(CANCELLED.into());
+    }
 
     // 끝날 때까지 기다립니다. 대기열에 있으면 몇 번째인지, 돌고 있으면 얼마나 지났는지 알립니다.
     let deadline = Instant::now() + Duration::from_secs(timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
@@ -738,6 +822,10 @@ pub async fn comfy_generate(
     let mut running_since: Option<Instant> = None;
     let outputs = loop {
         tokio::time::sleep(Duration::from_secs(2)).await;
+        // 거두기는 `comfy_cancel` 이 이미 했습니다. 여기서는 기다리기만 그만둡니다.
+        if job.cancelled() {
+            return Err(CANCELLED.into());
+        }
         if Instant::now() > deadline {
             withdraw(&client, &base, &prompt_id).await;
             return Err(format!("사내 ComfyUI({host})에서 시간 안에 끝나지 않아 요청을 거뒀습니다."));
@@ -1064,6 +1152,27 @@ mod tests {
         let (fourth, r4) = rank_and_reserve(&statuses);
         assert_eq!(fourth[0].url, "spread-a");
         drop((r2, r3, r4));
+    }
+
+    /// 멈추기 표: 올라간 작업만 찾히고, 끝나면 표에서 내려갑니다.
+    #[test]
+    fn cancel_marks_only_registered_jobs() {
+        let job = JobEntry::register(Some("cancel-test".into()));
+        assert!(!job.cancelled());
+        job.submitted("http://server", "prompt-1");
+        assert_eq!(
+            jobs().lock().unwrap()["cancel-test"].submitted,
+            Some(("http://server".to_string(), "prompt-1".to_string()))
+        );
+        // 서버를 부르지 않고, 표시가 되는지만 봅니다.
+        jobs().lock().unwrap().get_mut("cancel-test").unwrap().cancelled = true;
+        assert!(job.cancelled());
+        drop(job);
+        assert!(!jobs().lock().unwrap().contains_key("cancel-test"));
+        // 번호 없이 부른 작업은 표에 오르지 않고, 멈출 수도 없습니다.
+        let anonymous = JobEntry::register(None);
+        assert!(!anonymous.cancelled());
+        assert!(!tauri::async_runtime::block_on(comfy_cancel("no-such-job".into())).unwrap());
     }
 
     #[test]

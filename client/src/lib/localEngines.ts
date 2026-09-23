@@ -1085,6 +1085,8 @@ export async function runLocal(
   hooks?: {
     onProgress?: (event: LocalProgressEvent) => void;
     timeoutSecs?: number;
+    /** 참이 되면 멈춥니다. 지금은 사내 ComfyUI 작업만 멈출 수 있습니다(`runComfy`). */
+    shouldStop?: () => boolean;
   },
 ): Promise<LocalRunResult> {
   assertDesktop("로컬 모델로 생성");
@@ -1099,7 +1101,7 @@ export async function runLocal(
       결과의 `meta.backend` 가 «comfy» 이고, 어느 서버에서 뽑았는지가 `meta.endpoint` 에 있습니다.
     */
     if (isComfyRemote(engine)) {
-      return await runComfy(engine, outputPath, options, hooks?.timeoutSecs);
+      return await runComfy(engine, outputPath, options, hooks?.timeoutSecs, hooks?.shouldStop);
     }
     const raw = await invoke<{
       output: string;

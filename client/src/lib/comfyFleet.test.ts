@@ -8,6 +8,7 @@ import {
   COMFY_REMOTE_ENGINES,
   comfyDroppedNote,
   comfyHostOf,
+  isComfyCancelled,
   isComfyRemote,
   remoteOrder,
 } from "@/lib/comfyFleet";
@@ -99,6 +100,13 @@ describe("원격 결과 알림", () => {
     expect(note).toContain("레퍼런스 2개");
     expect(note).toContain("로라 1개");
     expect(note).toContain("움직임 마스크");
+  });
+
+  it("멈춘 것과 실패한 것을 가른다 — Rust 의 CANCELLED 문구와 같아야 한다", () => {
+    const rust = RUST.match(/const CANCELLED: &str = "([^"]+)"/)?.[1];
+    expect(rust).toBeTruthy();
+    expect(isComfyCancelled(rust)).toBe(true);
+    expect(isComfyCancelled(new Error("사내 ComfyUI 가 실행 중 실패했습니다"))).toBe(false);
   });
 
   it("서버 주소에서 http 를 뗀다", () => {

@@ -1406,6 +1406,7 @@ pub fn run() {
             comfy::comfy_check_connection,
             comfy::comfy_upscale_image,
             comfy_gen::comfy_generate,
+            comfy_gen::comfy_cancel,
             comfy_gen::comfy_fleet_status,
             comfy_gen::comfy_remote_engines,
             upscale::upscale_engines_status,

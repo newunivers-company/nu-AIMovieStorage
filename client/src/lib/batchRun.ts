@@ -412,6 +412,8 @@ async function localImage(
   aspect = "16:9",
   /** 인물 시트·구도 그림. 사내 Qwen-Image 2.1 만 받고, 나머지 엔진에는 싣지 않습니다. */
   references: string[] = [],
+  /** 작업 줄의 «멈추기». 사내 ComfyUI 작업이면 서버에서 거둡니다. */
+  shouldStop?: () => boolean,
 ) {
   const engine = payload.engine as LocalEngineId;
   const tuned = tuneForLocal(engine, { en: prompt, ko: "" });
@@ -456,6 +458,7 @@ async function localImage(
       precision: loadPrecision(),
     },
     timeoutSecs: 1800,
+    shouldStop,
     onProgress: (message) => report({ step: message || "이 컴퓨터가 뽑는 중" }),
   });
 }
@@ -586,7 +589,7 @@ registerTaskRunner(CHARACTER_SHEET_TASK, async (raw, report, task) => {
           report,
           () => isStopping(task.id),
         )
-      : await localImage(payload, prompt, "character-generated", report, draft?.localLoras?.[payload.engine], aspectOf(draft, "image"), refs);
+      : await localImage(payload, prompt, "character-generated", report, draft?.localLoras?.[payload.engine], aspectOf(draft, "image"), refs, () => isStopping(task.id));
   report({ step: "카드에 붙이는 중" });
   const wrote = await attachSheet(payload.projectId, payload.characterId, made.path, made.name);
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
@@ -668,7 +671,7 @@ registerTaskRunner(CUT_IMAGE_TASK, async (raw, report, task) => {
           report,
           () => isStopping(task.id),
         )
-      : await localImage(payload, base, "scene-cut", report, draft.localLoras?.[payload.engine], aspectOf(draft, "image"), references);
+      : await localImage(payload, base, "scene-cut", report, draft.localLoras?.[payload.engine], aspectOf(draft, "image"), references, () => isStopping(task.id));
   report({ step: "카드에 붙이는 중" });
   const wrote = await attachImage(payload.projectId, payload.cutId, made.path, made.name);
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
@@ -907,6 +910,7 @@ registerTaskRunner(SCENE_VIDEO_TASK, async (raw, report, task) => {
       precision: loadPrecision(),
     },
     timeoutSecs: 7200,
+    shouldStop: () => isStopping(task.id),
     onProgress: (message) => report({ step: message || `이 컴퓨터가 ${seconds}초를 뽑는 중` }),
   });
   report({ step: "장면에 붙이는 중" });
