@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from "lucide-react";
-import { availableLocalEngines, useLocalEngines, type LocalEngineId } from "@/lib/localEngines";
+import { availableLocalEngines, runsOnComfy, useLocalEngines, type LocalEngineId } from "@/lib/localEngines";
+import { COMFY_MODEL_LABEL } from "@/lib/comfyFleet";
 import { useMagnificStatus } from "@/lib/magnificMcp";
 import { useMagnificModels, type MagnificModel } from "@/lib/magnificModels";
 import { aspectOf, enginesOf, type BatchEngine } from "@/lib/batchRun";
@@ -116,7 +117,10 @@ export default function BatchToolsField({
         {magnific.connected && <option value="magnific-mcp">마그니픽 — 끝까지 뽑기(건당 과금)</option>}
         {locals.map((engine) => (
           <option key={engine.id} value={engine.id}>
-            {engine.name} — 이 컴퓨터가 뽑기
+            {/* 사내 ComfyUI 가 켜져 있으면 그 서버에서 실제로 도는 모델 이름을 적습니다. */}
+            {runsOnComfy(engine.id)
+              ? `${COMFY_MODEL_LABEL[engine.id] ?? engine.name} — 사내 ComfyUI 가 뽑기`
+              : `${engine.name} — 이 컴퓨터가 뽑기`}
           </option>
         ))}
       </select>
