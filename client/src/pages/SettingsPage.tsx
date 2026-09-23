@@ -16,6 +16,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import UpdateBanner from "@/components/UpdateBanner";
+import {
+  fetchedAtFor,
+  isLoadingModels,
+  modelsFor,
+  refreshModels,
+  useModelCatalog,
+} from "@/lib/modelCatalog";
 import { useLocation } from "wouter";
 import { ensureTutorialSample } from "@/lib/tutorialSample";
 import { LOCALES, setLocale, useLocale, useT } from "@/lib/i18n";
@@ -53,7 +61,6 @@ import {
   getActiveProvider,
   getApiKeyStatus,
   getTaskModels,
-  modelOptionsFor,
   resetTaskModelsFor,
   saveActiveProvider,
   saveApiKey,
@@ -142,9 +149,22 @@ export default function SettingsPage() {
   const [llmConcurrency, setLlmConcurrencyState] = useState(() => getLlmConcurrency());
   const concurrencyNow = useLlmConcurrency();
   const [activeProvider, setActiveProvider] = useState<LlmProvider>(getActiveProvider());
+  /*
+    **모델 목록은 제공자에게 물어봅니다**(`modelCatalog.ts`).
+
+    설정을 열 때 한 번 받아 두고 하루 동안 기억합니다. 실패해도 알림을 띄우지 않습니다 —
+    아직 키를 안 넣은 사람에게 설정을 열 때마다 잔소리가 되니까요. 그때는 앱에 적어 둔
+    목록으로 물러서고, 사람이 「목록 새로 받기」 를 누르면 그제야 까닭을 보여 줍니다.
+  */
+  useModelCatalog();
+  const modelsLoading = isLoadingModels(activeProvider);
+  const modelsFetchedAt = fetchedAtFor(activeProvider);
+  useEffect(() => {
+    void refreshModels(activeProvider);
+  }, [activeProvider]);
   const [keyStatus, setKeyStatus] = useState<Record<LlmProvider, ApiKeyStatus>>({
-    claude: { provider: "claude", saved: false, lastFour: "" },
-    openai: { provider: "openai", saved: false, lastFour: "" },
+    claude: { provider: "claude", saved: false, hint: null },
+    openai: { provider: "openai", saved: false, hint: null },
   });
   const [keyInput, setKeyInput] = useState<Record<LlmProvider, string>>({
     claude: "",
@@ -314,7 +334,7 @@ export default function SettingsPage() {
   };
 
   const refreshKeys = async () => {
-    const blank = (provider: LlmProvider): ApiKeyStatus => ({ provider, saved: false, lastFour: "" });
+    const blank = (provider: LlmProvider): ApiKeyStatus => ({ provider, saved: false, hint: null });
     const [claude, openai] = await Promise.all([
       getApiKeyStatus("claude").catch(() => blank("claude")),
       getApiKeyStatus("openai").catch(() => blank("openai")),
@@ -440,6 +460,15 @@ export default function SettingsPage() {
             {t("폴더·API 키·작업별 모델을 정합니다. 전부 이 기기에만 저장됩니다.")}
           </p>
         </div>
+
+        {/*
+          ── 앱 업데이트 ─────────────────────────────────────────────
+          
+
+          **새 판이 있을 때만 보입니다.** 없을 때도 자리를 차지하면 설정 맨 위가 늘
+          「최신입니다」 한 줄로 채워집니다 — 확인은 아래 단추로 언제든 다시 합니다.
+        */}
+        <UpdateBanner />
 
         {/* ── 프롬프트 작성 프로필 ─────────────────────────────────── */}
         <Section icon={Cpu} tint="oklch(0.78 0.18 290)" title={t("프롬프트 작성 프로필")} anchor="settings-profile">
@@ -700,7 +729,7 @@ export default function SettingsPage() {
                       style={{ background: "oklch(0.70 0.15 160 / 18%)", color: "oklch(0.82 0.15 160)" }}
                     >
                       <ShieldCheck className="h-3 w-3" />
-                      {t("저장됨")}{status.lastFour ? ` ···${status.lastFour}` : ""}
+                      {t("저장됨")}{status.hint ? ` ···${status.hint}` : ""}
                     </span>
                   ) : (
                     <span className="text-[10px]" style={{ color: "oklch(0.48 0.01 265)" }}>
@@ -1162,11 +1191,36 @@ export default function SettingsPage() {
             >
               기본값
             </button>
+            {/*
+              **목록은 제공자에게 물어봅니다.**
+
+              
+              실제로 앱에는 `gpt-5.6-*` 이 박혀 있는데 계정에는 이미 `gpt-6-*` 이 있었습니다.
+              받은 것은 하루 동안 기억하고(`modelCatalog.ts`), 이 단추로 그 전에도 새로 받습니다.
+            */}
+            <button
+              type="button"
+              disabled={modelsLoading}
+              onClick={async () => {
+                const got = await refreshModels(activeProvider, true);
+                if ("count" in got) toast.success(`모델 ${got.count}개를 받았습니다.`);
+                else toast.error(got.reason);
+              }}
+              title={
+                modelsFetchedAt
+                  ? `마지막으로 받은 때: ${new Date(modelsFetchedAt).toLocaleString()}`
+                  : "아직 받은 적이 없습니다 — 지금은 앱에 적어 둔 목록입니다"
+              }
+              className="rounded-md px-2.5 py-1 text-[10px] font-semibold disabled:opacity-40"
+              style={{ background: "oklch(1 0 0 / 6%)", color: "oklch(0.72 0.12 200)" }}
+            >
+              {modelsLoading ? "받는 중…" : "목록 새로 받기"}
+            </button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {(Object.keys(LLM_TASK_LABELS) as LlmTask[]).map((task) => {
               const choice = taskModels[task][activeProvider];
-              const options = modelOptionsFor(activeProvider);
+              const options = modelsFor(activeProvider);
               return (
                 <div
                   key={task}

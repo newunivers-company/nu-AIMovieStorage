@@ -1,8 +1,8 @@
 [package]
-name = "frameforge"
-version = "0.1.0"
-description = "FrameForge local AI preproduction workspace"
-authors = ["FrameForge"]
+name = "aimoviestorage"
+version = "0.2.0"
+description = "AIMovieStorage local AI preproduction workspace"
+authors = ["AIMovieStorage"]
 license = ""
 repository = ""
 edition = "2021"
@@ -11,8 +11,21 @@ rust-version = "1.77.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "frameforge_lib"
+name = "aimoviestorage_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# 실행 파일 이름을 **따로** 적습니다.
+#
+# 설치 폴더·제품 이름은
+# `AIMovieStorage` 인데 실행 파일만 `frameforge.exe` 였고, 무설치본 이름도 그것을 따라
+# `frameforge_portable.zip` 이 됐습니다(릴리스 목록에서 둘이 섞여 보였습니다).
+#
+# 꾸러미 이름(`name`)은 소문자가 관례라 그대로 두고, 사람이 보는 실행 파일만 여기서
+# 정합니다. 업데이터가 설치 파일 이름을 그대로 쓰므로 **업데이터를 켜기 전에** 맞춰
+# 둡니다 — 나중에 바꾸면 첫 자동 업데이트가 옛 이름의 실행 파일을 남깁니다.
+[[bin]]
+name = "AIMovieStorage"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
@@ -57,6 +70,8 @@ tokio-tungstenite = "0.24"
 futures-util = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 dirs = "5"
+tauri-plugin-updater = "2.12"
+tauri-plugin-process = "2.3"
 
 # 마그니픽 데스크톱 창을 찾아 앞으로 가져오고 Ctrl+V 를 넣는 데 씁니다 (Windows 만).
 # 0.61 은 tauri 가 이미 끌어오는 판이라 새로 받는 것이 거의 없습니다.

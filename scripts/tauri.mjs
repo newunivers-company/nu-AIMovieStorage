@@ -93,6 +93,32 @@ const rules = JSON.parse(readFileSync(path.join(repoRoot, "edition.json"), "utf8
 /** @type {string[]} */
 const excluded = edition === "public" ? rules.public.excludeEngines : [];
 
+/**
+ * `tauri.conf.json` — 판 번호와 제품 이름이 여기 한 곳에 있습니다.
+ *
+ * `Cargo.toml` 에도 판이 있지만 Tauri 는 **설정 쪽을 씁니다**(설정에 있으면 그것이 이김).
+ * 두 값이 어긋나 있던 적이 있어(Cargo 0.1.0 · 설정 0.2.0) 여기서 한 곳만 봅니다.
+ */
+const tauriConf = JSON.parse(readFileSync(path.join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"));
+
+/**
+ * 실행 파일 이름 — `Cargo.toml` 의 `[[bin]] name` 한 곳에서 읽습니다.
+ *
+ * 여기 글자로 박아 두면 이름을 바꿀 때 한쪽만 고쳐집니다. 이 저장소가 반복해 겪은
+ * 「여덟 곳은 맞고 한 곳만 틀리다」 라서 읽어 씁니다.
+ */
+function binaryName() {
+  const toml = readFileSync(path.join(repoRoot, "src-tauri", "Cargo.toml"), "utf8");
+  const found = /\[\[bin\]\][\s\S]*?name\s*=\s*"([^"]+)"/.exec(toml);
+  if (!found) fail(["Cargo.toml 에서 [[bin]] name 을 찾지 못했습니다."]);
+  return found[1];
+}
+
+/** 이 판의 제품 이름. 공개판은 «-Public» 이 붙습니다 — 설치 파일·무설치본 이름이 여기서 나옵니다. */
+function productNameFor(which) {
+  return which === "public" ? `${tauriConf.productName}-Public` : tauriConf.productName;
+}
+
 /** 판 이름을 나르는 환경 변수 — 화면(vite)과 Rust(cargo)가 하나씩 읽습니다. 심는 것도 지우는 것도 이 목록입니다. */
 const EDITION_KEYS = ["VITE_EDITION", "FRAMEFORGE_EDITION"];
 
@@ -194,12 +220,12 @@ function tauriExtraArgs() {
     일이 생기고, 받는 사람이 한국어 윈도우를 쓴다는 보장도 없습니다. 화면에 뜨는 글은 그대로
     한국어(다국어)이고, 폴더와 파일 이름만 영문으로 둡니다.
   */
-  const productName = `${conf.productName}-Public`;
+  const productName = productNameFor("public");
   const overlay = { productName, bundle: { resources: kept } };
   /* Tauri NSIS 번들러의 이름 규칙(`<productName>_<version>_<arch>-setup.exe`). release.yml 의 글롭
      `bundle/nsis/*.exe` 는 그대로 맞습니다. */
   const installerName = `${productName}_${conf.version}_x64-setup.exe`;
-  const overlayPath = path.join(os.tmpdir(), "frameforge-tauri-public.conf.json");
+  const overlayPath = path.join(os.tmpdir(), "aimoviestorage-tauri-public.conf.json");
   if (!dryRun) writeFileSync(overlayPath, JSON.stringify(overlay, null, 2));
   // shell: true 로 띄우므로 경로에 공백이 있어도 되게 따옴표를 우리가 칩니다.
   return { args: ["--config", `"${overlayPath}"`], overlay, overlayPath, dropped, installerName };
@@ -379,9 +405,16 @@ function packPortable(childEnv) {
     childEnv.CARGO_TARGET_DIR ? path.resolve(childEnv.CARGO_TARGET_DIR) : path.join(repoRoot, "src-tauri", "target"),
     "release",
   );
-  const exe = readdirSync(releaseDir).find((name) => name.endsWith(".exe") && !name.includes("setup"));
-  if (!exe) {
-    console.log("  무설치본: 실행 파일을 찾지 못해 건너뜁니다 — " + releaseDir);
+  /*
+    실행 파일 이름은 **설정에서 읽습니다** — 폴더를 훑어 첫 exe 를 집지 않습니다.
+
+    이름을 `frameforge.exe` → `AIMovieStorage.exe` 로 바꾼 날, 옛 exe 가 `target/release`
+    에 남아 있어서 무설치본이 **옛 것을 집어** 묶였습니다(2026-09-23). 폴더 훑기는
+    「지금 빌드한 것」 이 아니라 「거기 있는 것」 을 집습니다.
+  */
+  const exe = `${binaryName()}.exe`;
+  if (!existsSync(path.join(releaseDir, exe))) {
+    console.log(`  무설치본: ${exe} 를 찾지 못해 건너뜁니다 — ` + releaseDir);
     return;
   }
   const stage = path.join(releaseDir, "portable-stage");
@@ -408,7 +441,14 @@ function packPortable(childEnv) {
 
   const outDir = path.join(releaseDir, "bundle", "portable");
   mkdirSync(outDir, { recursive: true });
-  const zipName = `${exe.replace(/\.exe$/, "")}_portable.zip`;
+  /*
+    이름을 **설치 파일과 같은 모양**으로 답니다 — `<제품>_<판>_x64-portable.zip`.
+
+    예전에는 실행 파일 이름을 따서 `frameforge_portable.zip` 이었습니다. 릴리스 목록에
+    `AIMovieStorage-Public_0.2.0_x64-setup.exe` 와 나란히 놓이니 둘이 다른 앱처럼 보였고,
+    판도 이름에 안 들어가 어느 판인지 몰랐습니다.
+  */
+  const zipName = `${productNameFor(edition)}_${tauriConf.version}_x64-portable.zip`;
   const zipPath = path.join(outDir, zipName);
   rmSync(zipPath, { force: true });
   // 윈도에 기본으로 있는 것만 씁니다 — 빌드 기계에 압축 도구를 더 깔게 하지 않으려고요.

@@ -289,13 +289,21 @@ export function isDesktopApp() {
 export interface ApiKeyStatus {
   provider: string;
   saved: boolean;
-  lastFour: string;
+  /**
+   * 키 끝 네 글자. 어느 키를 넣어 뒀는지 사람이 알아보는 유일한 단서입니다.
+   *
+   * **Rust 가 보내는 칸 이름은 `hint` 입니다**(`llm.rs` 의 `ApiKeyStatus`). 여기서만
+   * `lastFour` 로 적어 두었더니 값이 늘 비어서, 「저장됨 ···abcd」 가 **한 번도 안 떴습니다**
+   * (2026-09-23 검토). 칸 이름은 보내는 쪽을 따릅니다 — 두 이름을 두면 잇는 코드를
+   * 어디에도 안 두고 조용히 비는 일이 또 납니다.
+   */
+  hint?: string | null;
 }
 
 export async function getApiKeyStatus(
   provider: LlmProvider,
 ): Promise<ApiKeyStatus> {
-  if (!isDesktopApp()) return { provider, saved: false, lastFour: "" };
+  if (!isDesktopApp()) return { provider, saved: false, hint: null };
   return invoke<ApiKeyStatus>("get_api_key_status", { provider });
 }
 

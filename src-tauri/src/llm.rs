@@ -476,6 +476,227 @@ async fn cancel_openai_by_id(response_id: &str) -> Res<()> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 모델 목록
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 화면에 내줄 모델 한 줄.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelChoice {
+    /// 요청에 그대로 실어 보낼 id.
+    pub id: String,
+    /// 사람이 읽을 이름. 제공자가 안 주면 id 를 그대로 둡니다.
+    pub label: String,
+}
+
+/// 글 모델이 아닌 것을 거릅니다 — OpenAI 목록에는 **온갖 것이 섞여 나옵니다.**
+///
+/// 임베딩·TTS·음성 인식·그림·검열기가 같은 목록에 있습니다. 그대로 드롭다운에 부으면
+/// 백 줄이 넘고, 그중 고르면 호출이 통째로 실패합니다. 「어떤 것을 남길까」 가 아니라
+/// **「어떤 것을 뺄까」** 로 적는 까닭: 새 모델이 나왔을 때 우리가 모르는 이름이라고
+/// 빠지면 안 됩니다. 모르는 것은 보여 주고, 아는 «글이 아닌 것» 만 뺍니다.
+const NOT_TEXT: &[&str] = &[
+    "embed", "tts", "whisper", "audio", "transcribe", "realtime", "live", "image", "dall-e",
+    "sora", "moderation", "rerank", "similarity", "davinci", "babbage",
+];
+// `codex` 는 **빼지 않습니다** — `gpt-5.3-codex` 같은 것은 코딩용이지만 글 모델입니다
+// (2026-09-23 실측: 여섯 개를 통째로 숨기고 있었습니다).
+// `search`·`edit` 도 뺐습니다 — `gpt-4o-search-preview` 는 글 모델이고, `edit` 은 흔한
+// 낱말이라 애먼 것까지 걸립니다. 거르개는 **좁게** 잡습니다.
+
+/// 유닉스 일수 → (해, 달, 날). 날짜 크레이트를 하나 더 들이지 않으려고 씁니다.
+///
+/// Howard Hinnant 의 `civil_from_days` 그대로입니다 — 윤년·400년 주기까지 맞습니다.
+/// 쓰는 곳은 «문 닫은 모델 거르기» 한 곳뿐이라, 하루쯤 어긋나도 크게 다칠 일은 없지만
+/// 어림셈을 적어 두면 나중에 다른 데서 그대로 베껴 갑니다.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+fn is_text_model(id: &str) -> bool {
+    let id = id.to_ascii_lowercase();
+    !NOT_TEXT.iter().any(|mark| id.contains(mark))
+}
+
+/// 제공자에게 **지금 쓸 수 있는 모델**을 물어봅니다.
+///
+/// # 왜 목록을 박아 두지 않는가
+///
+/// 새 모델이 나올
+/// 때마다 앱을 고쳐 다시 깔아야 했습니다. 제공자가 이미 목록을 내주므로 물어봅니다.
+///
+/// 박아 둔 목록(`client/src/lib/llm.ts`)은 **없애지 않습니다** — 키가 없거나 네트워크가
+/// 막혔을 때 드롭다운이 비면 아무것도 못 고릅니다. 받아 온 것이 있으면 그걸 쓰고,
+/// 없으면 박아 둔 것으로 물러섭니다.
+///
+/// # 요금
+///
+/// 두 제공자 모두 목록 부르기에는 요금이 붙지 않습니다. 그래도 켤 때마다 부르지는
+/// 않습니다 — 화면이 하루치를 기억하고, 사람이 단추로 새로 받습니다.
+#[tauri::command]
+pub async fn list_llm_models(provider: String) -> Res<Vec<ModelChoice>> {
+    let key = read_api_key(&provider)?;
+    // 목록은 짧은 요청입니다. 오래 기다릴 값이 없습니다.
+    let client = build_client(30)?;
+
+    if provider == "claude" {
+        return list_claude_models(&client, &key).await;
+    }
+    list_openai_models(&client, &key).await
+}
+
+async fn list_openai_models(client: &reqwest::Client, key: &str) -> Res<Vec<ModelChoice>> {
+    #[derive(Deserialize)]
+    struct Item {
+        id: String,
+        /// 만들어진 때(유닉스 초). **새것부터** 보여 주는 데 씁니다.
+        created: Option<i64>,
+        /// 문 닫는 날(`"2027-02-26"`). 이미 지난 것은 고르면 호출이 실패합니다.
+        shutdown_date: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Reply {
+        data: Vec<Item>,
+    }
+
+    let reply = client
+        .get("https://api.openai.com/v1/models")
+        .bearer_auth(key)
+        .send()
+        .await
+        .map_err(|e| send_error("OpenAI", e))?;
+    let status = reply.status();
+    let text = reply.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(model_list_error("OpenAI", status, &text));
+    }
+    let parsed: Reply =
+        serde_json::from_str(&text).map_err(|e| err("모델 목록을 읽지 못했습니다", e))?;
+
+    /*
+      **이미 문 닫은 모델은 뺍니다.**
+
+      OpenAI 는 항목마다 `shutdown_date` 를 줍니다(실측 132개 중 54개에 값이 있었고,
+      그중 13개는 이미 지났습니다). 그대로 보여 주면 고를 수 있는데 부르면 실패합니다 —
+      사람은 「우리 앱이 고장 났다」 로 읽습니다.
+
+      날짜는 `YYYY-MM-DD` 라 글자 그대로 견주면 됩니다(사전순 = 시간순).
+      오늘을 못 구하면(시계가 이상하면) 거르지 않습니다 — 애먼 것을 숨기는 쪽이 더 나쁩니다.
+    */
+    let today = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| {
+            let days = since.as_secs() / 86_400;
+            let (year, month, day) = civil_from_days(days as i64);
+            format!("{year:04}-{month:02}-{day:02}")
+        });
+    let mut items: Vec<Item> = parsed
+        .data
+        .into_iter()
+        .filter(|item| is_text_model(&item.id))
+        .filter(|item| match (&item.shutdown_date, &today) {
+            (Some(gone), Some(now)) => gone.as_str() >= now.as_str(),
+            _ => true,
+        })
+        .collect();
+    /*
+      **새것부터** 놓습니다.
+
+      이름순으로 두면 `gpt-3.5-turbo` 가 맨 위에 오고, 정작 쓰려는 새 모델은 일흔 줄
+      아래에 묻힙니다. 목록을 받아 오는 까닭이 「새 모델을 쓰려고」 이므로 차례도 그래야
+      합니다. 때를 안 주는 모델은 맨 뒤로 보냅니다(id 로 견줘 차례가 흔들리지 않게).
+    */
+    items.sort_by(|a, b| {
+        b.created
+            .unwrap_or(0)
+            .cmp(&a.created.unwrap_or(0))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    // 이름을 따로 안 주므로 id 를 그대로 보여 줍니다. 화면이 아는 id 에는
+    // 제 이름표를 덧씌웁니다(`llm.ts` 의 박아 둔 목록).
+    Ok(items
+        .into_iter()
+        .map(|item| ModelChoice { label: item.id.clone(), id: item.id })
+        .collect())
+}
+
+async fn list_claude_models(client: &reqwest::Client, key: &str) -> Res<Vec<ModelChoice>> {
+    #[derive(Deserialize)]
+    struct Item {
+        id: String,
+        display_name: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Reply {
+        data: Vec<Item>,
+        has_more: Option<bool>,
+        last_id: Option<String>,
+    }
+
+    let mut out = Vec::new();
+    let mut after: Option<String> = None;
+    // 페이지가 여럿일 수 있습니다. **끝없이 돌지 않게** 횟수를 묶어 둡니다 —
+    // 서버가 has_more 를 계속 참으로 주면 앱이 그 자리에 갇힙니다.
+    for _ in 0..10 {
+        let mut request = client
+            .get("https://api.anthropic.com/v1/models")
+            .header("x-api-key", key)
+            .header("anthropic-version", "2023-06-01")
+            .query(&[("limit", "100")]);
+        if let Some(cursor) = &after {
+            request = request.query(&[("after_id", cursor.as_str())]);
+        }
+        let reply = request.send().await.map_err(|e| send_error("Claude", e))?;
+        let status = reply.status();
+        let text = reply.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(model_list_error("Claude", status, &text));
+        }
+        let parsed: Reply =
+            serde_json::from_str(&text).map_err(|e| err("모델 목록을 읽지 못했습니다", e))?;
+        for item in parsed.data {
+            let label = item.display_name.clone().unwrap_or_else(|| item.id.clone());
+            out.push(ModelChoice { id: item.id, label });
+        }
+        match (parsed.has_more.unwrap_or(false), parsed.last_id) {
+            (true, Some(cursor)) => after = Some(cursor),
+            _ => break,
+        }
+    }
+    Ok(out)
+}
+
+/// 목록을 못 받았을 때 **무엇을 하면 되는지**까지 적습니다.
+///
+/// 「401」 만 보여 주면 사람이 할 수 있는 일이 없습니다. 키 문제인지 네트워크인지
+/// 제공자 쪽인지 갈라 줘야 설정 화면에서 바로 고칩니다.
+fn model_list_error(provider: &str, status: reqwest::StatusCode, body: &str) -> String {
+    let hint = match status.as_u16() {
+        401 | 403 => "API 키가 맞는지 확인해 주세요.",
+        429 => "요청이 너무 잦습니다. 잠시 뒤 다시 받아 주세요.",
+        500..=599 => "제공자 쪽이 답하지 않습니다. 잠시 뒤 다시 받아 주세요.",
+        _ => "",
+    };
+    // 본문에 키가 섞여 나오는 일은 없지만, 길면 잘라 둡니다 — 알림 창을 덮습니다.
+    let detail: String = body.chars().take(200).collect();
+    if hint.is_empty() {
+        format!("{provider} 모델 목록을 받지 못했습니다({status}). {detail}")
+    } else {
+        format!("{provider} 모델 목록을 받지 못했습니다({status}). {hint}")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 명령
 // ─────────────────────────────────────────────────────────────────────────────
 

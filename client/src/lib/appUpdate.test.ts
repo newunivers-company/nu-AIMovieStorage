@@ -1,0 +1,120 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+/*
+  **자동 업데이트가 실제로 돌 모양인가** — 글로 셉니다.
+
+  
+
+  이 기능은 **조각이 하나만 빠져도 조용히 안 됩니다.** 서명 열쇠가 없으면 받아도 거절하고,
+  `latest.json` 이 안 올라가면 영영 「최신입니다」 이고, 비공개판이 공개판 끝점을 보면
+  모션캡처·업스케일 엔진이 통째로 사라집니다. 어느 쪽도 화면에는 아무 말이 안 나옵니다.
+*/
+const ROOT = resolve(__dirname, "../../..");
+const read = (rel: string) => readFileSync(resolve(ROOT, rel), "utf-8");
+
+const CONF = JSON.parse(read("src-tauri/tauri.conf.json"));
+const LIB = read("src-tauri/src/lib.rs");
+const CARGO = read("src-tauri/Cargo.toml");
+const RELEASE = read(".github/workflows/release.yml");
+const MANIFEST = read("scripts/updater-manifest.mjs");
+const CAPS = JSON.parse(read("src-tauri/capabilities/default.json"));
+
+describe("업데이터 설정", () => {
+  it("산출물을 만들게 켜 두었습니다", () => {
+    // 이게 꺼져 있으면 `.sig` 가 안 나오고, 서명 없는 업데이트는 거절당합니다.
+    expect(CONF.bundle.createUpdaterArtifacts).toBe(true);
+  });
+
+  it("끝점이 https 입니다", () => {
+    // 릴리스 빌드에서 https 가 아니면 플러그인이 `InsecureTransportProtocol` 로 막습니다.
+    const endpoints: string[] = CONF.plugins.updater.endpoints;
+    expect(endpoints.length).toBeGreaterThan(0);
+    for (const url of endpoints) expect(url.startsWith("https://")).toBe(true);
+  });
+
+  it("공개 열쇠가 들어 있습니다", () => {
+    // 없으면 플러그인이 설정을 못 읽어 **앱이 아예 안 뜹니다.**
+    expect(typeof CONF.plugins.updater.pubkey).toBe("string");
+    expect(CONF.plugins.updater.pubkey.length).toBeGreaterThan(50);
+  });
+
+  it("설치가 조용히 돕니다 — 사람이 «다음» 을 누를 일이 없게", () => {
+    expect(CONF.plugins.updater.windows.installMode).toBe("passive");
+  });
+
+  it("권한이 열려 있습니다", () => {
+    // 권한이 없으면 화면에서 `check()` 가 「허용되지 않음」 으로 막힙니다.
+    expect(CAPS.permissions).toContain("updater:default");
+    // 깔고 나서 앱을 다시 띄우는 것은 우리가 부릅니다 — NSIS 가 안 해 줍니다.
+    expect(CAPS.permissions).toContain("process:allow-restart");
+  });
+});
+
+describe("판 가르기", () => {
+  it("업데이터는 공개판에서만 등록됩니다", () => {
+    /*
+      끝점은 공개판 릴리스를 가리킵니다. 비공개판(내 PC용, 모션캡처·업스케일 엔진이 든 판)이
+      그것을 받아 깔면 그 엔진들이 사라지거나, 이름이 달라 **엉뚱한 앱이 하나 더 생깁니다.*    */
+    const setup = LIB.slice(LIB.indexOf(".setup(|app|"));
+    const body = setup.slice(0, setup.indexOf("\n        })"));
+    expect(body).toContain("edition::is_public()");
+    expect(body).toContain("tauri_plugin_updater");
+    // 등록 줄이 판 검사 **안쪽**에 있어야 합니다.
+    expect(body.indexOf("is_public()")).toBeLessThan(body.indexOf("tauri_plugin_updater"));
+  });
+});
+
+describe("판 번호", () => {
+  it("설정과 Cargo 가 같은 판입니다", () => {
+    /*
+      Tauri 는 설정 쪽을 쓰지만, 두 값이 어긋나 있으면 어느 것이 진짜인지 사람이 헷갈립니다
+      (한때 Cargo 0.1.0 · 설정 0.2.0 이었습니다).
+    */
+    const cargo = /^version = "([^"]+)"/m.exec(CARGO)?.[1];
+    expect(cargo).toBe(CONF.version);
+  });
+
+  it("만들 때 태그와 판이 어긋나면 멈춥니다", () => {
+    // 어긋나면 업데이터가 영영 «최신입니다» 로 답합니다 — 올렸는데 아무도 못 받습니다.
+    expect(MANIFEST).toContain("태그와 판이 어긋납니다");
+  });
+});
+
+describe("릴리스 흐름", () => {
+  it("빌드가 서명 열쇠를 받습니다", () => {
+    expect(RELEASE).toContain("TAURI_SIGNING_PRIVATE_KEY");
+    // 저장소에 박아 두면 안 됩니다 — 비밀값에서 와야 합니다.
+    expect(RELEASE).toContain("secrets.TAURI_SIGNING_PRIVATE_KEY");
+  });
+
+  it("latest.json 을 만들어 릴리스에 올립니다", () => {
+    expect(RELEASE).toContain("scripts/updater-manifest.mjs");
+    expect(RELEASE).toContain("bundle/updater/latest.json");
+  });
+
+  it("서명이 없으면 만들지 않고 멈춥니다", () => {
+    // 조용히 넘어가면 「업데이트가 안 된다」 는 보고만 남고 까닭을 못 찾습니다.
+    expect(MANIFEST).toContain("서명 파일이 없습니다");
+  });
+});
+
+describe("이름", () => {
+  it("실행 파일이 제품 이름과 같습니다", () => {
+    /*
+       설치 폴더는 `AIMovieStorage`
+      인데 실행 파일만 `frameforge.exe` 였고, 무설치본 이름도 그것을 따라갔습니다.
+      **업데이터를 켜기 전에** 맞춰야 합니다 — 나중에 바꾸면 첫 자동 업데이트가 옛 이름의
+      실행 파일을 남깁니다.
+    */
+    expect(CARGO).toContain('name = "AIMovieStorage"');
+    expect(read("src-tauri/src/main.rs")).toContain("aimoviestorage_lib::run()");
+  });
+
+  it("무설치본 이름이 설치 파일과 같은 모양입니다", () => {
+    const script = read("scripts/tauri.mjs");
+    expect(script).toContain("_x64-portable.zip");
+    expect(script).not.toContain("_portable.zip`;");
+  });
+});
