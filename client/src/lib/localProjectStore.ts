@@ -1,6 +1,6 @@
 import { coverOf } from "@/lib/projectCover";
 import { toast } from "sonner";
-import { migrateProjectLayout } from "@/lib/mediaLibrary";
+import { migrateProjectLayout, whenAppSettingsReady } from "@/lib/mediaLibrary";
 import { applyMovedPaths } from "@/lib/ownerFolders";
 import { PROJECT_SCHEMA_VERSION, migrateSavedProject, schemaVersionOf } from "@/lib/projectMigrate";
 import {
@@ -341,6 +341,21 @@ function persistToFile(
  * 잘 옮겨졌는지 확인하기 전에 원본을 없애면 되돌릴 수 없습니다.
  */
 export async function loadProjects(): Promise<LocalProject[]> {
+  /*
+    **저장 폴더가 정해진 뒤에 읽습니다.**
+
+    설치본과 개발 서버는 웹뷰 origin 이 달라 `localStorage` 가 통째로 갈립니다. 진짜 저장
+    폴더는 거울 파일에 있고, 그것을 읽어 오는 데 한 틱이 걸립니다. 기다리지 않고 읽으면
+    **옛 폴더에서 목록을 읽고, 그다음 저장은 새 폴더로** 나갑니다 — 목록과 저장이 서로
+    다른 폴더를 보는 상태입니다(2026-09-23 재현: 목록은 `D:/old`, 저장은 `D:/new`).
+
+    기다리는 자리는 **화면이 아니라 여기**입니다. 부르는 쪽이 둘(작품 목록 화면·튜토리얼
+    표본)이라, 화면마다 적으면 한 곳을 빠뜨립니다. 앞선 판례가 `bgmRestore.ts` 에 있습니다.
+
+    실패해도 반드시 풀립니다(`whenAppSettingsReady` 가 `.catch` 로 받습니다) — 여기서
+    앱이 멈추지는 않습니다. 브라우저로 열었으면 곧장 돌아옵니다.
+  */
+  await whenAppSettingsReady();
   const stored = readLocalStorage();
 
   if (!canUseProjectFiles()) {

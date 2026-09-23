@@ -527,7 +527,7 @@ pub fn merge_app_settings(
         return Err("칸 이름이 비었습니다.".into());
     }
     let path = app_settings_path(&app)?;
-    let _guard = SAVE_LOCK.lock().map_err(|_| "설정 자물쇠가 깨졌습니다.".to_string())?;
+    let _guard = SAVE_LOCK.lock_safe();
 
     // 파일이 없거나 깨졌으면 빈 것에서 시작합니다 — 처음 켠 것뿐이라 오류가 아닙니다.
     let on_disk: Value = match fs::read_to_string(&path) {

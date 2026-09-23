@@ -38,6 +38,20 @@ describe("저장본을 지키는 문", () => {
     expect(SOURCE).toMatch(/if \(lastStagedId !== id\) \{\s*\n\s*emptySaveFor = null;/);
   });
 
+  it("목록은 저장 폴더가 정해진 뒤에 읽습니다", () => {
+    /*
+      설치본과 개발 서버는 웹뷰 origin 이 달라 localStorage 가 갈립니다. 진짜 저장 폴더는
+      거울 파일에 있고 읽어 오는 데 한 틱이 걸립니다. 기다리지 않으면 **옛 폴더에서 목록을
+      읽고 그다음 저장은 새 폴더로** 나갑니다(2026-09-23 재현: 목록 D:/old, 저장 D:/new).
+
+      기다리는 자리는 화면이 아니라 `loadProjects` 안이어야 합니다 — 부르는 쪽이 둘이라
+      화면마다 적으면 한 곳을 빠뜨립니다.
+    */
+    const body = SOURCE.slice(SOURCE.indexOf("export async function loadProjects"));
+    const head = body.slice(0, body.indexOf("readLocalStorage()"));
+    expect(head, "폴더가 정해지기 전에 목록을 읽습니다").toContain("await whenAppSettingsReady()");
+  });
+
   it("문법만 맞는 파일은 걸러집니다", () => {
     expect(SOURCE).toContain("function looksLikeProject");
     expect(SOURCE).toContain("if (!looksLikeProject(parsed))");
