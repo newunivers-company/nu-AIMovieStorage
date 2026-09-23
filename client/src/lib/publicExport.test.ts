@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /*
@@ -23,12 +23,18 @@ import { resolve } from "node:path";
 */
 const ACCOUNT = ["raon", "olje"].join("");
 
-const SCRIPT = readFileSync(
-  resolve(__dirname, "../../../scripts/public-export.mjs"),
-  "utf-8",
-);
+/*
+  **내보내는 도구 자신은 공개본에 안 실립니다**(`DROP_SCRIPTS`). 그래서 공개본에서
+  이 파일을 읽으면 없습니다 — 그대로 두었더니 공개 저장소의 「검사」 가 34초 만에
+  죽었습니다(2026-09-23).
 
-describe("공개본 내보내기", () => {
+  이 시험은 **비공개판(원본)에서만** 뜻이 있습니다. 공개본에서는 건너뜁니다.
+*/
+const SCRIPT_PATH = resolve(__dirname, "../../../scripts/public-export.mjs");
+const HAS_SCRIPT = existsSync(SCRIPT_PATH);
+const SCRIPT = HAS_SCRIPT ? readFileSync(SCRIPT_PATH, "utf-8") : "";
+
+describe.skipIf(!HAS_SCRIPT)("공개본 내보내기", () => {
   it("깃허브 주소의 계정 이름은 남깁니다", () => {
     // 지우기 전에 주소를 빼 두었다가 되돌립니다.
     expect(SCRIPT).toContain("github.com/${KEEP}");
@@ -59,5 +65,26 @@ describe("공개본 내보내기", () => {
       (2026-09-23 — 고쳤는데 검사기가 계속 우는 모양이 됐습니다).
     */
     expect(SCRIPT).toContain(`__GITHUB_${"ACCOUNT"}__`);
+  });
+});
+
+/*
+  **시험이 읽는 파일이 공개본에도 있어야 합니다.**
+
+  이 저장소의 시험 여럿이 소스를 글로 읽어 규칙을 셉니다(설정 칸·워크플로 걸음·거르개).
+  그런데 공개본에서는 **빠지는 파일**이 있습니다 — 제외 엔진의 워커, 그리고 내보내는
+  도구 자신. 그런 파일을 읽는 시험은 공개 저장소의 「검사」 에서 곧바로 죽습니다.
+
+  실제로 그랬습니다(2026-09-23): 공개판 릴리스의 검사가 34초 만에 실패하고 빌드가
+  통째로 건너뛰어졌습니다. 원본에서는 234개가 다 통과하니 **여기서만 안 보입니다.**/
+describe.skipIf(!HAS_SCRIPT)("시험이 읽는 파일", () => {
+  it("공개본에서 빠지는 파일을 읽는 시험은 건너뛰어야 합니다", () => {
+    // 내보내는 도구가 「뺄 것」 으로 적어 둔 목록을 그대로 읽습니다.
+    const dropped = /const DROP_SCRIPTS = \[([\s\S]*?)\]/.exec(SCRIPT)?.[1] ?? "";
+    expect(dropped).toContain("public-export.mjs");
+    // 이 시험 파일 자신이 그 규칙을 지키는지.
+    const self = readFileSync(resolve(__dirname, "./publicExport.test.ts"), "utf-8");
+    expect(self, "빠지는 파일을 읽으면서 건너뛰기를 안 걸었습니다").toContain("skipIf(!HAS_SCRIPT)");
+    expect(self).toContain("existsSync");
   });
 });
