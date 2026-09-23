@@ -34,6 +34,8 @@ export interface LocalOutput {
   /** 확장자 없는 파일 이름. 화면에 적고 `@태그` 로도 씁니다. */
   name: string;
   seconds: number;
+  /** 엔진이 덧붙인 값. 사내 ComfyUI 로 뽑았으면 `backend: "comfy"` 와 서버 주소가 있습니다. */
+  meta: Record<string, unknown>;
 }
 
 const stemOf = (path: string) =>
@@ -79,5 +81,10 @@ export async function runLocalToProject(input: {
       // 못 지워도 그림은 제대로 나옵니다. 빈 파일 하나가 남을 뿐입니다.
     });
   }
-  return { path: result.output, name: stemOf(result.output) || stem, seconds: result.seconds };
+  return {
+    path: result.output,
+    name: stemOf(result.output) || stem,
+    seconds: result.seconds,
+    meta: result.meta,
+  };
 }

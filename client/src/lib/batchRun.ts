@@ -2,7 +2,7 @@ import { pickedCharacterRefs } from "@/lib/promptPayloads";
 import { toast } from "sonner";
 import { composeInMagnific } from "@/lib/magnificCompose";
 import { safeFileName, saveProjectMediaAsset, type ProjectAssetType } from "@/lib/mediaLibrary";
-import { loadPrecision, type LocalEngineId } from "@/lib/localEngines";
+import { loadPrecision, runsOnComfy, type LocalEngineId } from "@/lib/localEngines";
 import { isEngineIncluded } from "@/lib/edition";
 import { lorasToRun, withLoraTriggers } from "@/lib/localLoras";
 import { runLocalToProject } from "@/lib/localOutput";
@@ -410,16 +410,31 @@ async function localImage(
   loras?: string[],
   /** 화면 비율 — 숏츠면 `9:16`. */
   aspect = "16:9",
+  /** 인물 시트·구도 그림. 사내 Qwen-Image 2.1 만 받고, 나머지 엔진에는 싣지 않습니다. */
+  references: string[] = [],
 ) {
   const engine = payload.engine as LocalEngineId;
   const tuned = tuneForLocal(engine, { en: prompt, ko: "" });
   /*
-    **로컬 그림 엔진은 레퍼런스를 못 뭅니다.** 넷(Qwen-Image·Z-Image·Krea 2·Anima) 다
-    워커에 `image` 를 읽는 자리가 없습니다. 마그니픽으로 뽑을 때는 인물 시트가 올라가는데
-    로컬은 글만 가므로, 같은 컷이라도 **컷마다 얼굴이 달라집니다.** 작업 줄에 적어 두어야
-    를 여기서 찾습니다(2026-09-18 점검).
+    **사내 Qwen-Image 2.1 은 레퍼런스 그림을 받습니다**(`comfy_workflows/qwenimage.json`).
+    이 길이면 인물 시트가 실려 컷마다 얼굴이 이어집니다.
   */
-  report({ step: "이 컴퓨터가 뽑는 중 · 이 엔진은 글만 받습니다(인물 시트 못 실음)" });
+  const remoteRefs = runsOnComfy(engine) && engine === "qwenimage" ? references.slice(0, 4) : [];
+  if (runsOnComfy(engine)) {
+    report({
+      step: remoteRefs.length
+        ? `사내 ComfyUI 로 보내는 중 · 레퍼런스 ${remoteRefs.length}장`
+        : "사내 ComfyUI 로 보내는 중",
+    });
+  } else {
+    /*
+      **로컬 그림 엔진은 레퍼런스를 못 뭅니다.** 넷(Qwen-Image·Z-Image·Krea 2·Anima) 다
+      워커에 `image` 를 읽는 자리가 없습니다. 마그니픽으로 뽑을 때는 인물 시트가 올라가는데
+      로컬은 글만 가므로, 같은 컷이라도 **컷마다 얼굴이 달라집니다.** 작업 줄에 적어 두어야
+      를 여기서 찾습니다(2026-09-18 점검).
+    */
+    report({ step: "이 컴퓨터가 뽑는 중 · 이 엔진은 글만 받습니다(인물 시트 못 실음)" });
+  }
   const chosen = lorasToRun(engine, loras);
   return runLocalToProject({
     engine,
@@ -434,6 +449,9 @@ async function localImage(
       prompt: withLoraTriggers(tuned.prompt, chosen),
       negative: tuned.negative,
       ...localSize(engine, aspect),
+      ...(remoteRefs.length
+        ? { references: remoteRefs.map((path) => ({ kind: "image" as const, path })) }
+        : {}),
       loras: chosen,
       precision: loadPrecision(),
     },
@@ -568,7 +586,7 @@ registerTaskRunner(CHARACTER_SHEET_TASK, async (raw, report, task) => {
           report,
           () => isStopping(task.id),
         )
-      : await localImage(payload, prompt, "character-generated", report, draft?.localLoras?.[payload.engine], aspectOf(draft, "image"));
+      : await localImage(payload, prompt, "character-generated", report, draft?.localLoras?.[payload.engine], aspectOf(draft, "image"), refs);
   report({ step: "카드에 붙이는 중" });
   const wrote = await attachSheet(payload.projectId, payload.characterId, made.path, made.name);
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
@@ -650,7 +668,7 @@ registerTaskRunner(CUT_IMAGE_TASK, async (raw, report, task) => {
           report,
           () => isStopping(task.id),
         )
-      : await localImage(payload, base, "scene-cut", report, draft.localLoras?.[payload.engine], aspectOf(draft, "image"));
+      : await localImage(payload, base, "scene-cut", report, draft.localLoras?.[payload.engine], aspectOf(draft, "image"), references);
   report({ step: "카드에 붙이는 중" });
   const wrote = await attachImage(payload.projectId, payload.cutId, made.path, made.name);
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
@@ -866,7 +884,7 @@ registerTaskRunner(SCENE_VIDEO_TASK, async (raw, report, task) => {
   const seconds = Math.min(MAX_GENERATOR_SECONDS, wanted);
   const engine = payload.engine as LocalEngineId;
   const tuned = tuneForLocal(engine, { en: prompt, ko: "" });
-  report({ step: `이 컴퓨터가 ${seconds}초를 뽑는 중` });
+  report({ step: runsOnComfy(engine) ? `사내 ComfyUI 로 ${seconds}초를 뽑는 중` : `이 컴퓨터가 ${seconds}초를 뽑는 중` });
   const videoLoras = lorasToRun(engine, draft?.localLoras?.[engine]);
   const made = await runLocalToProject({
     engine,

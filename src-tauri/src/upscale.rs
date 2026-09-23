@@ -2361,7 +2361,7 @@ static JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// 프로세스 번호까지 섞는 까닭: 저장 폴더 하나를 앱 두 벌이 볼 수 있어, 번호표만으로는
 /// 둘 다 「1번」 에서 시작합니다.
-fn job_tag() -> String {
+pub(crate) fn job_tag() -> String {
     format!("{}-{}", std::process::id(), JOB_COUNTER.fetch_add(1, Ordering::SeqCst) + 1)
 }
 
@@ -2370,15 +2370,15 @@ fn job_tag() -> String {
 /// 왜 «고르기» 만으로는 모자랐나: 번호를 고르는 것과 결과를 놓는 것 사이가 몇 분입니다
 /// (엔진이 도는 시간). 그 틈에 들어온 다음 요청이 같은 번호를 고르고, 둘 다 같은 이름으로
 /// 이름 바꾸기를 해서 **먼저 끝난 결과가 사라졌습니다**.
-struct Reserved {
-    path: PathBuf,
+pub(crate) struct Reserved {
+    pub(crate) path: PathBuf,
     /// 결과를 제자리에 놓았는가. 놓기 전에 떨어지면 빈 껍데기를 치웁니다 —
     /// 0 바이트 파일을 인물 폴더에 남기면 폴더를 다시 읽을 때 깨진 그림으로 되살아납니다.
     kept: bool,
 }
 
 impl Reserved {
-    fn keep(&mut self) {
+    pub(crate) fn keep(&mut self) {
         self.kept = true;
     }
 }
@@ -2412,7 +2412,7 @@ fn reserve_numbered_path(dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
 
 /// 부른 대로의 이름을 먼저 잡아 보고, 이미 있으면 번호를 올립니다.
 /// 생성은 늘 새 파일이라 덮어쓰지 않습니다.
-fn reserve_free_path(out: &Path, out_dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
+pub(crate) fn reserve_free_path(out: &Path, out_dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
     match fs::OpenOptions::new().write(true).create_new(true).open(out) {
         Ok(_) => Ok(Reserved { path: out.to_path_buf(), kept: false }),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => {

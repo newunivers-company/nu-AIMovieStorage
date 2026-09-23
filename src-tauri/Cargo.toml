@@ -61,6 +61,8 @@ reqwest = { version = "0.12", default-features = false, features = [
   "stream",
 ] }
 base64 = "0.22"
+# 사내 ComfyUI 음악 결과(flac)를 앱의 wav 자리에 놓을 때 풉니다. 순수 Rust 라 C 컴파일러가 필요 없습니다.
+claxon = "0.4"
 # 업스케일 엔진 설치 — 받은 파일의 sha256 확인, 고정 커밋 코드 압축본 풀기.
 # zip 은 압축만 쓰면 되므로 기본 피처를 끄고 deflate 만 켭니다(빌드 시간·의존성 절약).
 sha2 = "0.10"

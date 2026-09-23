@@ -6,6 +6,7 @@ import {
   availableLocalEngines,
   loadPrecision,
   onLocalProgress,
+  runsOnComfy,
   useLocalEngines,
   type LocalEngineId,
   type LocalEngineKind,
@@ -13,6 +14,7 @@ import {
 import { localSize, tuneForLocal, type LocalPromptInput } from "@/lib/localPrompt";
 import type { ProjectAssetType } from "@/lib/mediaLibrary";
 import { runLocalToProject } from "@/lib/localOutput";
+import { COMFY_MODEL_LABEL, comfyDroppedNote, comfyHostOf, isComfyRemote } from "@/lib/comfyFleet";
 import { lorasToRun, useLoraFiles, withLoraTriggers } from "@/lib/localLoras";
 import LoraPicker from "@/components/LoraPicker";
 import PoseControlPicker from "@/components/PoseControlPicker";
@@ -97,6 +99,13 @@ export default function LocalGenerateButton({
   // 쓸 수 있는 엔진이 없으면 **아무것도 안 그립니다.** 설치는 설정에서 합니다 —
   // 카드마다 「설치하세요」 를 띄우면 화면이 안내문으로 뒤덮입니다.
   if (!engine) return null;
+  /*
+    **사내 ComfyUI 로 보내는가.** 그쪽에서는 Qwen-Image 2.1 이 레퍼런스 그림을, MiniMax H3 가
+    첫 프레임·레퍼런스를 받습니다. 로컬 워커와 받는 것이 달라 아래에서 갈라 씁니다.
+  */
+  const remote = runsOnComfy(engine.id);
+  const engineName = remote ? (COMFY_MODEL_LABEL[engine.id] ?? engine.name) : engine.name;
+  const takesImageRefs = engine.id === "minimaxh3" || (remote && engine.id === "qwenimage");
 
   const run = async () => {
     if (busy) return;
@@ -124,7 +133,8 @@ export default function LocalGenerateButton({
         한 장**이 나왔습니다(회색 칸 여섯 개를 벽에 걸린 액자로 그렸습니다). 40분과 60 GB 를
         쓰고 못 쓸 그림을 받는 셈이라, 시작 전에 말해 줍니다.
       */
-      const wantsRefs = kind === "image" && /@[^\s]+/.test(tuned.prompt);
+      const wantsRefs =
+        kind === "image" && /@[^\s]+/.test(tuned.prompt) && !(takesImageRefs && references?.length);
       if (wantsRefs)
         toast.warning("이 프롬프트는 그림 @태그를 가리킵니다.", {
           description:
@@ -195,12 +205,14 @@ export default function LocalGenerateButton({
           // 파이썬 쪽이 같은 한도를 쓰게 넘깁니다 — 두 곳에 다른 숫자를 적으면 한쪽만 맞습니다.
           max_tokens: tuned.budget,
           ...size,
+          // 사내 Qwen-Image 2.1 은 레퍼런스 그림을 받습니다(인물 시트로 얼굴을 붙듭니다).
+          ...(kind === "image" && takesImageRefs && references?.length ? { references } : {}),
           ...(kind === "video"
             ? {
                 seconds: seconds ?? 5,
                 fps: 16,
                 image: firstFrame,
-                references: engine.id === "minimaxh3" ? references : undefined,
+                references: takesImageRefs ? references : undefined,
                 // 그림 한 장에는 얼릴 구역이 없습니다 — 마스크는 영상에만 실립니다.
                 motion_mask: motionMask,
               }
@@ -223,15 +235,19 @@ export default function LocalGenerateButton({
         시트를 골라 둔 채로 «만들었습니다» 만 띄웠습니다. 그래서 컷마다 얼굴이 달라지는데도
         까닭을 알 수가 없었습니다. 말없이 버리지 않습니다.
       */
-      const dropped =
-        kind === "image"
+      const dropped = remote
+        ? 0 // 원격은 서버가 실제로 못 실은 것을 결과에 적어 보냅니다(`comfyDroppedNote`).
+        : kind === "image"
           ? (references?.length ?? 0) + (firstFrame ? 1 : 0)
           : engine.id === "minimaxh3"
             ? 0
             : (references?.length ?? 0);
-      toast.success(`${engine.name} 으로 만들었습니다.`, {
+      const remoteNote = comfyDroppedNote(result.meta);
+      const where = remote ? ` · 사내 ComfyUI ${comfyHostOf(result.meta)}` : "";
+      toast.success(`${engineName} 으로 만들었습니다.`, {
         description:
-          `${Math.round(result.seconds)}초 걸렸습니다` +
+          `${Math.round(result.seconds)}초 걸렸습니다${where}` +
+          (remoteNote ? ` · ${remoteNote}` : "") +
           (tuned.usedKorean
             ? " · 영문 칸이 비어 한글로 보냈습니다(오픈 모델은 영어를 훨씬 잘 알아듣습니다)"
             : "") +
@@ -267,7 +283,7 @@ export default function LocalGenerateButton({
         <select
           value={engine.id}
           onChange={(event) => setEngineId(event.target.value as LocalEngineId)}
-          title="이 컴퓨터에 깔린 로컬 모델 중에서"
+          title={remote ? "사내 ComfyUI 에서 돌릴 모델" : "이 컴퓨터에 깔린 로컬 모델 중에서"}
           className="rounded-md px-1.5 py-1 text-[10px] outline-none"
           style={{
             background: "oklch(0.18 0.012 265)",
@@ -277,7 +293,8 @@ export default function LocalGenerateButton({
         >
           {engines.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name}
+              {/* 원격이면 서버에서 실제로 도는 모델 이름을 적습니다(사내 Qwen-Image 는 2.1). */}
+              {remote && isComfyRemote(item.id) ? `사내 · ${COMFY_MODEL_LABEL[item.id] ?? item.name}` : item.name}
             </option>
           ))}
         </select>
@@ -289,7 +306,9 @@ export default function LocalGenerateButton({
         title={
           busy
             ? status || "만드는 중…"
-            : `${engine.name} 으로 이 컴퓨터에서 바로 만듭니다. 적어 둔 프롬프트를 그대로 쓰되 마그니픽용 @칩과 매개변수는 걷어냅니다.`
+            : remote
+              ? `${engineName} 으로 사내 ComfyUI 에서 만듭니다(가장 한가한 서버로 보냅니다). 적어 둔 프롬프트를 그대로 쓰되 마그니픽용 @칩과 매개변수는 걷어냅니다.`
+              : `${engine.name} 으로 이 컴퓨터에서 바로 만듭니다. 적어 둔 프롬프트를 그대로 쓰되 마그니픽용 @칩과 매개변수는 걷어냅니다.`
         }
         className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-semibold disabled:opacity-50"
         style={{
@@ -302,7 +321,7 @@ export default function LocalGenerateButton({
         ) : (
           <Cpu className="h-3 w-3" />
         )}
-        {busy ? status || "만드는 중…" : label || "로컬로 뽑기"}
+        {busy ? status || "만드는 중…" : label || (remote ? "사내 ComfyUI로 뽑기" : "로컬로 뽑기")}
       </button>
       </div>
 

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isDesktopApp } from "@/lib/llm";
 import { isEngineIncluded } from "@/lib/edition";
+import { isComfyRemote, loadComfyFleet, remoteOrder, runComfy, subscribeComfyFleet } from "@/lib/comfyFleet";
 
 /**
  * 로컬 생성 엔진 — 프런트 쪽.
@@ -659,12 +660,31 @@ export function useLocalEngines(): LocalSnapshot {
 }
 
 
-/** 설치돼 있어 지금 쓸 수 있는 엔진. 갈래를 주면 그 갈래만. */
+/**
+ * 지금 쓸 수 있는 엔진 — 이 컴퓨터에 설치돼 있거나, **사내 ComfyUI 로 뽑을 수 있는** 것.
+ * 갈래를 주면 그 갈래만.
+ *
+ * 사내 ComfyUI 가 켜져 있으면 설치하지 않은 엔진도 여기 들어오고, 사용자가 정한 엔진
+ * (그림 Qwen-Image 2.1 · 영상 MiniMax H3)이 맨 앞에 섭니다(`comfyFleet.ts`).
+ * 원격은 데스크톱 앱에서만 됩니다 — 호출이 Rust 를 거치기 때문입니다.
+ */
 export function availableLocalEngines(kind?: LocalEngineKind): LocalEngineStatus[] {
+  const remote = isDesktopApp() && loadComfyFleet().enabled;
   return snapshot.engines
-    .filter((engine) => engine.installed && (!kind || engine.kind === kind))
-    .sort((a, b) => a.priority - b.priority);
+    .filter(
+      (engine) =>
+        (engine.installed || (remote && isComfyRemote(engine.id))) && (!kind || engine.kind === kind),
+    )
+    .sort((a, b) => (remote ? remoteOrder(a) - remoteOrder(b) : a.priority - b.priority));
 }
+
+/** 이 엔진으로 뽑으면 어디서 도는가 — 버튼 문구와 안내에 씁니다. */
+export function runsOnComfy(engine: LocalEngineId): boolean {
+  return isDesktopApp() && isComfyRemote(engine);
+}
+
+// 사내 ComfyUI 를 켜고 끄면 엔진 목록이 달라집니다 — 구독하는 화면을 다시 그리게 알립니다.
+subscribeComfyFleet(() => publish());
 
 /* ────────────────────────── 진행 이벤트 ────────────────────────── */
 
@@ -1073,6 +1093,14 @@ export async function runLocal(
     ? onLocalProgress(hooks.onProgress, engine)
     : () => {};
   try {
+    /*
+      **사내 ComfyUI 가 켜져 있고 그쪽에서 뽑을 수 있는 엔진이면 그리로 보냅니다.**
+      같은 `opts`, 같은 진행 이벤트(`local-progress`), 같은 결과 꼴이라 부르는 쪽은 차이를 모릅니다.
+      결과의 `meta.backend` 가 «comfy» 이고, 어느 서버에서 뽑았는지가 `meta.endpoint` 에 있습니다.
+    */
+    if (isComfyRemote(engine)) {
+      return await runComfy(engine, outputPath, options, hooks?.timeoutSecs);
+    }
     const raw = await invoke<{
       output: string;
       seconds: number;
