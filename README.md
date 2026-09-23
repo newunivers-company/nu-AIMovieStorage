@@ -6,10 +6,10 @@ A Windows desktop workbench for **local AI image, video and music generation**, 
 and shot planning. Connect **Claude or OpenAI (GPT) APIs** to break down scripts, analyze references and write
 model-specific prompts, while keeping characters, 3D blocking and generated assets in one project.
 
-**[Download for Windows](https://github.com/사용자/AIMovieStorage/releases/latest)** · [Installation](#installation) ·
+**[Download for Windows](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [Installation](#installation) ·
 [Local models](#local-models-and-seedvr2) · [Claude / OpenAI APIs](#claude-and-openai-api-connections) ·
 [Feature details](#what-it-does) · [Build from source](#build-from-source) ·
-[Report an issue](https://github.com/사용자/AIMovieStorage/issues)
+[Report an issue](https://github.com/raonolje/AIMovieStorage/issues)
 
 | Task | What AIMovieStorage provides |
 | --- | --- |
@@ -76,7 +76,7 @@ downloads require a separate token. API usage is billed by the selected provider
 
 ## Installation
 
-Download the latest build from the [Releases page](https://github.com/사용자/AIMovieStorage/releases)
+Download the latest build from the [Releases page](https://github.com/raonolje/AIMovieStorage/releases)
 and open its **Assets** section. Prebuilt packages do not require Node, pnpm or Rust; those tools are only
 needed to [build from source](#build-from-source).
 
@@ -200,7 +200,7 @@ Development requires **Windows 10/11**, **Git**, **Node 22+**, **pnpm 10+**, **R
 and **Visual Studio C++ Build Tools**. The GPU and API key requirements above apply only to their optional features.
 
 ```bash
-git clone https://github.com/사용자/AIMovieStorage.git
+git clone https://github.com/raonolje/AIMovieStorage.git
 cd AIMovieStorage
 pnpm install --frozen-lockfile
 pnpm dev:desktop --edition public  # run with public-edition engine restrictions
@@ -229,7 +229,7 @@ made from inside the app — so keys are not visible to the web layer and CORS i
 
 ## Suggestions and bug reports
 
-Both are welcome, and wanted. Open an [Issue](https://github.com/사용자/AIMovieStorage/issues) for anything at all —
+Both are welcome, and wanted. Open an [Issue](https://github.com/raonolje/AIMovieStorage/issues) for anything at all —
 something crashed, something behaved oddly, a step was hard to follow, or a feature you need is missing.
 Korean or English is fine. If it is a bug, the app version, what you clicked and a screenshot make it
 much faster to track down; if it is an idea, just describe what you were trying to do.
@@ -251,10 +251,10 @@ For the same reason a few engines are not part of this build — `edition.json` 
 **Claude 또는 OpenAI(GPT) API** 를 연결해 시나리오 분해·레퍼런스 분석·모델별 프롬프트 작성을 돕고,
 인물·3D 구도·생성 결과를 한 프로젝트에서 관리합니다.
 
-**[Windows 다운로드](https://github.com/사용자/AIMovieStorage/releases/latest)** · [설치 안내](#설치-안내) ·
+**[Windows 다운로드](https://github.com/raonolje/AIMovieStorage/releases/latest)** · [설치 안내](#설치-안내) ·
 [로컬 모델](#로컬-모델과-seedvr2) · [Claude / OpenAI API](#claudeopenai-api-연결) ·
 [기능 자세히 보기](#무엇을-해-주는가) · [소스에서 실행](#소스에서-실행) ·
-[오류 제보](https://github.com/사용자/AIMovieStorage/issues)
+[오류 제보](https://github.com/raonolje/AIMovieStorage/issues)
 
 | 작업 | 주요 기능 |
 | --- | --- |
@@ -320,7 +320,7 @@ API 사용료는 선택한 제공자의 과금 기준을 따릅니다.
 
 ## 설치 안내
 
-[Releases](https://github.com/사용자/AIMovieStorage/releases)에서 최신 배포본을 내려받고
+[Releases](https://github.com/raonolje/AIMovieStorage/releases)에서 최신 배포본을 내려받고
 **Assets**를 펼쳐 원하는 형식을 고르세요. 배포 파일을 실행할 때는 Node·pnpm·Rust가 필요하지 않습니다 —
 이 도구들은 [소스에서 실행](#소스에서-실행)할 때만 필요합니다.
 
@@ -434,7 +434,7 @@ AI 분석과 프롬프트 작성은 [Claude·OpenAI API](#claudeopenai-api-연�
 GPU와 API 키는 위에서 설명한 선택 기능에만 사용됩니다.
 
 ```bash
-git clone https://github.com/사용자/AIMovieStorage.git
+git clone https://github.com/raonolje/AIMovieStorage.git
 cd AIMovieStorage
 pnpm install --frozen-lockfile
 pnpm dev:desktop --edition public  # 공개판 엔진 제한을 적용해 실행
@@ -460,7 +460,7 @@ API 키는 브라우저가 아니라 **앱 설정 폴더에 파일로** 저장�
 
 ## 건의와 오류 제보
 
-둘 다 환영합니다. 무엇이든 [Issues](https://github.com/사용자/AIMovieStorage/issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
+둘 다 환영합니다. 무엇이든 [Issues](https://github.com/raonolje/AIMovieStorage/issues) 에 남겨 주세요 — 멈췄다거나, 이상하게 동작한다거나,
 따라 하기 어려웠다거나, 필요한 기능이 없다거나. 한국어·영어 다 좋습니다.
 오류라면 앱 판과 «무엇을 눌렀는지», 화면 한 장이 있으면 훨씬 빨리 찾습니다.
 건의라면 «무엇을 하려고 했는지» 만 적어 주셔도 됩니다.
