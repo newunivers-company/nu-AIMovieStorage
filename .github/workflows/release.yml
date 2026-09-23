@@ -107,6 +107,9 @@ jobs:
       - name: 빌드
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # **빈 값이라도 반드시 줍니다.** 열쇠는 암호를 안 걸어도 «빈 암호로 암호화» 되어
+          # 있어서(`rsign encrypted secret key`), 이 변수가 없으면 서명기가 암호를 물으며
+          # **멈춥니다.** CI 에서는 아무도 답하지 않으니 빌드가 그 자리에서 굳습니다.
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/tauri.mjs build --edition ${{ env.FRAMEFORGE_EDITION }}
 

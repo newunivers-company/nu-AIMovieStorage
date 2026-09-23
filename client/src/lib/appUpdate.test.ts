@@ -94,6 +94,24 @@ describe("릴리스 흐름", () => {
     expect(RELEASE).toContain("bundle/updater/latest.json");
   });
 
+  it("이번 판의 설치 파일만 고릅니다", () => {
+    /*
+      `target/release/bundle/nsis` 에는 지난 판들이 그대로 쌓입니다. 그냥 첫 `-setup.exe`
+      를 집으면 **옛 판을 새 판이라고 올립니다** — 받는 사람은 업데이트했는데 판이 그대로이거나
+      오히려 내려갑니다. 실제로 시험 삼아 돌렸다가 0.1.0 을 집었습니다(2026-09-23).
+    */
+    expect(MANIFEST).toContain("name.includes(`_${version}_`)");
+  });
+
+  it("암호 변수를 빈 값이라도 줍니다", () => {
+    /*
+      열쇠는 암호를 안 걸어도 «빈 암호로 암호화» 되어 있습니다(`rsign encrypted secret key`).
+      이 변수가 없으면 서명기가 암호를 물으며 **멈춥니다** — CI 에서는 아무도 답하지 않으니
+      빌드가 그 자리에서 굳습니다(2026-09-23 실측: 손으로 돌린 서명이 그렇게 멈췄습니다).
+    */
+    expect(RELEASE).toContain("TAURI_SIGNING_PRIVATE_KEY_PASSWORD");
+  });
+
   it("서명이 없으면 만들지 않고 멈춥니다", () => {
     // 조용히 넘어가면 「업데이트가 안 된다」 는 보고만 남고 까닭을 못 찾습니다.
     expect(MANIFEST).toContain("서명 파일이 없습니다");

@@ -55,8 +55,21 @@ const nsisDir = path.join(repoRoot, "src-tauri", "target", "release", "bundle", 
 if (!existsSync(nsisDir)) fail([`설치 파일 폴더가 없습니다: ${nsisDir}`, "  먼저 빌드해 주세요."]);
 
 const files = readdirSync(nsisDir);
-const setup = files.find((name) => name.endsWith("-setup.exe"));
-if (!setup) fail([`설치 파일(-setup.exe)을 찾지 못했습니다: ${nsisDir}`]);
+/*
+  **이번 판의 설치 파일만** 고릅니다.
+
+  폴더에는 지난 판들이 그대로 쌓여 있습니다(`…_0.1.0_…`, `…_0.1.2_…`). 그냥 첫 `-setup.exe`
+  를 집으면 **옛 판을 새 판이라고 올리는** 사고가 납니다 — 받는 사람은 업데이트했는데
+  판이 그대로이거나 오히려 내려갑니다(2026-09-23 실측에서 실제로 0.1.0 을 집었습니다).
+  CI 는 폴더가 깨끗하지만 사람이 손으로 돌릴 때는 안 그렇습니다.
+*/
+const setup = files.find((name) => name.includes(`_${version}_`) && name.endsWith("-setup.exe"));
+if (!setup) {
+  fail([
+    `판 ${version} 의 설치 파일을 찾지 못했습니다: ${nsisDir}`,
+    `  있는 것: ${files.filter((name) => name.endsWith("-setup.exe")).join(", ") || "(없음)"}`,
+  ]);
+}
 
 const sigName = `${setup}.sig`;
 if (!files.includes(sigName)) {
