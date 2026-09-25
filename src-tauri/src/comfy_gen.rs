@@ -55,6 +55,20 @@ const WORKFLOWS: &[(&str, &str)] = &[
 
 /// 사내 SeedVR2 업스케일(3B fp8). 생성 엔진이 아니라서 `WORKFLOWS` 와 따로 둡니다.
 const UPSCALE_WORKFLOW: &str = include_str!("comfy_workflows/upscale/seedvr2.json");
+/// 목표가 원본의 `TWO_PASS_RATIO` 배를 넘으면 두 단계로 올립니다(`upscale_plan`).
+const UPSCALE_2PASS_WORKFLOW: &str = include_str!("comfy_workflows/upscale/seedvr2_2pass.json");
+
+/// 한 번에 이보다 크게 올리면 SeedVR2 3B 가 피부에 격자무늬를 지어냅니다(2배는 깨끗, 4배는 무늬).
+const TWO_PASS_RATIO: f64 = 2.2;
+
+/// 업스케일을 한 번에 할지 두 번에 할지. 두 번이면 첫 단계의 긴 변(원본의 2배)을 함께 돌려줍니다.
+pub(crate) fn upscale_plan(source_long: u32, target_long: u32) -> (&'static str, Option<u32>) {
+    if source_long > 0 && target_long as f64 > source_long as f64 * TWO_PASS_RATIO {
+        ("seedvr2_upscale_2pass", Some(source_long * 2))
+    } else {
+        ("seedvr2_upscale", None)
+    }
+}
 
 /// 사내 ComfyUI 로 뽑을 수 있는 엔진. 프런트가 «원격으로 쓸 수 있는가» 를 이것으로 압니다.
 pub const REMOTE_ENGINES: &[&str] = &["qwenimage", "zimage", "krea2", "minimaxh3", "wanvideo", "ltx25", "acestep"];
@@ -62,6 +76,8 @@ pub const REMOTE_ENGINES: &[&str] = &["qwenimage", "zimage", "krea2", "minimaxh3
 fn workflow_doc(name: &str) -> Res<Value> {
     let text = if name == "seedvr2_upscale" {
         UPSCALE_WORKFLOW
+    } else if name == "seedvr2_upscale_2pass" {
+        UPSCALE_2PASS_WORKFLOW
     } else {
         WORKFLOWS
             .iter()
@@ -188,6 +204,9 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &Refs, 
     }
     if let Some(long_edge) = num(opts.get("long_edge")) {
         values.insert("long_edge".into(), json!(long_edge.round() as u64));
+    }
+    if let Some(mid) = num(opts.get("long_edge_mid")) {
+        values.insert("long_edge_mid".into(), json!(mid.round() as u64));
     }
     if let Some(negative) = non_empty(opts, "negative").or_else(|| non_empty(&defaults, "negative")) {
         values.insert("negative".into(), json!(negative));
@@ -678,7 +697,7 @@ async fn check_endpoint(client: &reqwest::Client, url: &str) -> EndpointCheck {
     let workflows = WORKFLOWS
         .iter()
         .map(|(name, _)| *name)
-        .chain(std::iter::once("seedvr2_upscale"))
+        .chain(["seedvr2_upscale", "seedvr2_upscale_2pass"])
         .filter_map(|name| {
             let doc = workflow_doc(name).ok()?;
             let mut graph = doc.get("graph")?.as_object()?.clone();
@@ -1408,8 +1427,15 @@ pub async fn comfy_upscale_fleet(
     }
     let out = PathBuf::from(&out_path);
     let (out_ext, out_dir) = crate::comfy::check_upscale_target(&source, &out)?;
-    let doc = workflow_doc("seedvr2_upscale")?;
-    let opts = json!({ "image": image_path, "long_edge": target_size.clamp(256, 8192) });
+    let target = target_size.clamp(256, 8192);
+    // 원본의 2.2배를 넘기면 2배씩 두 번에 나눠 올립니다(격자무늬 방지, `upscale_plan`).
+    let source_long = image::image_dimensions(&source).map(|(w, h)| w.max(h)).unwrap_or(0);
+    let (workflow, mid) = upscale_plan(source_long, target);
+    let doc = workflow_doc(workflow)?;
+    let mut opts = json!({ "image": image_path, "long_edge": target });
+    if let Some(mid) = mid {
+        opts["long_edge_mid"] = json!(mid);
+    }
     let job = JobEntry::register(None);
     let remote = run_remote(&app, crate::upscale::UPSCALE.event, "seedvr2", &doc, &opts, &endpoints, timeout_secs, &job).await?;
     let final_path = crate::comfy::place_upscaled(&remote.bytes, &out, &out_dir, &out_ext, numbered.unwrap_or(false))?;
@@ -1807,6 +1833,21 @@ mod tests {
         assert_eq!(models, vec!["minimax_h3_fl2va_pruned_int8_convrot.safetensors".to_string()]);
         let music = models_of(&workflow_doc("acestep").unwrap()["graph"]);
         assert_eq!(music, vec!["ace_step_1.5_turbo_aio.safetensors".to_string()]);
+    }
+
+    /// 2.2배를 넘기면 두 단계로, 첫 단계는 원본의 2배. 두 단계 워크플로도 제대로 채워집니다.
+    #[test]
+    fn large_upscales_go_in_two_passes() {
+        assert_eq!(upscale_plan(1024, 2048), ("seedvr2_upscale", None));
+        assert_eq!(upscale_plan(1024, 2252), ("seedvr2_upscale", None));
+        assert_eq!(upscale_plan(1024, 4096), ("seedvr2_upscale_2pass", Some(2048)));
+        assert_eq!(upscale_plan(0, 4096), ("seedvr2_upscale", None));
+        let doc = workflow_doc("seedvr2_upscale_2pass").unwrap();
+        let result = fill(&doc, &json!({ "long_edge": 4096, "long_edge_mid": 2048 }), Some("src.png"), &Refs::default(), "p", 1).unwrap();
+        assert_eq!(result.graph["s1resize"]["inputs"]["resize_type.longer_size"], 2048);
+        assert_eq!(result.graph["s2resize"]["inputs"]["resize_type.longer_size"], 4096);
+        assert_eq!(result.graph["s2resize"]["inputs"]["input"], json!(["s1post", 0]));
+        assert_links_resolve(&result.graph);
     }
 
     #[test]

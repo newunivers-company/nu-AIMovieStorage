@@ -1,0 +1,296 @@
+{
+  "_about": "SeedVR2 3B fp8 두 단계 업스케일 — 먼저 2배, 그다음 목표 크기로. 한 번에 4배로 올리면 피부에 직물 같은 격자무늬가 생기고 2배씩 두 번이면 사라진다(2026-09-25 사내 서버 실측, 768×1024 → 4096: 한 번 49초·두 번 37초).",
+  "engine": "seedvr2",
+  "kind": "upscale",
+  "extension": "png",
+  "defaults": {},
+  "graph": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": ""
+      }
+    },
+    "51": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "seedvr2_official_vae_fp16.safetensors"
+      }
+    },
+    "52": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "seedvr2_3b_fp8_e4m3fn.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "s1resize": {
+      "class_type": "ResizeImageMaskNode",
+      "inputs": {
+        "input": [
+          "1",
+          0
+        ],
+        "resize_type": "scale longer dimension",
+        "resize_type.longer_size": 2048,
+        "scale_method": "lanczos"
+      }
+    },
+    "s1pre": {
+      "class_type": "SeedVR2Preprocess",
+      "inputs": {
+        "resized_images": [
+          "s1resize",
+          0
+        ]
+      }
+    },
+    "s1enc": {
+      "class_type": "VAEEncodeTiled",
+      "inputs": {
+        "pixels": [
+          "s1pre",
+          0
+        ],
+        "vae": [
+          "51",
+          0
+        ],
+        "tile_size": 512,
+        "overlap": 128,
+        "temporal_size": 4096,
+        "temporal_overlap": 8
+      }
+    },
+    "s1cond": {
+      "class_type": "SeedVR2Conditioning",
+      "inputs": {
+        "model": [
+          "52",
+          0
+        ],
+        "vae_conditioning": [
+          "s1enc",
+          0
+        ]
+      }
+    },
+    "s1ks": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": [
+          "52",
+          0
+        ],
+        "positive": [
+          "s1cond",
+          0
+        ],
+        "negative": [
+          "s1cond",
+          1
+        ],
+        "latent_image": [
+          "s1enc",
+          0
+        ],
+        "seed": 42,
+        "steps": 1,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1
+      }
+    },
+    "s1dec": {
+      "class_type": "VAEDecodeTiled",
+      "inputs": {
+        "samples": [
+          "s1ks",
+          0
+        ],
+        "vae": [
+          "51",
+          0
+        ],
+        "tile_size": 512,
+        "overlap": 128,
+        "temporal_size": 4096,
+        "temporal_overlap": 8
+      }
+    },
+    "s1post": {
+      "class_type": "SeedVR2PostProcessing",
+      "inputs": {
+        "images": [
+          "s1dec",
+          0
+        ],
+        "original_resized_images": [
+          "s1resize",
+          0
+        ],
+        "color_correction_method": "lab"
+      }
+    },
+    "s2resize": {
+      "class_type": "ResizeImageMaskNode",
+      "inputs": {
+        "input": [
+          "s1post",
+          0
+        ],
+        "resize_type": "scale longer dimension",
+        "resize_type.longer_size": 4096,
+        "scale_method": "lanczos"
+      }
+    },
+    "s2pre": {
+      "class_type": "SeedVR2Preprocess",
+      "inputs": {
+        "resized_images": [
+          "s2resize",
+          0
+        ]
+      }
+    },
+    "s2enc": {
+      "class_type": "VAEEncodeTiled",
+      "inputs": {
+        "pixels": [
+          "s2pre",
+          0
+        ],
+        "vae": [
+          "51",
+          0
+        ],
+        "tile_size": 512,
+        "overlap": 128,
+        "temporal_size": 4096,
+        "temporal_overlap": 8
+      }
+    },
+    "s2cond": {
+      "class_type": "SeedVR2Conditioning",
+      "inputs": {
+        "model": [
+          "52",
+          0
+        ],
+        "vae_conditioning": [
+          "s2enc",
+          0
+        ]
+      }
+    },
+    "s2ks": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": [
+          "52",
+          0
+        ],
+        "positive": [
+          "s2cond",
+          0
+        ],
+        "negative": [
+          "s2cond",
+          1
+        ],
+        "latent_image": [
+          "s2enc",
+          0
+        ],
+        "seed": 42,
+        "steps": 1,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1
+      }
+    },
+    "s2dec": {
+      "class_type": "VAEDecodeTiled",
+      "inputs": {
+        "samples": [
+          "s2ks",
+          0
+        ],
+        "vae": [
+          "51",
+          0
+        ],
+        "tile_size": 512,
+        "overlap": 128,
+        "temporal_size": 4096,
+        "temporal_overlap": 8
+      }
+    },
+    "s2post": {
+      "class_type": "SeedVR2PostProcessing",
+      "inputs": {
+        "images": [
+          "s2dec",
+          0
+        ],
+        "original_resized_images": [
+          "s2resize",
+          0
+        ],
+        "color_correction_method": "lab"
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "s2post",
+          0
+        ],
+        "filename_prefix": ""
+      }
+    }
+  },
+  "bind": {
+    "image": [
+      [
+        "1",
+        "image"
+      ]
+    ],
+    "long_edge_mid": [
+      [
+        "s1resize",
+        "resize_type.longer_size"
+      ]
+    ],
+    "long_edge": [
+      [
+        "s2resize",
+        "resize_type.longer_size"
+      ]
+    ],
+    "seed": [
+      [
+        "s1ks",
+        "seed"
+      ],
+      [
+        "s2ks",
+        "seed"
+      ]
+    ],
+    "prefix": [
+      [
+        "9",
+        "filename_prefix"
+      ]
+    ]
+  },
+  "output": {
+    "node": "9",
+    "key": "images"
+  }
+}
