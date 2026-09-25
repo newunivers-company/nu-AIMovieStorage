@@ -74,6 +74,28 @@ These connections provide cloud-based analysis and prompt writing; local image/v
 upscaling use the installed engines on your PC. Local engines do not require a Claude/OpenAI key, though some model
 downloads require a separate token. API usage is billed by the selected provider.
 
+## Company ComfyUI (remote generation)
+
+In this company build, generation can run on the in-house ComfyUI servers instead of this PC.
+It is **on by default** under **Settings → Company ComfyUI (remote generation)**; no local engine install is needed.
+
+| Task | Model on the servers |
+| --- | --- |
+| Images (default) | **Qwen-Image 2.1** — accepts character-sheet references, so faces carry across cuts |
+| Video (default) | **MiniMax H3** — text, first frame, or references (up to 9 images, 3 videos, 3 audio clips) |
+| Other image / video | Z-Image Turbo · Krea 2 Turbo · Wan 2.2 A14B · LTX 2.5 |
+| Music | ACE-Step 1.5 (MiniMax-Music3 is not installed on the servers) |
+| Upscale | SeedVR2 3B — used by the «External — ComfyUI» upscale engine when no workflow file is chosen |
+
+- Each request goes to the server with the shortest queue; results land in the project folder exactly as local runs do.
+- **Speed:** MiniMax H3 defaults to «Fast» (turbo LoRA, 8 steps — about 2× faster). Reference-driven H3 video is always 20 steps.
+- **Stop:** the «Stop» button on a card, or stopping a queued batch task, withdraws only that job from the server.
+- **Check connection** shows each server's queue and whether every built-in workflow's nodes and model files are present.
+- Not sent to the servers yet: motion masks and pose control. LoRAs are applied only when a file with the same name exists on the server. Anything dropped is listed in the result notice.
+- The four servers share one host (80 GB RAM). Several MiniMax H3 jobs at once slow each other down.
+
+Workflows live in `src-tauri/src/comfy_workflows/` (API format, one per engine); `comfy_gen.rs` fills and submits them.
+
 ## Installation
 
 Download the latest build from the [Releases page](https://github.com/raonolje/AIMovieStorage/releases)
@@ -317,6 +339,28 @@ API 활동에서 사용 토큰과 예상 비용을 확인할 수 있습니다.
 API는 클라우드에서 분석과 프롬프트 작성을 돕고, 로컬 이미지·영상·음악 생성과 SeedVR2 업스케일은 PC에 설치한 엔진이 수행합니다.
 로컬 엔진 실행에는 Claude·OpenAI 키가 필요하지 않습니다. 다만 일부 모델을 받으려면 별도 토큰이 필요하며,
 API 사용료는 선택한 제공자의 과금 기준을 따릅니다.
+
+## 사내 ComfyUI (원격 생성)
+
+이 회사판에서는 생성을 이 컴퓨터 대신 **사내 ComfyUI 서버**에서 돌릴 수 있습니다.
+**설정 → 사내 ComfyUI (원격 생성)** 에서 **기본으로 켜져 있고**, 로컬 엔진을 설치하지 않아도 됩니다.
+
+| 작업 | 서버에서 도는 모델 |
+| --- | --- |
+| 그림(기본) | **Qwen-Image 2.1** — 인물 시트를 레퍼런스로 받아 컷이 바뀌어도 얼굴이 이어집니다 |
+| 영상(기본) | **MiniMax H3** — 텍스트·첫 프레임·레퍼런스(그림 9·영상 3·소리 3) |
+| 그 밖의 그림·영상 | Z-Image Turbo · Krea 2 Turbo · Wan 2.2 A14B · LTX 2.5 |
+| 음악 | ACE-Step 1.5 (MiniMax-Music3 는 서버에 없습니다) |
+| 업스케일 | SeedVR2 3B — «외부 — ComfyUI» 업스케일 엔진에서 워크플로 파일을 고르지 않으면 이것을 씁니다 |
+
+- 요청마다 대기열이 가장 짧은 서버로 보내고, 결과는 로컬로 뽑을 때와 같은 프로젝트 폴더 자리에 놓입니다.
+- **속도:** MiniMax H3 는 기본이 «빠르게»(터보 로라, 8스텝, 약 2배 빠름)입니다. 레퍼런스로 뽑는 H3 영상은 늘 20스텝입니다.
+- **멈추기:** 카드의 «멈추기» 단추나 작업 줄의 멈추기는 서버에서 **그 작업만** 거둡니다.
+- **연결 확인**은 서버마다 대기열과, 내장 워크플로가 요구하는 노드·모델 파일이 다 있는지를 보여 줍니다.
+- 아직 서버로 보내지 않는 것: 움직임 마스크, 포즈 조건. 로라는 서버에 같은 이름의 파일이 있을 때만 겁니다. 못 실은 것은 결과 알림에 적습니다.
+- 서버 네 대는 한 컴퓨터(RAM 80GB)를 나눠 씁니다. MiniMax H3 를 여러 개 동시에 돌리면 서로 느려집니다.
+
+워크플로는 `src-tauri/src/comfy_workflows/` 에 엔진마다 하나씩(API 형식) 있고, `comfy_gen.rs` 가 채워서 보냅니다.
 
 ## 설치 안내
 

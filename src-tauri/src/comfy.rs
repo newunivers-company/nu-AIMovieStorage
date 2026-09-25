@@ -40,9 +40,83 @@ pub struct ComfyWorkflowInfo {
 #[serde(rename_all = "camelCase")]
 pub struct ComfyUpscaleResult {
     /// 결과가 놓인 자리 (덮어썼으면 out_path 그대로, 번호를 붙였으면 새 경로)
-    path: String,
+    pub(crate) path: String,
     /// SeedVR2 노드에 넣은 짧은 변 값. None 이면 워크플로를 손대지 않았습니다.
-    seedvr2_resolution: Option<u32>,
+    pub(crate) seedvr2_resolution: Option<u32>,
+}
+
+/// 업스케일 결과 자리를 **보내기 전에** 확인합니다 — 그림 확장자, 폴더가 있음, 원본과 같은 폴더.
+/// 돌려주는 값은 (결과 확장자, 결과 폴더).
+///
+/// 사내 ComfyUI 업스케일(`comfy_gen::comfy_upscale_fleet`)도 이 한 벌을 씁니다 — 같은 명령의
+/// 두 갈래가 서로 다른 검사를 하면, 느슨한 쪽이 «디스크 어디든 덮어쓰는» 길이 됩니다.
+pub(crate) fn check_upscale_target(source: &PathBuf, out: &PathBuf) -> Res<(String, PathBuf)> {
+    let out_ext = out
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !UPSCALE_EXTENSIONS.contains(&out_ext.as_str()) {
+        return Err("결과 자리는 png·jpg·webp 그림 경로여야 합니다.".into());
+    }
+    let Some(out_dir) = out.parent().filter(|p| p.is_dir()) else {
+        return Err("결과를 놓을 폴더가 없습니다.".into());
+    };
+    let source_dir = source
+        .parent()
+        .and_then(|p| p.canonicalize().ok())
+        .ok_or("원본 그림의 폴더를 확인하지 못했습니다.")?;
+    let target_dir = out_dir
+        .canonicalize()
+        .map_err(|e| err("결과 폴더를 확인하지 못했습니다", e))?;
+    if source_dir != target_dir {
+        return Err("업스케일 결과는 원본과 같은 폴더에만 놓을 수 있습니다.".into());
+    }
+    Ok((out_ext, out_dir.to_path_buf()))
+}
+
+/// 받은 결과 그림을 자리에 놓습니다 — 임시 파일에 쓴 뒤 이름 바꾸기(받다 끊겨도 원본이 반쪽이 되지 않게).
+/// `numbered` 면 `<stem>_001` 식으로 새 파일, 아니면 `out` 을 덮어씁니다. 확장자가 png 가 아니면 다시 인코딩합니다.
+pub(crate) fn place_upscaled(result_bytes: &[u8], out: &PathBuf, out_dir: &PathBuf, out_ext: &str, numbered: bool) -> Res<PathBuf> {
+    let final_path = if numbered {
+        let stem = out
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.is_empty())
+            .ok_or("결과 파일 이름이 비어 있습니다.")?;
+        next_numbered_path(out_dir, &safe_name(stem), out_ext)
+    } else {
+        out.clone()
+    };
+    let temp = out_dir.join(format!(
+        ".{}.업스케일중",
+        final_path.file_name().and_then(|n| n.to_str()).unwrap_or("결과")
+    ));
+    let written: Result<(), String> = if out_ext == "png" {
+        // ComfyUI SaveImage 는 png 를 냅니다. 그대로 씁니다.
+        fs::write(&temp, result_bytes).map_err(|e| err("결과를 쓰지 못했습니다", e))
+    } else {
+        // 원본이 jpg·webp 면 확장자에 맞춰 다시 인코딩합니다 — 내용은 png 인데 이름만
+        // jpg 면 나중에 `image::open` 이 확장자를 믿고 읽다 실패합니다.
+        image::load_from_memory(result_bytes)
+            .map_err(|e| err("결과 그림을 읽지 못했습니다", e))
+            .and_then(|decoded| {
+                let format = image::ImageFormat::from_extension(out_ext).unwrap_or(image::ImageFormat::Png);
+                decoded.save_with_format(&temp, format).map_err(|e| err("결과를 쓰지 못했습니다", e))
+            })
+    };
+    // 쓰다 실패하면(디스크 가득·권한) 반쪽짜리 `.…업스케일중` 이 주인 폴더에 남습니다. 목록에는
+    // 안 뜨지만 폴더 이름 바꾸기가 훑는 범위 안에 «앱이 만든 정체 모를 파일» 이 쌓이니
+    // 우리가 만든 것은 우리가 치웁니다(rename 실패 갈래와 같은 처리).
+    if let Err(e) = written {
+        let _ = fs::remove_file(&temp);
+        return Err(e);
+    }
+    if let Err(e) = fs::rename(&temp, &final_path) {
+        let _ = fs::remove_file(&temp);
+        return Err(err("결과 파일로 바꾸지 못했습니다", e));
+    }
+    Ok(final_path)
 }
 
 /// 주소를 정리합니다. 비면 기본 자리, 끝의 `/` 는 뗍니다.
@@ -184,23 +258,12 @@ pub async fn comfy_upscale_image(
         return Err("업스케일할 원본 그림을 찾지 못했습니다.".into());
     }
     let out = PathBuf::from(&out_path);
-    let out_ext = out
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .unwrap_or_default();
-    if !UPSCALE_EXTENSIONS.contains(&out_ext.as_str()) {
-        return Err("결과 자리는 png·jpg·webp 그림 경로여야 합니다.".into());
-    }
-    let Some(out_dir) = out.parent().filter(|p| p.is_dir()) else {
-        return Err("결과를 놓을 폴더가 없습니다.".into());
-    };
     /*
       **결과는 원본과 같은 폴더에만 씁니다.**
 
       2026-09-18 점검에서 드러났습니다 — 여기에는 폴더 범위 검사가 **하나도 없었습니다.**
       방어라고는 확장자와 «부모 폴더가 있는가» 둘뿐이라, `numbered` 가 꺼져 있으면
-      아래 `fs::rename` 이 **디스크 어디에 있는 png·jpg 든 말없이 덮어썼습니다.**
+      결과를 놓는 이름 바꾸기가 **디스크 어디에 있는 png·jpg 든 말없이 덮어썼습니다.**
 
       같은 파일의 `delete_project_media_file`·`claim_project_inbox_file`·
       `resolve_image_files` 는 모두 `ensure_inside` 를 거칩니다. 여기만 빠져 있었습니다.
@@ -208,20 +271,11 @@ pub async fn comfy_upscale_image(
       이 명령에는 저장 폴더 인자가 없어서 `ensure_inside` 를 그대로 쓸 수 없습니다.
       대신 **부르는 쪽이 늘 지키는 사실**을 못 박습니다 — 업스케일 결과는 원본 곁에
       놓습니다(`upscale.ts` 의 `runComfy`). 이러면 원본이 프로젝트 폴더 안에 있는 한
-      결과도 그 안입니다.
+      결과도 그 안입니다. 검사는 `check_upscale_target` 한 벌입니다.
 
       CLAUDE.md: 「의도한 대상은 좁았는데 실제 명령의 사정거리가 넓었다」.
     */
-    let source_dir = source
-        .parent()
-        .and_then(|p| p.canonicalize().ok())
-        .ok_or("원본 그림의 폴더를 확인하지 못했습니다.")?;
-    let target_dir = out_dir
-        .canonicalize()
-        .map_err(|e| err("결과 폴더를 확인하지 못했습니다", e))?;
-    if source_dir != target_dir {
-        return Err("업스케일 결과는 원본과 같은 폴더에만 놓을 수 있습니다.".into());
-    }
+    let (out_ext, out_dir) = check_upscale_target(&source, &out)?;
 
     // LoadImage 는 하나여야 합니다. 여럿이면 어느 것에 넣을지 알 수 없습니다.
     let load_ids: Vec<String> = workflow
@@ -406,44 +460,7 @@ pub async fn comfy_upscale_image(
     }
 
     // 6) 임시 파일 → 이름 바꾸기. numbered 면 저장 규칙대로 번호를 붙입니다.
-    let final_path = if numbered.unwrap_or(false) {
-        let stem = out
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .filter(|s| !s.is_empty())
-            .ok_or("결과 파일 이름이 비어 있습니다.")?;
-        next_numbered_path(out_dir, &safe_name(stem), &out_ext)
-    } else {
-        out.clone()
-    };
-    let temp = out_dir.join(format!(
-        ".{}.업스케일중",
-        final_path.file_name().and_then(|n| n.to_str()).unwrap_or("결과")
-    ));
-    let written: Result<(), String> = if out_ext == "png" {
-        // ComfyUI SaveImage 는 png 를 냅니다. 그대로 씁니다.
-        fs::write(&temp, &result_bytes).map_err(|e| err("결과를 쓰지 못했습니다", e))
-    } else {
-        // 원본이 jpg·webp 면 확장자에 맞춰 다시 인코딩합니다 — 내용은 png 인데 이름만
-        // jpg 면 나중에 `image::open` 이 확장자를 믿고 읽다 실패합니다.
-        image::load_from_memory(&result_bytes)
-            .map_err(|e| err("결과 그림을 읽지 못했습니다", e))
-            .and_then(|decoded| {
-                let format = image::ImageFormat::from_extension(&out_ext).unwrap_or(image::ImageFormat::Png);
-                decoded.save_with_format(&temp, format).map_err(|e| err("결과를 쓰지 못했습니다", e))
-            })
-    };
-    // 쓰다 실패하면(디스크 가득·권한) 반쪽짜리 `.…업스케일중` 이 주인 폴더에 남습니다. 목록에는
-    // 안 뜨지만 폴더 이름 바꾸기가 훑는 범위 안에 «앱이 만든 정체 모를 파일» 이 쌓이니
-    // 우리가 만든 것은 우리가 치웁니다(rename 실패 갈래와 같은 처리).
-    if let Err(e) = written {
-        let _ = fs::remove_file(&temp);
-        return Err(e);
-    }
-    if let Err(e) = fs::rename(&temp, &final_path) {
-        let _ = fs::remove_file(&temp);
-        return Err(err("결과 파일로 바꾸지 못했습니다", e));
-    }
+    let final_path = place_upscaled(&result_bytes, &out, &out_dir, &out_ext, numbered.unwrap_or(false))?;
 
     Ok(ComfyUpscaleResult {
         path: final_path.to_string_lossy().to_string(),

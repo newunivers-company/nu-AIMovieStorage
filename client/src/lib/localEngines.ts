@@ -3,6 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isDesktopApp } from "@/lib/llm";
 import { isEngineIncluded } from "@/lib/edition";
+import {
+  isComfyRemote,
+  isComfyUnreachable,
+  loadComfyFleet,
+  newComfyJobId,
+  remoteOrder,
+  runComfy,
+  subscribeComfyFleet,
+} from "@/lib/comfyFleet";
 
 /**
  * 로컬 생성 엔진 — 프런트 쪽.
@@ -536,6 +545,8 @@ export interface LocalProgressEvent {
   message: string;
   done: boolean;
   error: string | null;
+  /** 사내 ComfyUI 작업 번호. 같은 엔진으로 여러 장을 동시에 돌릴 때 자기 것만 고르려고 씁니다. */
+  job?: string | null;
 }
 
 export interface LocalSnapshot {
@@ -659,12 +670,31 @@ export function useLocalEngines(): LocalSnapshot {
 }
 
 
-/** 설치돼 있어 지금 쓸 수 있는 엔진. 갈래를 주면 그 갈래만. */
+/**
+ * 지금 쓸 수 있는 엔진 — 이 컴퓨터에 설치돼 있거나, **사내 ComfyUI 로 뽑을 수 있는** 것.
+ * 갈래를 주면 그 갈래만.
+ *
+ * 사내 ComfyUI 가 켜져 있으면 설치하지 않은 엔진도 여기 들어오고, 사용자가 정한 엔진
+ * (그림 Qwen-Image 2.1 · 영상 MiniMax H3)이 맨 앞에 섭니다(`comfyFleet.ts`).
+ * 원격은 데스크톱 앱에서만 됩니다 — 호출이 Rust 를 거치기 때문입니다.
+ */
 export function availableLocalEngines(kind?: LocalEngineKind): LocalEngineStatus[] {
+  const remote = isDesktopApp() && loadComfyFleet().enabled;
   return snapshot.engines
-    .filter((engine) => engine.installed && (!kind || engine.kind === kind))
-    .sort((a, b) => a.priority - b.priority);
+    .filter(
+      (engine) =>
+        (engine.installed || (remote && isComfyRemote(engine.id))) && (!kind || engine.kind === kind),
+    )
+    .sort((a, b) => (remote ? remoteOrder(a) - remoteOrder(b) : a.priority - b.priority));
 }
+
+/** 이 엔진으로 뽑으면 어디서 도는가 — 버튼 문구와 안내에 씁니다. */
+export function runsOnComfy(engine: LocalEngineId): boolean {
+  return isDesktopApp() && isComfyRemote(engine);
+}
+
+// 사내 ComfyUI 를 켜고 끄면 엔진 목록이 달라집니다 — 구독하는 화면을 다시 그리게 알립니다.
+subscribeComfyFleet(() => publish());
 
 /* ────────────────────────── 진행 이벤트 ────────────────────────── */
 
@@ -753,12 +783,17 @@ function ensureProgressHook(): Promise<void> {
 export function onLocalProgress(
   listener: (event: LocalProgressEvent) => void,
   engine?: string,
+  /** 주면 그 원격 작업의 이벤트만 받습니다. */
+  job?: string,
 ): () => void {
-  const wrapped = engine
-    ? (event: LocalProgressEvent) => {
-        if (event.engine === engine) listener(event);
-      }
-    : listener;
+  const wrapped =
+    engine || job
+      ? (event: LocalProgressEvent) => {
+          if (engine && event.engine !== engine) return;
+          if (job && event.job !== job) return;
+          listener(event);
+        }
+      : listener;
   progressListeners.add(wrapped);
   void ensureProgressHook();
   return () => {
@@ -1065,14 +1100,39 @@ export async function runLocal(
   hooks?: {
     onProgress?: (event: LocalProgressEvent) => void;
     timeoutSecs?: number;
+    /** 참이 되면 멈춥니다. 지금은 사내 ComfyUI 작업만 멈출 수 있습니다(`runComfy`). */
+    shouldStop?: () => boolean;
   },
 ): Promise<LocalRunResult> {
   assertDesktop("로컬 모델로 생성");
   await ensureProgressHook();
-  const off = hooks?.onProgress
-    ? onLocalProgress(hooks.onProgress, engine)
-    : () => {};
+  const remote = isComfyRemote(engine);
+  const jobId = remote ? newComfyJobId() : undefined;
+  let off = hooks?.onProgress ? onLocalProgress(hooks.onProgress, engine, jobId) : () => {};
+  /** 사내 ComfyUI 에 닿지 못해 이 컴퓨터로 되돌아왔으면 그 까닭. 결과 메타에 실어 알립니다. */
+  let fellBack = "";
   try {
+    /*
+      **사내 ComfyUI 가 켜져 있고 그쪽에서 뽑을 수 있는 엔진이면 그리로 보냅니다.**
+      같은 `opts`, 같은 진행 이벤트(`local-progress`), 같은 결과 꼴이라 부르는 쪽은 차이를 모릅니다.
+      결과의 `meta.backend` 가 «comfy» 이고, 어느 서버에서 뽑았는지가 `meta.endpoint` 에 있습니다.
+    */
+    if (remote) {
+      try {
+        return await runComfy(engine, outputPath, options, hooks?.timeoutSecs, hooks?.shouldStop, jobId);
+      } catch (error) {
+        /*
+          **사내망 밖이면 이 컴퓨터의 엔진으로 되돌아갑니다.** 사내 ComfyUI 는 기본으로 켜져 있어서,
+          집·다른 지사처럼 서버에 닿지 않는 곳에서는 예전에 되던 로컬 생성이 전부 막혔습니다
+          (코드 리뷰 2026-09-25). 서버에 닿았는데 실패한 것은 되돌아가지 않습니다.
+        */
+        const local = snapshot.engines.find((item) => item.id === engine);
+        if (!isComfyUnreachable(error) || !local?.installed) throw error;
+        fellBack = "사내 ComfyUI 에 닿지 않아 이 컴퓨터의 엔진으로 뽑았습니다";
+        off();
+        off = hooks?.onProgress ? onLocalProgress(hooks.onProgress, engine) : () => {};
+      }
+    }
     const raw = await invoke<{
       output: string;
       seconds: number;
@@ -1086,7 +1146,7 @@ export async function runLocal(
     return {
       output: raw.output,
       seconds: Number(raw.seconds) || 0,
-      meta: raw.meta ?? {},
+      meta: fellBack ? { ...(raw.meta ?? {}), comfy_fallback: fellBack } : (raw.meta ?? {}),
     };
   } finally {
     off();

@@ -15,6 +15,7 @@
   "로라 (엔진별로 찾고 받기)": "LoRA (find and download per engine)",
   "마그니픽 (MCP 로 끝까지 뽑기)": "Magnific (generate end-to-end via MCP)",
   "로컬 모델 (그림·영상·음악)": "Local models (image · video · music)",
+  "사내 ComfyUI (원격 생성)": "Company ComfyUI (remote generation)",
   "업스케일 엔진": "Upscale engines",
   "가이드 문서 관리": "Guide documents",
   "작업별 모델": "Per-task models",

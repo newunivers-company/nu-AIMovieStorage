@@ -89,6 +89,7 @@ registerTaskRunner(BGM_TASK, async (raw, report, task) => {
       precision: loadPrecision(),
     },
     timeoutSecs: 3600,
+    shouldStop: () => isStopping(task.id),
     onProgress: (message) => report({ step: message || "뽑는 중" }),
   });
 

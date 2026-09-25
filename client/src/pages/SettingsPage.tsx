@@ -3,6 +3,7 @@ import { LLM_CONCURRENCY, LLM_CONCURRENCY_CHOICES, getLlmConcurrency, setLlmConc
 import {
   BookOpen,
   Cpu,
+  Server,
   FileText,
   FolderOpen,
   Grid2x2,
@@ -36,6 +37,7 @@ import { READING_WIDTH } from "@/lib/layout";
 import { ConfirmDialogHost, confirmDialog } from "@/components/ConfirmDialog";
 import PromptLibraryPanel from "@/components/PromptLibraryPanel";
 import LocalEnginesPanel from "@/components/LocalEnginesPanel";
+import ComfyFleetPanel from "@/components/ComfyFleetPanel";
 import {
   getAutoUnfoldEnabled,
   setAutoUnfoldEnabled,
@@ -847,6 +849,11 @@ export default function SettingsPage() {
 
         <Section icon={Link2} tint="oklch(0.78 0.16 45)" title={t("마그니픽 (MCP 로 끝까지 뽑기)")} anchor="settings-magnific">
           <MagnificConnectPanel />
+        </Section>
+
+        {/* 사내 ComfyUI — 켜 두면 아래 로컬 모델 대신 회사 서버에서 뽑습니다. 그래서 바로 위에 둡니다. */}
+        <Section icon={Server} tint="oklch(0.78 0.16 200)" title={t("사내 ComfyUI (원격 생성)")} anchor="settings-comfy-fleet">
+          <ComfyFleetPanel />
         </Section>
 
         <Section icon={Cpu} tint="oklch(0.78 0.16 290)" title={t("로컬 모델 (그림·영상·음악)")} anchor="settings-local-engines">

@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 /// 로컬 업스케일 엔진(설치·상주 워커·실행). ComfyUI 다리와는 별개입니다 —
 /// 이 파일 아래쪽의 `comfy_*` 는 «외부 엔진» 으로 그대로 남습니다.
 mod comfy;
+mod comfy_gen;
 mod datafiles;
 mod download;
 mod edition;
@@ -1404,6 +1405,12 @@ pub fn run() {
             comfy::comfy_inspect_workflow,
             comfy::comfy_check_connection,
             comfy::comfy_upscale_image,
+            comfy_gen::comfy_generate,
+            comfy_gen::comfy_cancel,
+            comfy_gen::comfy_upscale_fleet,
+            comfy_gen::comfy_fleet_status,
+            comfy_gen::comfy_fleet_check,
+            comfy_gen::comfy_remote_engines,
             upscale::upscale_engines_status,
             upscale::upscale_install_engine,
             upscale::upscale_cancel_install,

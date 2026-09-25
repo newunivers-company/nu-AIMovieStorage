@@ -1,0 +1,173 @@
+{
+  "_about": "Qwen-Image 2.1 (int8) 텍스트→그림. 사내 서버에서 수백 번 성공한 그래프 그대로. 레퍼런스 그림을 주면 images.image_N 으로 물립니다.",
+  "engine": "qwenimage",
+  "kind": "image",
+  "extension": "png",
+  "defaults": {
+    "width": 1328,
+    "height": 1328,
+    "size_step": 16,
+    "negative": "text, letters, watermark, extra fingers, deformed hands, blurry, low quality"
+  },
+  "graph": {
+    "37": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "qwen_image_2.1_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "38": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+        "type": "qwen_image",
+        "device": "default"
+      }
+    },
+    "39": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    "452": {
+      "class_type": "TextEncodeQwenImage21",
+      "inputs": {
+        "clip": [
+          "38",
+          0
+        ],
+        "prompt": "",
+        "negative_prompt": "",
+        "resolution": 1024
+      }
+    },
+    "456": {
+      "class_type": "EmptyLatentImage",
+      "inputs": {
+        "width": 1328,
+        "height": 1328,
+        "batch_size": 1
+      }
+    },
+    "458": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": [
+          "37",
+          0
+        ],
+        "positive": [
+          "452",
+          0
+        ],
+        "negative": [
+          "452",
+          1
+        ],
+        "latent_image": [
+          "456",
+          0
+        ],
+        "seed": 0,
+        "steps": 25,
+        "cfg": 1.0,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1.0
+      }
+    },
+    "457": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": [
+          "458",
+          0
+        ],
+        "vae": [
+          "39",
+          0
+        ]
+      }
+    },
+    "460": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "457",
+          0
+        ],
+        "filename_prefix": ""
+      }
+    }
+  },
+  "bind": {
+    "prompt": [
+      [
+        "452",
+        "prompt"
+      ]
+    ],
+    "negative": [
+      [
+        "452",
+        "negative_prompt"
+      ]
+    ],
+    "width": [
+      [
+        "456",
+        "width"
+      ]
+    ],
+    "height": [
+      [
+        "456",
+        "height"
+      ]
+    ],
+    "seed": [
+      [
+        "458",
+        "seed"
+      ]
+    ],
+    "prefix": [
+      [
+        "460",
+        "filename_prefix"
+      ]
+    ]
+  },
+  "references": {
+    "max": 4,
+    "input": [
+      "452",
+      "images.image_{n}"
+    ],
+    "extra": [
+      [
+        "452",
+        "vae",
+        [
+          "39",
+          0
+        ]
+      ]
+    ]
+  },
+  "loras": {
+    "after": "37",
+    "into": [
+      [
+        "458",
+        "model"
+      ]
+    ]
+  },
+  "output": {
+    "node": "460",
+    "key": "images"
+  }
+}

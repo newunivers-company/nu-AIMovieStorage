@@ -34,6 +34,8 @@ export interface LocalOutput {
   /** 확장자 없는 파일 이름. 화면에 적고 `@태그` 로도 씁니다. */
   name: string;
   seconds: number;
+  /** 엔진이 덧붙인 값. 사내 ComfyUI 로 뽑았으면 `backend: "comfy"` 와 서버 주소가 있습니다. */
+  meta: Record<string, unknown>;
 }
 
 const stemOf = (path: string) =>
@@ -53,6 +55,8 @@ export async function runLocalToProject(input: {
   opts: LocalRunOptions;
   timeoutSecs?: number;
   onProgress?: (message: string) => void;
+  /** 참이 되면 멈춥니다(사내 ComfyUI 작업). */
+  shouldStop?: () => boolean;
 }): Promise<LocalOutput> {
   const stem = `${safeFileName(input.stem)}_로컬`;
   const mime = { image: "image/png", video: "video/mp4", audio: "audio/wav" }[input.kind];
@@ -65,10 +69,21 @@ export async function runLocalToProject(input: {
   });
   if (!saved?.path) throw new Error("결과를 놓을 자리를 만들지 못했습니다.");
 
-  const result = await runLocal(input.engine, saved.path, input.opts, {
-    timeoutSecs: input.timeoutSecs,
-    onProgress: input.onProgress ? (event) => input.onProgress!(event.message || "") : undefined,
-  });
+  let result;
+  try {
+    result = await runLocal(input.engine, saved.path, input.opts, {
+      timeoutSecs: input.timeoutSecs,
+      shouldStop: input.shouldStop,
+      onProgress: input.onProgress ? (event) => input.onProgress!(event.message || "") : undefined,
+    });
+  } catch (error) {
+    /*
+      **실패하거나 멈춰도 자리 파일을 치웁니다.** 예전에는 성공한 길에서만 치워서, 실패할 때마다
+      0바이트 짝이 폴더에 하나씩 남았습니다(2026-09-24, 사내 ComfyUI «멈추기» 를 붙이다 발견).
+    */
+    await deleteProjectMediaFile(input.projectName, saved.path).catch(() => undefined);
+    throw error;
+  }
 
   /*
     자리로 잡아 둔 빈 파일은 치웁니다. **결과가 그 자리에 놓인 경우에는 건드리지
@@ -79,5 +94,10 @@ export async function runLocalToProject(input: {
       // 못 지워도 그림은 제대로 나옵니다. 빈 파일 하나가 남을 뿐입니다.
     });
   }
-  return { path: result.output, name: stemOf(result.output) || stem, seconds: result.seconds };
+  return {
+    path: result.output,
+    name: stemOf(result.output) || stem,
+    seconds: result.seconds,
+    meta: result.meta,
+  };
 }
