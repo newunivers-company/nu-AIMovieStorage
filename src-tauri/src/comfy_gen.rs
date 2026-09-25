@@ -642,7 +642,14 @@ async fn check_endpoint(client: &reqwest::Client, url: &str) -> EndpointCheck {
         .chain(std::iter::once("seedvr2_upscale"))
         .filter_map(|name| {
             let doc = workflow_doc(name).ok()?;
-            let graph = doc.get("graph")?.as_object()?.clone();
+            let mut graph = doc.get("graph")?.as_object()?.clone();
+            // «빠르게»(기본값)가 얹는 터보 로라도 서버에 있어야 합니다 — 그래프에는 없어서 따로 넣어 봅니다.
+            if let Some(lora) = doc.pointer("/fast/lora").and_then(Value::as_str) {
+                graph.insert(
+                    "fastlora_check".into(),
+                    json!({ "class_type": "LoraLoaderModelOnly", "inputs": { "lora_name": lora } }),
+                );
+            }
             Some(WorkflowCheck {
                 workflow: name.to_string(),
                 engine: doc.get("engine").and_then(Value::as_str).unwrap_or("").to_string(),
@@ -775,11 +782,15 @@ pub(crate) fn flac_to_wav(bytes: &[u8]) -> Res<Vec<u8>> {
 
 /// 진행 줄. 생성은 로컬 모델과 같은 이벤트(`local-progress`)라 카드의 진행 문구가 그대로 움직입니다.
 /// 업스케일은 설정 화면(업스케일) 쪽 이벤트로 보냅니다 — 로컬 모델 화면의 진행 줄이 움직이면 안 됩니다.
-fn emit_progress_on(app: &AppHandle, event: &str, engine: &str, message: &str) {
+///
+/// `job` 은 프런트가 준 작업 번호입니다. 같은 엔진으로 카드 여러 장을 동시에 돌리면 이벤트의 엔진 이름이
+/// 같아서, 번호가 없으면 카드마다 남의 진행 문구(다른 서버·다른 대기 순번)가 뜹니다.
+fn emit_progress_on(app: &AppHandle, event: &str, engine: &str, job: Option<&str>, message: &str) {
     let _ = app.emit(
         event,
         json!({
             "engine": engine,
+            "job": job,
             "stage": "run",
             "percent": Value::Null,
             "message": message,
@@ -793,20 +804,68 @@ fn host_of(base: &str) -> &str {
     base.trim_start_matches("http://").trim_start_matches("https://")
 }
 
-/// 시간이 다 됐을 때 **우리가 보낸 것만** 거둡니다. 대기 중이면 빼고, 돌고 있으면 그것만 멈춥니다.
+/// **우리가 보낸 것만** 거둡니다. 대기 중이면 대기열에서 빼고, 돌고 있을 때만 멈춥니다.
+///
+/// `/interrupt` 는 **지금 도는 작업이 우리 것일 때만** 보냅니다. `prompt_id` 를 무시하는 판의 ComfyUI 는
+/// `/interrupt` 를 받으면 그 GPU 에서 도는 작업을 무조건 멈추는데, 우리 작업이 대기 중이었다면 그것은
+/// 동료의 작업입니다(코드 리뷰 2026-09-25).
 async fn withdraw(client: &reqwest::Client, base: &str, prompt_id: &str) {
+    let queue: Value = match client.get(format!("{base}/queue")).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => response.json().await.unwrap_or_default(),
+        Err(_) => Value::Null,
+    };
     let _ = client
         .post(format!("{base}/queue"))
         .json(&json!({ "delete": [prompt_id] }))
         .timeout(Duration::from_secs(10))
         .send()
         .await;
-    let _ = client
-        .post(format!("{base}/interrupt"))
-        .json(&json!({ "prompt_id": prompt_id }))
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await;
+    if is_running(&queue, prompt_id) {
+        let _ = client
+            .post(format!("{base}/interrupt"))
+            .json(&json!({ "prompt_id": prompt_id }))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await;
+    }
+}
+
+/// `/queue` 응답에서 이 작업이 지금 도는 중인가.
+fn is_running(queue: &Value, prompt_id: &str) -> bool {
+    queue
+        .get("queue_running")
+        .and_then(Value::as_array)
+        .is_some_and(|items| items.iter().any(|item| item.get(1).and_then(Value::as_str) == Some(prompt_id)))
+}
+
+/// 업로드 이름에 섞을 값 — 작업 번호(프로세스 번호 + 순번)는 **PC 사이에서** 겹칠 수 있습니다.
+/// 서버 input 폴더는 모두가 같이 쓰므로, 두 PC 가 같은 이름을 올리면 먼저 올린 사람의 첫 프레임이
+/// 덮입니다(코드 리뷰 2026-09-25). 시각과 무작위 해시를 섞어 겹치지 않게 합니다.
+fn unique_suffix() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
+    format!("{:012x}", hasher.finish() & 0xffff_ffff_ffff)
+}
+
+/// 레퍼런스를 워크플로가 받는 수만큼만 남깁니다 — 받지 않을 파일을 올리지 않게.
+fn trim_refs(doc: &Value, asked: Refs) -> Refs {
+    let max = |key: &str| doc.pointer(&format!("/{key}/max")).and_then(Value::as_u64).map(|m| m as usize);
+    let keep = |list: Vec<String>, key: &str| match (doc.get(key), max(key)) {
+        (Some(_), Some(m)) => list.into_iter().take(m).collect(),
+        (Some(_), None) => list,
+        (None, _) => Vec::new(),
+    };
+    Refs {
+        images: keep(asked.images, "references"),
+        videos: keep(asked.videos, "video_references"),
+        audios: keep(asked.audios, "audio_references"),
+    }
 }
 
 /// 서버 하나에 보낼 요청의 재료. 서버를 바꿔 다시 보낼 때 같은 값을 그대로 씁니다.
@@ -900,6 +959,10 @@ impl JobEntry {
         JobEntry(job_id)
     }
 
+    fn id(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+
     fn cancelled(&self) -> bool {
         let Some(id) = &self.0 else { return false };
         jobs().lock().map(|m| m.get(id).map(|j| j.cancelled).unwrap_or(false)).unwrap_or(false)
@@ -975,7 +1038,7 @@ async fn run_remote(
         return Err("사내 ComfyUI 주소가 없습니다. 설정 → 사내 ComfyUI 에서 주소를 넣으세요.".into());
     }
     let client = http_client()?;
-    emit_progress_on(app, event, engine, "사내 ComfyUI 서버 상태를 확인하는 중…");
+    emit_progress_on(app, event, engine, job.id(), "사내 ComfyUI 서버 상태를 확인하는 중…");
     let statuses = futures_util::future::join_all(endpoints.iter().map(|url| probe(&client, url))).await;
     // 1순위는 여기서 바로 예약됩니다 — 동시에 들어온 다른 요청이 같은 서버로 몰리지 않게(`rank_and_reserve`).
     let (ranked, mut first_reservation) = rank_and_reserve(&statuses);
@@ -987,7 +1050,7 @@ async fn run_remote(
         return Err(format!("응답하는 사내 ComfyUI 가 없습니다.\n{}", why.join("\n")));
     }
 
-    let tag = job_tag().replace('-', "_");
+    let tag = format!("{}_{}", job_tag().replace('-', "_"), unique_suffix());
     let seed = opts.get("seed").and_then(Value::as_u64).unwrap_or_else(|| {
         // 시드를 안 주면 매번 다른 그림이 나와야 합니다. 시각과 작업 번호를 섞습니다.
         let nanos = std::time::SystemTime::now()
@@ -998,13 +1061,19 @@ async fn run_remote(
     }) % 1_125_899_906_842_624;
     let prefix = format!("aimoviestorage/{engine}_{tag}");
     let image_path = non_empty(opts, "image").map(str::to_string);
-    // 워크플로가 자리를 선언한 종류만 올립니다 — 받을 곳 없는 파일은 올리지 않고 «못 실음» 으로 셉니다.
-    let asked = references_of(opts);
-    let reference_paths = Refs {
-        images: if doc.get("references").is_some() { asked.images } else { Vec::new() },
-        videos: if doc.get("video_references").is_some() { asked.videos } else { Vec::new() },
-        audios: if doc.get("audio_references").is_some() { asked.audios } else { Vec::new() },
+    // 워크플로가 자리를 선언한 종류만, 받는 수만큼만 올립니다 — 나머지는 올리지 않고 «못 실음» 으로 셉니다.
+    let reference_paths = trim_refs(doc, references_of(opts));
+    /*
+      **올리기 전에 한 번 채워 봅니다.** 프롬프트가 없거나 첫 프레임이 빠진 것은 서버를 바꿔도 같은
+      실패입니다. 예전에는 파일을 다 올린 뒤에야 알았고, 서버 네 대에 차례로 같은 파일을 올렸습니다.
+    */
+    let placeholder = |list: &Vec<String>| list.iter().map(|_| "check".to_string()).collect::<Vec<_>>();
+    let dry_refs = Refs {
+        images: placeholder(&reference_paths.images),
+        videos: placeholder(&reference_paths.videos),
+        audios: placeholder(&reference_paths.audios),
     };
+    fill(doc, opts, image_path.as_deref().map(|_| "check.png"), &dry_refs, &prefix, seed)?;
     let loras: Vec<(String, f64)> = opts
         .get("loras")
         .and_then(Value::as_array)
@@ -1030,7 +1099,7 @@ async fn run_remote(
         let base = status.url.clone();
         // 1순위는 이미 예약해 두었습니다. 거절당해 다음 서버로 넘어갈 때는 그 서버를 새로 예약합니다.
         let reservation = first_reservation.take().unwrap_or_else(|| Reservation::take(&base));
-        emit_progress_on(app, event, engine, &format!("{} 에 요청을 올리는 중…", host_of(&base)));
+        emit_progress_on(app, event, engine, job.id(), &format!("{} 에 요청을 올리는 중…", host_of(&base)));
         let request = Submission {
             doc,
             opts,
@@ -1055,7 +1124,7 @@ async fn run_remote(
             }
         }
     }
-    let Some((base, prompt_id, filled, lora_used, lora_dropped, _reservation)) = accepted else {
+    let Some((base, prompt_id, filled, lora_used, lora_dropped, reservation)) = accepted else {
         return Err(format!("어느 사내 ComfyUI 도 요청을 받지 않았습니다.\n{}", rejections.join("\n")));
     };
     let host = host_of(&base).to_string();
@@ -1070,8 +1139,16 @@ async fn run_remote(
     let deadline = Instant::now() + Duration::from_secs(timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
     let queued_at = Instant::now();
     let mut running_since: Option<Instant> = None;
+    /*
+      예약은 **서버 대기열에 보일 때까지만** 잡습니다. 보인 뒤에도 잡고 있으면 이 앱의 작업이 대기열과
+      예약에서 두 번 세어져, 한가한 서버를 바쁜 서버로 봅니다(코드 리뷰 2026-09-25).
+    */
+    let mut reservation = Some(reservation);
+    // 대기열에도 기록에도 없는 횟수. 서버가 다시 시작되면 작업이 사라져 끝없이 기다리게 됩니다.
+    let mut unseen_polls = 0u32;
     let outputs = loop {
         tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = &reservation;
         // 거두기는 `comfy_cancel` 이 이미 했습니다. 여기서는 기다리기만 그만둡니다.
         if job.cancelled() {
             return Err(CANCELLED.into());
@@ -1086,6 +1163,7 @@ async fn run_remote(
             Err(_) => continue,
         };
         if let Some(entry) = history.get(&prompt_id) {
+            reservation = None;
             if entry.pointer("/status/status_str").and_then(Value::as_str) == Some("error") {
                 let detail = entry
                     .pointer("/status/messages")
@@ -1110,6 +1188,24 @@ async fn run_remote(
             Ok(response) => response.json().await.unwrap_or_default(),
             Err(_) => Value::Null,
         };
+        let in_queue = |key: &str| {
+            queue
+                .get(key)
+                .and_then(Value::as_array)
+                .is_some_and(|items| items.iter().any(|item| item.get(1).and_then(Value::as_str) == Some(prompt_id.as_str())))
+        };
+        if in_queue("queue_running") || in_queue("queue_pending") {
+            reservation = None;
+            unseen_polls = 0;
+        } else if queue.get("queue_running").is_some() && history.get(&prompt_id).is_none() {
+            // 대기열을 제대로 받았는데 어디에도 없습니다. 끝나는 순간의 틈일 수 있어 몇 번 더 봅니다(약 10초).
+            unseen_polls += 1;
+            if unseen_polls >= 5 {
+                return Err(format!(
+                    "사내 ComfyUI({host})에서 작업이 사라졌습니다. 서버가 다시 시작되었거나 기록이 지워졌을 수 있습니다 — 다시 뽑아 주세요."
+                ));
+            }
+        }
         let has = |key: &str| {
             queue.get(key).and_then(Value::as_array).map(|items| {
                 items.iter().position(|item| item.get(1).and_then(Value::as_str) == Some(prompt_id.as_str()))
@@ -1124,7 +1220,7 @@ async fn run_remote(
         } else {
             format!("사내 ComfyUI({host})에서 마무리하는 중…")
         };
-        emit_progress_on(app, event, engine, &message);
+        emit_progress_on(app, event, engine, job.id(), &message);
     };
 
     let item = outputs
@@ -1134,7 +1230,7 @@ async fn run_remote(
     let filename = item.get("filename").and_then(Value::as_str).ok_or("결과에 파일 이름이 없습니다.")?.to_string();
     let subfolder = item.get("subfolder").and_then(Value::as_str).unwrap_or("").to_string();
     let kind = item.get("type").and_then(Value::as_str).unwrap_or("output").to_string();
-    emit_progress_on(app, event, engine, &format!("사내 ComfyUI({host})에서 결과를 받는 중…"));
+    emit_progress_on(app, event, engine, job.id(), &format!("사내 ComfyUI({host})에서 결과를 받는 중…"));
     let response = client
         .get(format!("{base}/view"))
         .query(&[("filename", filename.as_str()), ("subfolder", subfolder.as_str()), ("type", kind.as_str())])
@@ -1594,6 +1690,41 @@ mod tests {
         assert_links_resolve(&result.graph);
         // 생성 워크플로는 여전히 프롬프트가 필수입니다.
         assert!(fill(&workflow_doc("zimage").unwrap(), &json!({}), None, &Refs::default(), "p", 1).is_err());
+    }
+
+    /// 받는 수보다 많은 레퍼런스는 올리기 전에 잘라 냅니다. 자리가 없는 종류는 통째로 뺍니다.
+    #[test]
+    fn references_are_trimmed_to_what_the_workflow_takes() {
+        let many = Refs {
+            images: (0..6).map(|i| format!("{i}.png")).collect(),
+            videos: (0..5).map(|i| format!("{i}.mp4")).collect(),
+            audios: vec!["a.wav".into()],
+        };
+        let qwen = trim_refs(&workflow_doc("qwenimage").unwrap(), many.clone());
+        assert_eq!(qwen.images.len(), 4);
+        assert!(qwen.videos.is_empty() && qwen.audios.is_empty());
+        let h3 = trim_refs(&workflow_doc("minimaxh3_r2v").unwrap(), many.clone());
+        assert_eq!((h3.images.len(), h3.videos.len(), h3.audios.len()), (6, 3, 1));
+        let wan = trim_refs(&workflow_doc("wanvideo_t2v").unwrap(), many);
+        assert_eq!(wan.total(), 0);
+    }
+
+    /// 대기 중인 작업을 거둘 때는 interrupt 를 보내지 않습니다(돌고 있는 것은 남의 작업).
+    #[test]
+    fn interrupt_only_when_our_job_is_running() {
+        let queue = json!({ "queue_running": [[1, "theirs", {}]], "queue_pending": [[2, "ours", {}]] });
+        assert!(!is_running(&queue, "ours"));
+        assert!(is_running(&queue, "theirs"));
+        assert!(!is_running(&Value::Null, "ours"));
+    }
+
+    /// 업로드 이름에 섞는 값은 매번 다릅니다(PC 사이에서 겹치지 않게).
+    #[test]
+    fn upload_suffix_differs_each_time() {
+        let a = unique_suffix();
+        let b = unique_suffix();
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 12);
     }
 
     #[test]

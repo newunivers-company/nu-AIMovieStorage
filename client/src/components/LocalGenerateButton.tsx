@@ -5,7 +5,6 @@ import { findFillerWords } from "@/lib/modelRules";
 import {
   availableLocalEngines,
   loadPrecision,
-  onLocalProgress,
   runsOnComfy,
   useLocalEngines,
   type LocalEngineId,
@@ -127,9 +126,10 @@ export default function LocalGenerateButton({
     stopRef.current = false;
     setStopping(false);
     setStatus("모델을 올리는 중…");
-    const off = onLocalProgress((event) => {
-      setStatus(event.message || "");
-    }, engine.id);
+    /*
+      진행 문구는 **이 카드의 작업 것만** 받습니다(`runLocalToProject` → `runLocal` 이 작업 번호로 거릅니다).
+      예전에는 엔진 이름으로만 걸러서, 같은 엔진으로 카드 여러 장을 돌리면 남의 서버·대기 순번이 떴습니다.
+    */
     try {
       /*
         결과를 프로젝트 폴더에 놓으려면 «그 폴더 안의 경로» 가 필요합니다. 빈 파일로
@@ -204,6 +204,7 @@ export default function LocalGenerateButton({
       const size = localSize(engine.id, aspect);
       const result = await runLocalToProject({
         shouldStop: () => stopRef.current,
+        onProgress: (message) => setStatus(message),
         engine: engine.id,
         extension: engine.extension,
         kind,
@@ -247,14 +248,20 @@ export default function LocalGenerateButton({
         시트를 골라 둔 채로 «만들었습니다» 만 띄웠습니다. 그래서 컷마다 얼굴이 달라지는데도
         까닭을 알 수가 없었습니다. 말없이 버리지 않습니다.
       */
+      /*
+        원격이면 **보내지도 않은 것**을 여기서 셉니다 — 레퍼런스를 받지 않는 엔진(Z-Image·Krea 2·Wan·LTX)의
+        레퍼런스, 그림의 첫 프레임. 서버가 받고도 못 실은 것(상한 초과 등)은 `comfyDroppedNote` 가 따로 알립니다.
+      */
       const dropped = remote
-        ? 0 // 원격은 서버가 실제로 못 실은 것을 결과에 적어 보냅니다(`comfyDroppedNote`).
+        ? (kind === "image" && firstFrame ? 1 : 0) + (takesImageRefs ? 0 : (references?.length ?? 0))
         : kind === "image"
           ? (references?.length ?? 0) + (firstFrame ? 1 : 0)
           : engine.id === "minimaxh3"
             ? 0
             : (references?.length ?? 0);
-      const remoteNote = comfyDroppedNote(result.meta);
+      const remoteNote =
+        comfyDroppedNote(result.meta) ||
+        (typeof result.meta.comfy_fallback === "string" ? result.meta.comfy_fallback : "");
       const where = remote ? ` · 사내 ComfyUI ${comfyHostOf(result.meta)}` : "";
       toast.success(`${engineName} 으로 만들었습니다.`, {
         description:
@@ -274,7 +281,6 @@ export default function LocalGenerateButton({
       if (isComfyCancelled(error)) toast.message(`${engineName} 작업을 멈췄습니다.`);
       else toast.error(String(error));
     } finally {
-      off();
       setStatus("");
       setBusy(false);
       setStopping(false);

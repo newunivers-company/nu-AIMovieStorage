@@ -190,8 +190,9 @@ export async function runComfy(
   opts: unknown,
   timeoutSecs?: number,
   shouldStop?: () => boolean,
+  /** 진행 이벤트를 거를 번호. 부르는 쪽이 먼저 구독하려면 `newComfyJobId()` 로 만들어 넘깁니다. */
+  jobId: string = newComfyJobId(),
 ): Promise<ComfyRunResult> {
-  const jobId = `aims-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   let asked = false;
   const watch = shouldStop
     ? setInterval(() => {
@@ -214,6 +215,21 @@ export async function runComfy(
   } finally {
     if (watch) clearInterval(watch);
   }
+}
+
+/** 원격 작업 번호. 진행 이벤트(`local-progress` 의 `job`)와 «멈추기» 가 이 번호로 작업을 찾습니다. */
+export function newComfyJobId(): string {
+  return `aims-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * 사내 ComfyUI 에 **닿지 못한** 실패인가(어느 서버도 응답하지 않음·주소 없음).
+ * 이때만 로컬 엔진으로 되돌아갑니다 — 서버가 받아서 돌리다 실패한 것은 로컬로 다시 돌려도
+ * 같은 요청이라, 되돌아가면 몇 분짜리 일을 두 번 하게 됩니다.
+ */
+export function isComfyUnreachable(error: unknown): boolean {
+  const text = String(error);
+  return text.includes("응답하는 사내 ComfyUI 가 없습니다") || text.includes("사내 ComfyUI 주소가 없습니다");
 }
 
 /** Rust 가 «멈췄습니다» 로 끝낸 것인가 — 실패 알림 대신 조용히 넘기려고. */

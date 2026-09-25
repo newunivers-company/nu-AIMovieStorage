@@ -423,10 +423,19 @@ async function localImage(
   */
   const remoteRefs = runsOnComfy(engine) && engine === "qwenimage" ? references.slice(0, 4) : [];
   if (runsOnComfy(engine)) {
+    /*
+      레퍼런스를 받는 것은 사내 **Qwen-Image 2.1 뿐**이고 그것도 4장까지입니다. 나머지를 조용히 버리면
+      컷마다 얼굴이 달라지는 까닭을 못 찾습니다(코드 리뷰 2026-09-25) — 작업 줄에 적어 둡니다.
+    */
+    const left = references.length - remoteRefs.length;
     report({
-      step: remoteRefs.length
-        ? `사내 ComfyUI 로 보내는 중 · 레퍼런스 ${remoteRefs.length}장`
-        : "사내 ComfyUI 로 보내는 중",
+      step:
+        (remoteRefs.length ? `사내 ComfyUI 로 보내는 중 · 레퍼런스 ${remoteRefs.length}장` : "사내 ComfyUI 로 보내는 중") +
+        (left > 0
+          ? engine === "qwenimage"
+            ? ` · 레퍼런스 ${left}장은 싣지 못함(4장까지)`
+            : ` · 이 모델은 글만 받습니다(인물 시트 ${left}장 못 실음)`
+          : ""),
     });
   } else {
     /*

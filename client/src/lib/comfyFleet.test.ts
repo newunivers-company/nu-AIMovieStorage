@@ -9,6 +9,7 @@ import {
   comfyDroppedNote,
   comfyHostOf,
   isComfyCancelled,
+  isComfyUnreachable,
   isComfyRemote,
   loadComfyFleet,
   remoteOrder,
@@ -116,6 +117,17 @@ describe("원격 결과 알림", () => {
     expect(rust).toBeTruthy();
     expect(isComfyCancelled(rust)).toBe(true);
     expect(isComfyCancelled(new Error("사내 ComfyUI 가 실행 중 실패했습니다"))).toBe(false);
+  });
+
+  it("«서버에 닿지 못함» 만 로컬로 되돌아간다 — Rust 의 문구와 같아야 한다", () => {
+    for (const phrase of ["응답하는 사내 ComfyUI 가 없습니다", "사내 ComfyUI 주소가 없습니다"]) {
+      expect(RUST).toContain(phrase);
+      expect(isComfyUnreachable(`${phrase}.
+192.168.0.136:8190 — 연결 실패`)).toBe(true);
+    }
+    // 서버가 받고 돌리다 실패한 것은 되돌아가지 않습니다(같은 일을 두 번 하게 됨).
+    expect(isComfyUnreachable("사내 ComfyUI(192.168.0.136:8191)가 실행 중 실패했습니다: OOM")).toBe(false);
+    expect(isComfyUnreachable("어느 사내 ComfyUI 도 요청을 받지 않았습니다.")).toBe(false);
   });
 
   it("서버 주소에서 http 를 뗀다", () => {
