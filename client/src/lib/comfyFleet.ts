@@ -152,6 +152,8 @@ export interface ComfyEndpointStatus {
   pending: number;
   reserved: number;
   latencyMs: number;
+  /** 이 서버에 지금 올라가 있을 확산 모델 파일(가장 최근 작업 기준). */
+  loadedModels: string[];
 }
 
 /** 등록한 서버들을 한꺼번에 물어봅니다(설정의 «연결 확인»). */

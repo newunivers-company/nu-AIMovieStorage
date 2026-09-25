@@ -413,6 +413,32 @@ pub struct EndpointStatus {
     /// 이 앱이 보냈지만 아직 끝나지 않은 것.
     pub reserved: u64,
     pub latency_ms: u64,
+    /// 이 서버에 **지금 올라가 있을** 모델 파일 — 가장 최근 작업(대기 중인 마지막 것, 없으면 도는 것,
+    /// 없으면 기록의 마지막 것)이 쓴 확산 모델. 같은 모델이면 적재(H3 약 130초)를 건너뜁니다.
+    pub loaded_models: Vec<String>,
+}
+
+/// 모델을 새로 올리는 값을 «대기 중인 작업 몇 개» 로 친 것.
+///
+/// 2026-09-25 실측(H3 «빠르게», 3초 832×480): 모델이 올라가 있으면 한 편 43초이고 네 대를 동시에 써도
+/// 거의 느려지지 않았습니다(처리량 1.41 → 5.28 편/분). 새로 올리면 한 편이 약 130초 더 걸립니다 —
+/// 생성 세 편쯤입니다. 그림 모델은 적재가 훨씬 가벼우므로 보수적으로 2 로 잡습니다.
+const COLD_LOAD_PENALTY: u64 = 2;
+
+/// 그래프가 올리는 확산 모델(UNET·체크포인트) 파일 이름. 서버에 «이미 올라가 있는가» 를 견줄 때 씁니다.
+pub(crate) fn models_of(graph: &Value) -> Vec<String> {
+    let mut models: Vec<String> = graph
+        .as_object()
+        .into_iter()
+        .flat_map(|g| g.values())
+        .filter_map(|node| {
+            let inputs = node.get("inputs")?;
+            inputs.get("unet_name").or_else(|| inputs.get("ckpt_name")).and_then(Value::as_str).map(str::to_string)
+        })
+        .collect();
+    models.sort();
+    models.dedup();
+    models
 }
 
 /// 이 앱이 서버마다 보내 둔 작업 수. 서버의 대기열에 뜨기 전의 틈을 메웁니다.
@@ -454,9 +480,9 @@ impl Drop for Reservation {
 /// VRAM 이 가장 빈 서버를 똑같이 골랐습니다. 예약 표는 있었지만 줄을 세운 **뒤에** 잡아서,
 /// 뒤따르는 요청이 앞의 예약을 보지 못했습니다. 그래서 줄을 세우는 순간의 예약 수를 읽고
 /// 1순위를 곧바로 예약합니다 — 다음 요청은 그 예약을 보고 다른 서버를 고릅니다.
-fn rank_and_reserve(statuses: &[EndpointStatus]) -> (Vec<EndpointStatus>, Option<Reservation>) {
+fn rank_and_reserve(statuses: &[EndpointStatus], wanted: &[String]) -> (Vec<EndpointStatus>, Option<Reservation>) {
     let Ok(mut map) = reserved_map().lock() else {
-        return (rank(statuses), None);
+        return (rank(statuses, wanted), None);
     };
     let fresh: Vec<EndpointStatus> = statuses
         .iter()
@@ -466,7 +492,7 @@ fn rank_and_reserve(statuses: &[EndpointStatus]) -> (Vec<EndpointStatus>, Option
             status
         })
         .collect();
-    let ranked = rank(&fresh);
+    let ranked = rank(&fresh, wanted);
     let first = ranked.first().map(|status| {
         *map.entry(status.url.clone()).or_insert(0) += 1;
         Reservation(status.url.clone())
@@ -488,6 +514,7 @@ async fn probe(client: &reqwest::Client, url: &str) -> EndpointStatus {
         pending: 0,
         reserved: reserved_on(&base),
         latency_ms: 0,
+        loaded_models: Vec::new(),
     };
     let stats = client.get(format!("{base}/system_stats")).timeout(Duration::from_secs(5)).send().await;
     let stats: Value = match stats {
@@ -519,8 +546,20 @@ async fn probe(client: &reqwest::Client, url: &str) -> EndpointStatus {
             status.running = count("queue_running");
             status.pending = count("queue_pending");
             status.ok = true;
+            // 대기열의 마지막 것이 끝나면 그 모델이 올라가 있게 됩니다. 비어 있으면 도는 것.
+            let last = |key: &str| queue.get(key).and_then(Value::as_array).and_then(|a| a.last()).and_then(|item| item.get(2)).cloned();
+            status.loaded_models = last("queue_pending").or_else(|| last("queue_running")).map(|g| models_of(&g)).unwrap_or_default();
         }
         Err(e) => status.error = Some(comfy_net_err(&base, e)),
+    }
+    if status.ok && status.loaded_models.is_empty() {
+        // 한가하면 기록의 마지막 작업이 올려 둔 것입니다.
+        if let Ok(response) = client.get(format!("{base}/history?max_items=1")).timeout(Duration::from_secs(5)).send().await {
+            let history: Value = response.json().await.unwrap_or_default();
+            if let Some(graph) = history.as_object().and_then(|h| h.values().next()).and_then(|e| e.pointer("/prompt/2")) {
+                status.loaded_models = models_of(graph);
+            }
+        }
     }
     status
 }
@@ -674,15 +713,20 @@ pub fn comfy_remote_engines() -> Vec<String> {
     REMOTE_ENGINES.iter().map(|id| id.to_string()).collect()
 }
 
-/// 살아 있는 서버를 한가한 차례로 줄 세웁니다. 짐 = 실행 + 대기 + 이 앱이 보낸 것.
-/// 짐이 같으면 VRAM 이 많이 빈 쪽, 그것도 같으면 등록한 차례.
-pub(crate) fn rank(statuses: &[EndpointStatus]) -> Vec<EndpointStatus> {
+/// 살아 있는 서버를 빨리 끝날 차례로 줄 세웁니다.
+/// 값 = 짐(실행 + 대기 + 이 앱이 보낸 것) + (이 작업의 모델이 안 올라가 있으면 `COLD_LOAD_PENALTY`).
+/// 같으면 VRAM 이 많이 빈 쪽, 그것도 같으면 등록한 차례.
+///
+/// `wanted` 는 이 작업이 쓰는 확산 모델(`models_of`). 비어 있으면 적재 벌점을 따지지 않습니다.
+pub(crate) fn rank(statuses: &[EndpointStatus], wanted: &[String]) -> Vec<EndpointStatus> {
+    let cost = |s: &EndpointStatus| {
+        let warm = wanted.is_empty() || wanted.iter().any(|m| s.loaded_models.contains(m));
+        s.running + s.pending + s.reserved + if warm { 0 } else { COLD_LOAD_PENALTY }
+    };
     let mut alive: Vec<(usize, EndpointStatus)> = statuses.iter().cloned().enumerate().filter(|(_, s)| s.ok).collect();
     alive.sort_by(|(ia, a), (ib, b)| {
-        let load_a = a.running + a.pending + a.reserved;
-        let load_b = b.running + b.pending + b.reserved;
-        load_a
-            .cmp(&load_b)
+        cost(a)
+            .cmp(&cost(b))
             .then(b.vram_free_gb.partial_cmp(&a.vram_free_gb).unwrap_or(std::cmp::Ordering::Equal))
             .then(ia.cmp(ib))
     });
@@ -1041,7 +1085,9 @@ async fn run_remote(
     emit_progress_on(app, event, engine, job.id(), "사내 ComfyUI 서버 상태를 확인하는 중…");
     let statuses = futures_util::future::join_all(endpoints.iter().map(|url| probe(&client, url))).await;
     // 1순위는 여기서 바로 예약됩니다 — 동시에 들어온 다른 요청이 같은 서버로 몰리지 않게(`rank_and_reserve`).
-    let (ranked, mut first_reservation) = rank_and_reserve(&statuses);
+    // 이 작업의 모델이 이미 올라가 있는 서버를 우선합니다(`COLD_LOAD_PENALTY`).
+    let wanted = doc.get("graph").map(models_of).unwrap_or_default();
+    let (ranked, mut first_reservation) = rank_and_reserve(&statuses, &wanted);
     if ranked.is_empty() {
         let why: Vec<String> = statuses
             .iter()
@@ -1591,6 +1637,7 @@ mod tests {
             pending,
             reserved,
             latency_ms: 1,
+            loaded_models: vec![],
         };
         let ranked = rank(&[
             status("a", true, 1, 3, 0, 20.0),
@@ -1598,7 +1645,7 @@ mod tests {
             status("c", true, 0, 0, 1, 10.0),
             status("d", true, 0, 0, 0, 5.0),
             status("e", true, 0, 0, 0, 7.0),
-        ]);
+        ], &[]);
         let order: Vec<&str> = ranked.iter().map(|s| s.url.as_str()).collect();
         assert_eq!(order, vec!["e", "d", "c", "a"]);
     }
@@ -1617,16 +1664,17 @@ mod tests {
             pending: 0,
             reserved: 0,
             latency_ms: 1,
+            loaded_models: vec![],
         };
         let statuses = vec![idle("spread-a"), idle("spread-b"), idle("spread-c")];
-        let (first, r1) = rank_and_reserve(&statuses);
-        let (second, r2) = rank_and_reserve(&statuses);
-        let (third, r3) = rank_and_reserve(&statuses);
+        let (first, r1) = rank_and_reserve(&statuses, &[]);
+        let (second, r2) = rank_and_reserve(&statuses, &[]);
+        let (third, r3) = rank_and_reserve(&statuses, &[]);
         let picked = [&first[0].url, &second[0].url, &third[0].url];
         assert_eq!(picked, [&"spread-a".to_string(), &"spread-b".to_string(), &"spread-c".to_string()]);
         // 끝난 작업의 예약은 풀려서, 그 서버가 다시 1순위가 됩니다.
         drop(r1);
-        let (fourth, r4) = rank_and_reserve(&statuses);
+        let (fourth, r4) = rank_and_reserve(&statuses, &[]);
         assert_eq!(fourth[0].url, "spread-a");
         drop((r2, r3, r4));
     }
@@ -1725,6 +1773,40 @@ mod tests {
         let b = unique_suffix();
         assert_ne!(a, b);
         assert_eq!(a.len(), 12);
+    }
+
+    /// 모델이 올라가 있는 서버를 우선합니다 — 앞 작업 하나를 기다리는 편이 새로 올리는 것보다 빠릅니다.
+    /// 다만 대기가 벌점보다 길면 빈 서버로 갑니다.
+    #[test]
+    fn warm_server_wins_unless_its_queue_is_long() {
+        let s = |url: &str, running: u64, pending: u64, loaded: &[&str]| EndpointStatus {
+            url: url.into(),
+            ok: true,
+            error: None,
+            device: String::new(),
+            vram_total_gb: 24.0,
+            vram_free_gb: 10.0,
+            running,
+            pending,
+            reserved: 0,
+            latency_ms: 1,
+            loaded_models: loaded.iter().map(|m| m.to_string()).collect(),
+        };
+        let wanted = vec!["h3.safetensors".to_string()];
+        // 모델이 올라간 서버가 하나 돌리는 중(값 1) vs 빈 서버지만 모델 없음(값 2) → 올라간 쪽
+        let ranked = rank(&[s("cold", 0, 0, &["qwen.safetensors"]), s("warm", 1, 0, &["h3.safetensors"])], &wanted);
+        assert_eq!(ranked[0].url, "warm");
+        // 올라간 서버의 대기가 길면(값 3) 빈 서버(값 2)로
+        let ranked = rank(&[s("cold", 0, 0, &[]), s("warm", 1, 2, &["h3.safetensors"])], &wanted);
+        assert_eq!(ranked[0].url, "cold");
+        // 워크플로가 모델을 모르면(업스케일 등) 짐만 봅니다
+        let ranked = rank(&[s("a", 1, 0, &[]), s("b", 0, 0, &[])], &[]);
+        assert_eq!(ranked[0].url, "b");
+        // 그래프에서 확산 모델을 뽑습니다
+        let models = models_of(&workflow_doc("minimaxh3_t2v").unwrap()["graph"]);
+        assert_eq!(models, vec!["minimax_h3_fl2va_pruned_int8_convrot.safetensors".to_string()]);
+        let music = models_of(&workflow_doc("acestep").unwrap()["graph"]);
+        assert_eq!(music, vec!["ace_step_1.5_turbo_aio.safetensors".to_string()]);
     }
 
     #[test]

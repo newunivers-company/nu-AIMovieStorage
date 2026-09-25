@@ -189,6 +189,9 @@ export default function ComfyFleetPanel() {
                   {item.vramFreeGb.toFixed(1)}/{item.vramTotalGb.toFixed(0)} GB 여유 · 실행 {item.running} · 대기{" "}
                   {item.pending}
                   {item.reserved ? ` · 이 앱이 보낸 것 ${item.reserved}` : ""} · {item.latencyMs}ms
+                  {item.loadedModels?.length
+                    ? ` · 올라가 있는 모델: ${item.loadedModels.map((m) => m.split("/").pop()?.replace(/\.safetensors$/, "")).join(", ")}`
+                    : ""}
                 </span>
               ) : (
                 <span style={{ color: "oklch(0.7 0.12 25)" }}>{item.error}</span>
