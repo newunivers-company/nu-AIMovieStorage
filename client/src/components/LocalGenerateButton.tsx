@@ -259,9 +259,14 @@ export default function LocalGenerateButton({
           : engine.id === "minimaxh3"
             ? 0
             : (references?.length ?? 0);
-      const remoteNote =
-        comfyDroppedNote(result.meta) ||
-        (typeof result.meta.comfy_fallback === "string" ? result.meta.comfy_fallback : "");
+      const skippedServerLoras = Array.isArray(result.meta.server_loras_skipped) ? result.meta.server_loras_skipped.length : 0;
+      const remoteNote = [
+        comfyDroppedNote(result.meta),
+        typeof result.meta.comfy_fallback === "string" ? result.meta.comfy_fallback : "",
+        skippedServerLoras ? `서버 로라 ${skippedServerLoras}개는 이 컴퓨터에 없어 빼고 뽑았습니다` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
       const where = remote ? ` · 사내 ComfyUI ${comfyHostOf(result.meta)}` : "";
       toast.success(`${engineName} 으로 만들었습니다.`, {
         description:

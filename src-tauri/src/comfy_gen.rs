@@ -446,7 +446,11 @@ pub(crate) fn attach_loras(
     let mut last = json!([after, 0]);
     for (index, (path, weight)) in loras.iter().enumerate() {
         let wanted = base_name(path);
-        let Some(found) = remote.iter().find(|r| base_name(r) == wanted) else {
+        // 서버 목록에서 고른 것은 폴더까지 같은 이름으로 옵니다 — 그것부터 찾습니다. 폴더가 달라도
+        // 파일 이름이 같은 것(`a/x.safetensors`·`b/x.safetensors`)이 있어서, 이름만 보면 엉뚱한 쪽을 겁니다.
+        let exact = path.replace('\\', "/");
+        let found = remote.iter().find(|r| r.replace('\\', "/") == exact).or_else(|| remote.iter().find(|r| base_name(r) == wanted));
+        let Some(found) = found else {
             dropped.push(wanted);
             continue;
         };
@@ -670,6 +674,21 @@ pub async fn comfy_fleet_status(endpoints: Vec<String>) -> Res<Vec<EndpointStatu
     Ok(futures_util::future::join_all(endpoints.iter().map(|url| probe(&client, url))).await)
 }
 
+/// 서버들에 있는 로라 이름(`models/loras` 의 상대 경로)을 모두 모아 돌려줍니다. 뽑는 자리의 «서버 로라» 목록.
+///
+/// 네 대가 같은 폴더를 보지만, 한 대라도 다르면 그 차이까지 보여 줘야 하므로 합칩니다. 응답이
+/// 없는 서버는 건너뜁니다. 실제로 걸 때는 받아 준 서버의 목록으로 다시 맞춥니다(`attach_loras`).
+#[tauri::command]
+pub async fn comfy_fleet_loras(endpoints: Vec<String>) -> Res<Vec<String>> {
+    let client = http_client()?;
+    let endpoints = normalize_endpoints(&endpoints);
+    let lists = futures_util::future::join_all(endpoints.iter().map(|url| remote_loras(&client, url))).await;
+    let mut names: Vec<String> = lists.into_iter().flatten().map(|name| name.replace('\\', "/")).collect();
+    names.sort_by_key(|name| name.to_lowercase());
+    names.dedup();
+    Ok(names)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 사전 점검 — 워크플로가 요구하는 노드·모델이 서버에 있는가
 // ─────────────────────────────────────────────────────────────────────────────
@@ -867,6 +886,65 @@ async fn upload_bytes(client: &reqwest::Client, base: &str, bytes: Vec<u8>, ext:
     Ok(if subfolder.is_empty() { name.to_string() } else { format!("{subfolder}/{name}") })
 }
 
+/*
+  **로라가 정말 붙었는가 — 서버 로그로 봅니다.**
+
+  서버는 모델과 맞지 않는 로라를 받아도 작업을 실패시키지 않습니다. 로그에 `ERROR lora … shape …
+  is invalid` 를 줄줄이 적고 **로라 없이** 끝까지 뽑습니다. 결과만 봐서는 «로라가 약하다» 로
+  보입니다(2026-09-27 실측: Qwen-Image v1 로라를 2.1 에 걸었더니 오류 243줄, 결과 차이 1.2 —
+  로라 없는 것과 같음). 제출 직전 로그의 마지막 시각을 적어 두었다가, 끝난 뒤 그 뒤의 줄만 셉니다.
+
+  서버는 한 번에 하나씩 돌리므로 그 사이의 줄은 대개 우리 작업 것입니다. 우리보다 먼저 줄 선
+  남의 작업이 있었으면 그 줄이 섞일 수 있어, 알림은 «로그에 기록이 있다» 로만 말합니다.
+*/
+
+/// 로그 마지막 줄의 시각(`2026-09-27T22:44:24.749464`). 로그를 못 읽으면 `None` — 그러면 검사를 건너뜁니다.
+async fn last_log_time(client: &reqwest::Client, base: &str) -> Option<String> {
+    let logs = fetch_logs(client, base).await?;
+    logs.last().map(|(time, _)| time.clone())
+}
+
+async fn fetch_logs(client: &reqwest::Client, base: &str) -> Option<Vec<(String, String)>> {
+    let response = client.get(format!("{base}/internal/logs/raw")).timeout(Duration::from_secs(15)).send().await.ok()?;
+    let body: Value = response.json().await.ok()?;
+    Some(parse_logs(&body))
+}
+
+fn parse_logs(body: &Value) -> Vec<(String, String)> {
+    body.get("entries")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| Some((entry.get("t")?.as_str()?.to_string(), entry.get("m")?.as_str()?.to_string())))
+        .collect()
+}
+
+/// `after` 뒤의 로그에서 로라 문제를 셉니다: (모양이 안 맞아 못 붙인 줄, 키를 못 찾은 줄).
+fn lora_problems(logs: &[(String, String)], after: &str) -> (usize, usize) {
+    let mut errors = 0;
+    let mut missing = 0;
+    for (time, message) in logs {
+        if time.as_str() <= after {
+            continue;
+        }
+        let lower = message.to_lowercase();
+        if lower.contains("error lora") {
+            errors += 1;
+        } else if lower.contains("lora key not loaded") {
+            missing += 1;
+        }
+    }
+    (errors, missing)
+}
+
+/// 이만큼 키를 못 찾았으면 «안 붙은 것» 으로 봅니다. LTX 2.5 로라는 맞는 것도 몇 개(실측 5개)는 못 찾습니다.
+const LORA_MISSING_LIMIT: usize = 50;
+
+/// 로라가 안 붙었다고 볼 만한가.
+fn lora_failed(errors: usize, missing: usize) -> bool {
+    errors > 0 || missing >= LORA_MISSING_LIMIT
+}
+
 async fn remote_loras(client: &reqwest::Client, base: &str) -> Vec<String> {
     match client.get(format!("{base}/models/loras")).timeout(Duration::from_secs(15)).send().await {
         Ok(response) => response.json::<Vec<String>>().await.unwrap_or_default(),
@@ -1042,6 +1120,12 @@ async fn submit(client: &reqwest::Client, base: &str, request: &Submission<'_>) 
         let after = filled.values.get("lora_after").and_then(Value::as_str).map(str::to_string);
         attach_loras(request.doc, &mut filled.graph, request.loras, &remote, after.as_deref())
     };
+    // 로라를 걸었으면 제출 직전 로그 시각을 적어 둡니다 — 끝난 뒤 그 뒤의 줄만 봅니다(`lora_problems`).
+    if !used.is_empty() {
+        if let Some(marker) = last_log_time(client, base).await {
+            filled.values.insert("log_marker".into(), json!(marker));
+        }
+    }
     let response = client
         .post(format!("{base}/prompt"))
         .json(&json!({ "prompt": filled.graph, "client_id": format!("aimoviestorage-{tag}") }))
@@ -1400,6 +1484,13 @@ async fn run_remote(
     if bytes.is_empty() {
         return Err("결과 파일이 비어 있습니다.".into());
     }
+    let mut filled = filled;
+    if let Some(marker) = filled.values.get("log_marker").and_then(Value::as_str).map(str::to_string) {
+        if let Some(logs) = fetch_logs(&client, &base).await {
+            let (errors, missing) = lora_problems(&logs, &marker);
+            filled.values.insert("lora_log".into(), json!({ "errors": errors, "missing": missing }));
+        }
+    }
     Ok(Remote { base, prompt_id, filled, lora_used, lora_dropped, rejections, tag, filename, bytes })
 }
 
@@ -1476,6 +1567,13 @@ pub async fn comfy_generate(
     meta.remove("prefix");
     meta.remove("lora_after");
     meta.remove("motion_mask_ignored");
+    meta.remove("log_marker");
+    let errors = filled.values.get("lora_log").and_then(|log| log.get("errors")).and_then(Value::as_u64).unwrap_or(0) as usize;
+    let missing = filled.values.get("lora_log").and_then(|log| log.get("missing")).and_then(Value::as_u64).unwrap_or(0) as usize;
+    if lora_failed(errors, missing) {
+        meta.insert("loras_failed".into(), json!(true));
+        ignored.push("로라(서버 로그에 «이 모델과 맞지 않아 못 붙임» 기록이 있습니다)".into());
+    }
     meta.insert("backend".into(), json!("comfy"));
     meta.insert("endpoint".into(), json!(base));
     meta.insert("prompt_id".into(), json!(prompt_id));
@@ -1739,6 +1837,38 @@ mod tests {
         assert_eq!(result.graph["lora0"]["inputs"]["model"], json!(["37", 0]));
         assert_eq!(result.graph["458"]["inputs"]["model"], json!(["lora0", 0]));
         assert_links_resolve(&result.graph);
+    }
+
+    /// 서버 로그에서 제출 뒤의 로라 문제만 셉니다(2026-09-27 실측 로그 모양).
+    #[test]
+    fn lora_problems_count_only_lines_after_marker() {
+        let body = json!({ "entries": [
+            { "t": "2026-09-27T22:40:00.000001", "m": "[ERROR] ERROR lora old shape '[4096, 4096]' is invalid\n" },
+            { "t": "2026-09-27T22:44:24.100000", "m": "got prompt\n" },
+            { "t": "2026-09-27T22:44:24.749464", "m": "[ERROR] ERROR lora diffusion_model.transformer_blocks.31.attn.to_q.weight shape '[4096, 4096]' is invalid for input of size 9437184\n" },
+            { "t": "2026-09-27T22:44:25.000000", "m": "[WARNING] lora key not loaded: diffusion_model.reference_slot_embedding.net.2.weight\n" },
+            { "t": "2026-09-27T22:44:30.000000", "m": "Prompt executed in 9.2 seconds\n" }
+        ] });
+        let logs = parse_logs(&body);
+        assert_eq!(logs.len(), 5);
+        assert_eq!(lora_problems(&logs, "2026-09-27T22:44:24.100000"), (1, 1));
+        assert_eq!(lora_problems(&logs, "2026-09-27T22:44:30.000000"), (0, 0));
+        assert!(lora_failed(1, 0));
+        assert!(!lora_failed(0, 5), "LTX 로라는 맞아도 몇 개는 못 찾습니다");
+        assert!(lora_failed(0, LORA_MISSING_LIMIT));
+        assert!(parse_logs(&json!({})).is_empty());
+    }
+
+    /// 서버 목록에서 고른 로라는 폴더까지 맞는 것을 겁니다(이름만 같은 다른 폴더의 것이 아니라).
+    #[test]
+    fn server_picked_lora_matches_its_folder() {
+        let doc = workflow_doc("qwenimage").unwrap();
+        let mut result = fill(&doc, &json!({ "prompt": "p" }), None, &Refs::default(), "p", 1).unwrap();
+        let remote = vec!["old\\style.safetensors".to_string(), "qwen\\style.safetensors".to_string()];
+        let (used, dropped) = attach_loras(&doc, &mut result.graph, &[("qwen/style.safetensors".into(), 0.7)], &remote, None);
+        assert_eq!(used, vec!["qwen\\style.safetensors".to_string()], "서버가 쓰는 표기 그대로 넘깁니다");
+        assert!(dropped.is_empty());
+        assert_eq!(result.graph["lora0"]["inputs"]["strength_model"], json!(0.7));
     }
 
     #[test]
