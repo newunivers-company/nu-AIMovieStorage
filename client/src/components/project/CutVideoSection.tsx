@@ -140,11 +140,11 @@ export default function CutVideoSection({
             assetType="scene-video"
             ownerName={sceneFolderName(sceneTitle, index)}
             stem={cutStem(sceneTitle, index, cut.order)}
-            onDone={(filePath, name) =>
+            onDone={(filePath, name, generation) =>
               patchCut((current) => ({
                 videos: [
                   ...(current.videos || []),
-                  { id: uid(), name, filePath },
+                  { id: uid(), name, filePath, generation },
                 ],
               }))
             }

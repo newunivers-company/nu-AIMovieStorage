@@ -5,6 +5,8 @@ import {
   type ProjectAssetType,
 } from "@/lib/mediaLibrary";
 import { runLocal, type LocalEngineId, type LocalRunOptions } from "@/lib/localEngines";
+import { buildGenerationInfo } from "@/lib/generationInfo";
+import type { GenerationInfo } from "@/lib/projectTypes";
 
 /**
  * **로컬 엔진이 뽑은 것을 프로젝트 폴더에 놓습니다.**
@@ -36,6 +38,8 @@ export interface LocalOutput {
   seconds: number;
   /** 엔진이 덧붙인 값. 사내 ComfyUI 로 뽑았으면 `backend: "comfy"` 와 서버 주소가 있습니다. */
   meta: Record<string, unknown>;
+  /** 카드에 함께 적어 둘 «어떻게 뽑았나»(`GenerationInfo`). */
+  generation: GenerationInfo;
 }
 
 const stemOf = (path: string) =>
@@ -99,5 +103,6 @@ export async function runLocalToProject(input: {
     name: stemOf(result.output) || stem,
     seconds: result.seconds,
     meta: result.meta,
+    generation: buildGenerationInfo(input.engine, input.opts, result),
   };
 }

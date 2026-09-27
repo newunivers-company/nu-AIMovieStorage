@@ -1,3 +1,4 @@
+import GenerationBadge from "@/components/project/GenerationBadge";
 import { sizeLabel, type ImageSize } from "@/lib/useImageSize";
 import { useRef, useState } from "react";
 import { CloudDownload, ImagePlus, Star, FolderSync } from "lucide-react";
@@ -406,9 +407,11 @@ export default function GeneratedImageShelf({
               className="group relative w-[120px] outline-none focus-visible:ring-2"
             >
               <div
-                className="aspect-square w-full overflow-hidden rounded-lg"
+                className="relative aspect-square w-full overflow-hidden rounded-lg"
                 style={{ background: "oklch(0.10 0.006 265)" }}
               >
+                {/* 로컬·사내 ComfyUI 로 뽑은 것이면 «어떻게 뽑았나» — 올리면 보이고 누르면 복사. */}
+                <GenerationBadge generation={image.generation} className="absolute bottom-1 left-1 z-10" />
                 {previewOf(image) && (
                   <img
                     src={previewOf(image)}

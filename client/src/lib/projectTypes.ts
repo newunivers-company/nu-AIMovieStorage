@@ -57,6 +57,51 @@ export function uid() {
  * `assetSrc(filePath) || thumb` 순서로 씁니다. 이 순서를 뒤집었다가
  * 「다시 열면 그림이 빈칸」 버그가 여러 번 났습니다.
  */
+/**
+ * **이 파일을 어떻게 뽑았는가** — 로컬 엔진·사내 ComfyUI 로 만든 것에만 붙습니다.
+ *
+ * 「이 컷 그림 좋은데 뭘로 뽑았더라」 에 답할 자리가 없었습니다. 프롬프트는 카드에 남아 있어도
+ * 그 뒤에 고쳐 쓰면 달라지고, 시드·로라·서버·모델은 어디에도 남지 않았습니다. 뽑는 순간의
+ * 값을 그림 곁에 적어 두면 같은 것을 다시 뽑거나(시드) 좋았던 조합을 되짚을 수 있습니다.
+ */
+export interface GenerationInfo {
+  /** 앱의 엔진 id(`qwenimage`·`minimaxh3` …). */
+  engine: string;
+  /** 사람이 읽는 모델 이름(«Qwen-Image 2.1»). */
+  model?: string;
+  /** 어디서 돌았나. */
+  backend: "local" | "comfy";
+  /** 사내 ComfyUI 면 받아 준 서버(`192.168.0.136:8191`). */
+  host?: string;
+  /** 서버가 매긴 작업 번호 — 서버 기록에서 같은 작업을 찾을 때. */
+  promptId?: string;
+  /** 실제로 쓴 워크플로(`minimaxh3_i2v`)나 로컬 엔진의 갈래(`t2va`). */
+  workflow?: string;
+  prompt: string;
+  negative?: string;
+  seed?: number;
+  width?: number;
+  height?: number;
+  /** 영상이면 길이(초)·프레임·fps. */
+  seconds?: number;
+  frames?: number;
+  fps?: number;
+  /** H3 «빠르게»(터보 로라) 로 뽑았는가. */
+  speed?: string;
+  /** 실제로 걸린 로라(서버면 서버 경로, 로컬이면 파일 이름). */
+  loras?: string[];
+  /** 로라를 걸었지만 서버 로그에 «못 붙임» 이 남았는가. */
+  lorasFailed?: boolean;
+  /** 레퍼런스 몇 장을 실었나. */
+  references?: number;
+  /** 움직임 마스크를 섞었나. */
+  motionMask?: boolean;
+  /** 뽑는 데 걸린 시간(초). */
+  took: number;
+  /** 뽑은 시각(ISO). */
+  at: string;
+}
+
 export interface GeneratedImageAsset {
   id: string;
   name: string;
@@ -114,6 +159,8 @@ export interface GeneratedImageAsset {
    * 남겨 둬야 카드를 열 때마다 픽셀을 다시 재지 않습니다.
    */
   unfoldedAt?: string;
+  /** 로컬·사내 ComfyUI 로 뽑았으면 그때의 값(`GenerationInfo`). */
+  generation?: GenerationInfo;
 }
 
 export interface ReferenceImage {
@@ -403,6 +450,8 @@ export interface SceneVideoAsset {
    * 그림 선반의 «별» 과 같은 뜻이고, 한 선반에 하나뿐입니다.
    */
   isPrimary?: boolean;
+  /** 로컬·사내 ComfyUI 로 뽑았으면 그때의 값(`GenerationInfo`). */
+  generation?: GenerationInfo;
 }
 
 export interface Cut {
