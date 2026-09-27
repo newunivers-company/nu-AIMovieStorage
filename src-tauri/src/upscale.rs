@@ -2375,6 +2375,8 @@ pub(crate) struct Reserved {
     /// 결과를 제자리에 놓았는가. 놓기 전에 떨어지면 빈 껍데기를 치웁니다 —
     /// 0 바이트 파일을 인물 폴더에 남기면 폴더를 다시 읽을 때 깨진 그림으로 되살아납니다.
     kept: bool,
+    /// 앱이 미리 만들어 둔 빈 자리를 이어받은 것인가(`claim_or_reserve`). 끝나면 이어받음 표시를 풉니다.
+    claimed: bool,
 }
 
 impl Reserved {
@@ -2385,6 +2387,9 @@ impl Reserved {
 
 impl Drop for Reserved {
     fn drop(&mut self) {
+        if self.claimed {
+            claimed_slots().lock().map(|mut set| set.remove(&self.path)).ok();
+        }
         if self.kept {
             return;
         }
@@ -2402,7 +2407,7 @@ fn reserve_numbered_path(dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
     for _ in 0..64 {
         let candidate = next_numbered_path(dir, stem, ext);
         match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
-            Ok(_) => return Ok(Reserved { path: candidate, kept: false }),
+            Ok(_) => return Ok(Reserved { path: candidate, kept: false, claimed: false }),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(err("결과 자리를 만들지 못했습니다", e)),
         }
@@ -2414,12 +2419,37 @@ fn reserve_numbered_path(dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
 /// 생성은 늘 새 파일이라 덮어쓰지 않습니다.
 pub(crate) fn reserve_free_path(out: &Path, out_dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
     match fs::OpenOptions::new().write(true).create_new(true).open(out) {
-        Ok(_) => Ok(Reserved { path: out.to_path_buf(), kept: false }),
+        Ok(_) => Ok(Reserved { path: out.to_path_buf(), kept: false, claimed: false }),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => {
             reserve_numbered_path(out_dir, &safe_name(stem), ext)
         }
         Err(e) => Err(err("결과 자리를 만들지 못했습니다", e)),
     }
+}
+
+/// 지금 이 앱의 작업이 이어받아 쓰고 있는 빈 자리들. 같은 자리를 두 작업이 함께 이어받지 않게.
+fn claimed_slots() -> &'static Mutex<HashSet<PathBuf>> {
+    static SLOTS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    SLOTS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// **생성용 자리 잡기.** `out` 이 앱이 미리 만들어 둔 **빈 파일**이면 그 자리를 그대로 씁니다.
+/// 아니면 `reserve_free_path` 와 같습니다.
+///
+/// 앱(`runLocalToProject`)은 이름 번호를 정하려고 `X_로컬_001.png` 라는 빈 파일을 먼저 만들고
+/// 그 경로를 넘깁니다. 예전에는 여기서 «이미 있다» 로 보고 번호를 하나 더 붙여
+/// `X_로컬_001_001.png` 에 놓았습니다 — 로컬·사내 ComfyUI 둘 다(2026-09-26 회귀 점검).
+/// 내용이 있는 파일은 절대 이어받지 않습니다. 이미 다른 작업이 이어받은 자리도 마찬가지입니다.
+pub(crate) fn claim_or_reserve(out: &Path, out_dir: &Path, stem: &str, ext: &str) -> Res<Reserved> {
+    let empty = fs::metadata(out).map(|m| m.is_file() && m.len() == 0).unwrap_or(false);
+    if empty {
+        if let Ok(mut set) = claimed_slots().lock() {
+            if set.insert(out.to_path_buf()) {
+                return Ok(Reserved { path: out.to_path_buf(), kept: false, claimed: true });
+            }
+        }
+    }
+    reserve_free_path(out, out_dir, stem, ext)
 }
 
 /// 그림 한 장을 업스케일합니다.
@@ -2603,6 +2633,38 @@ mod tests {
         assert_eq!(resolve_target((1000, 750), &TargetSpec { long_edge: Some(4096), scale: None }), (4096, 3072));
     }
 
+    /// 앱이 만들어 둔 빈 자리는 그대로 이어받습니다 — `X_로컬_001_001` 이 생기지 않게.
+    #[test]
+    fn 빈_자리는_이어받고_내용이_있으면_번호를_올린다() {
+        let dir = std::env::temp_dir().join(format!("claim_{}", job_tag()));
+        fs::create_dir_all(&dir).unwrap();
+        let slot = dir.join("컷_로컬_001.png");
+        fs::write(&slot, b"").unwrap();
+
+        let mut first = claim_or_reserve(&slot, &dir, "컷_로컬_001", "png").unwrap();
+        assert_eq!(first.path, slot, "빈 자리는 그 이름 그대로");
+        // 같은 자리를 다른 작업이 또 이어받지는 않습니다.
+        let second = claim_or_reserve(&slot, &dir, "컷_로컬_001", "png").unwrap();
+        assert_ne!(second.path, slot);
+        drop(second);
+
+        fs::write(&slot, b"png").unwrap();
+        first.keep();
+        drop(first);
+        // 내용이 생긴 파일은 이어받지 않습니다.
+        let third = claim_or_reserve(&slot, &dir, "컷_로컬_001", "png").unwrap();
+        assert_ne!(third.path, slot);
+        drop(third);
+        assert_eq!(fs::read(&slot).unwrap(), b"png", "결과는 그대로");
+
+        // 실패로 끝나면(keep 없이) 이어받은 빈 자리는 치우고, 다음에 다시 이어받을 수 있습니다.
+        let again = dir.join("컷_로컬_002.png");
+        fs::write(&again, b"").unwrap();
+        drop(claim_or_reserve(&again, &dir, "컷_로컬_002", "png").unwrap());
+        assert!(!again.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn 배율_지정도_16배수로() {
         assert_eq!(resolve_target((500, 500), &TargetSpec { long_edge: None, scale: Some(4) }), (2000, 2000));
@@ -2701,7 +2763,7 @@ pub(crate) fn generate_blocking(
       그 사이에 들어온 다음 요청도 «비어 있다» 를 보고 같은 이름을 골랐고, 나중 것이 먼저 것을
       덮었습니다. 임시 이름에도 작업 번호표를 섞습니다 — 고정 이름이면 두 작업이 서로 밟습니다.
     */
-    let mut reserved = reserve_free_path(&out, out_dir, stem, &out_ext)?;
+    let mut reserved = claim_or_reserve(&out, out_dir, stem, &out_ext)?;
     let final_path = reserved.path.clone();
     let final_stem = final_path.file_stem().and_then(|n| n.to_str()).unwrap_or(stem);
     let temp = out_dir.join(format!(".{final_stem}.생성중.{}.{out_ext}", job_tag()));

@@ -32,7 +32,7 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter};
 
 use crate::comfy::{comfy_base, comfy_net_err};
-use crate::upscale::{job_tag, known_engine, reserve_free_path, GenerateResult, LOCAL};
+use crate::upscale::{claim_or_reserve, job_tag, known_engine, GenerateResult, LOCAL};
 use crate::{err, Res};
 
 /// 영상 한 편이 수 분입니다. 로컬과 같은 한도를 씁니다.
@@ -1539,7 +1539,7 @@ pub async fn comfy_generate(
 
     // 로컬과 같은 규칙: 자리를 잡고, 임시 파일에 쓴 뒤 이름을 바꿉니다(반쪽짜리가 남지 않게).
     let stem = out.file_stem().and_then(|n| n.to_str()).unwrap_or("결과").to_string();
-    let mut reserved = reserve_free_path(&out, &out_dir, &stem, &out_ext)?;
+    let mut reserved = claim_or_reserve(&out, &out_dir, &stem, &out_ext)?;
     let final_path = reserved.path.clone();
     let final_stem = final_path.file_stem().and_then(|n| n.to_str()).unwrap_or(&stem).to_string();
     let temp = out_dir.join(format!(".{final_stem}.생성중.{tag}.{out_ext}"));
