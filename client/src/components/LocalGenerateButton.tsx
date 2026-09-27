@@ -13,6 +13,7 @@ import {
 import { localSize, tuneForLocal, type LocalPromptInput } from "@/lib/localPrompt";
 import type { ProjectAssetType } from "@/lib/mediaLibrary";
 import { runLocalToProject } from "@/lib/localOutput";
+import type { GenerationInfo } from "@/lib/projectTypes";
 import {
   COMFY_MODEL_LABEL,
   comfyDroppedNote,
@@ -79,7 +80,8 @@ export default function LocalGenerateButton({
   stem: string;
   label?: string;
   /** 만든 파일을 카드에 붙일 자리. 경로와 보일 이름을 줍니다. */
-  onDone: (filePath: string, name: string) => void;
+  /** `generation` 은 «어떻게 뽑았나» — 카드에 붙이는 쪽이 그림·영상 곁에 적어 둡니다. */
+  onDone: (filePath: string, name: string, generation: GenerationInfo) => void;
 }) {
   useLocalEngines(); // 설치 상태를 구독해야 단추가 제때 살아납니다.
   const engines = availableLocalEngines(kind);
@@ -239,7 +241,7 @@ export default function LocalGenerateButton({
         timeoutSecs: kind === "video" ? 7200 : 1800,
       });
       // **뽑힌 실제 경로**를 넘깁니다. 자리 경로를 넘기면 0바이트를 가리켜 액박이 납니다.
-      onDone(result.path, result.name);
+      onDone(result.path, result.name, result.generation);
       /*
         **버린 레퍼런스는 말해 줍니다.**
 

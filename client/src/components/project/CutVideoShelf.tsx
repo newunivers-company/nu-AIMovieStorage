@@ -1,3 +1,4 @@
+import GenerationBadge from "@/components/project/GenerationBadge";
 import { useState, type DragEvent } from "react";
 import { Expand, FolderOpen, Star, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -216,10 +217,13 @@ export default function CutVideoShelf({
               className="aspect-video w-full rounded-lg"
               style={{ background: "oklch(0.1 0.006 265)" }}
             />
-            <p className="mt-1 truncate text-[10px]" title={video.name} style={{ color: "oklch(0.62 0.01 265)" }}>
-              {video.isPrimary ? "★ " : ""}
-              {video.name}
-            </p>
+            <div className="mt-1 flex items-center gap-1">
+              <GenerationBadge generation={video.generation} />
+              <p className="min-w-0 truncate text-[10px]" title={video.name} style={{ color: "oklch(0.62 0.01 265)" }}>
+                {video.isPrimary ? "★ " : ""}
+                {video.name}
+              </p>
+            </div>
             <div className="absolute left-1 top-1 flex gap-1">
               {/* 대표는 늘 보입니다 — 어느 것이 그 장면인지가 이 선반에서 가장 중요한 표시입니다. */}
               <button

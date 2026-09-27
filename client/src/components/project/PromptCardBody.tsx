@@ -684,7 +684,7 @@ export default function PromptCardBody<
           }
           ownerName={cropSave?.ownerName ?? (name || "이름 없음")}
           stem={cropSave?.stem ?? safeFileName(name || "이름 없음")}
-          onDone={(filePath, imageName) =>
+          onDone={(filePath, imageName, generation) =>
             patch(
               (current) =>
                 ({
@@ -696,6 +696,7 @@ export default function PromptCardBody<
                       thumb: "",
                       file: null,
                       filePath,
+                      generation,
                       // 첫 장이면 대표. 선반의 별과 같은 규칙입니다(규칙 1).
                       isPrimary: !(current.generatedImages || []).length,
                     },

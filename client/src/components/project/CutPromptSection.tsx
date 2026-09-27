@@ -166,7 +166,7 @@ export default function CutPromptSection({
             assetType="scene-cut"
             ownerName={sceneFolderName(sceneTitle, index)}
             stem={cutStem(sceneTitle, index, cut.order)}
-            onDone={(filePath, name) =>
+            onDone={(filePath, name, generation) =>
               patchCut((current) => ({
                 images: [
                   ...current.images,
@@ -176,6 +176,7 @@ export default function CutPromptSection({
                     thumb: "",
                     file: null,
                     filePath,
+                    generation,
                     // 첫 장이면 대표가 됩니다 — 선반·후보함과 같은 규칙(규칙 1).
                     isPrimary: !current.images.length,
                   },

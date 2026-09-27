@@ -22,7 +22,7 @@ import {
 import { fileStemOf } from "@/components/ReferenceTagBar";
 import { readProject, writeProject } from "@/lib/projectWrite";
 import { enqueueTasks, isStopping, registerTaskRunner, type NewTask } from "@/lib/taskQueue";
-import type { Cut, ProjectDraft, Scene } from "@/lib/projectTypes";
+import type { Cut, GenerationInfo, ProjectDraft, Scene } from "@/lib/projectTypes";
 
 /**
  * **한 번에 뽑기** — 작품 하나를 **순서대로** 끝까지 뽑습니다.
@@ -319,21 +319,26 @@ export function enqueueProjectGeneration(
   으로 굽고, 확인 탭에도 안 뜹니다. 그래서 뽑는 즉시 그 카드에 붙이고 대표(별)를
   세웁니다. 별이 하나여야 다음 걸음이 어느 것을 쓸지 압니다.
 */
-const asPrimary = (filePath: string, name: string) => ({
+const asPrimary = (filePath: string, name: string, generation?: GenerationInfo) => ({
   id: Math.random().toString(36).slice(2),
   name,
   thumb: "",
   file: null,
   filePath,
   isPrimary: true,
+  ...(generation ? { generation } : {}),
 });
+
+/** 로컬·사내 ComfyUI 로 뽑았으면 «어떻게 뽑았나». 마그니픽 결과에는 없습니다. */
+const generationOf = (made: object): GenerationInfo | undefined =>
+  "generation" in made ? (made.generation as GenerationInfo) : undefined;
 
 /*
   아래 셋의 갱신 함수는 **다시 돌려도 됩니다.** 닫힌 작품에 쓰다 다른 창에 지면 `writeProject`
   가 되읽은 판 위에 같은 함수를 다시 돌립니다(2026-09-21). `asPrimary` 가 안에서 만드는 그림 id
   는 시도마다 달라지지만 그 id 를 밖에서 읽는 곳이 없고, 거절된 판은 어디에도 남지 않습니다.
 */
-function attachSheet(projectId: string, characterId: string, filePath: string, name: string) {
+function attachSheet(projectId: string, characterId: string, filePath: string, name: string, generation?: GenerationInfo) {
   return writeProject(projectId, (current) => ({
     characters: current.characters.map((person) =>
       person.id === characterId
@@ -341,7 +346,7 @@ function attachSheet(projectId: string, characterId: string, filePath: string, n
             ...person,
             generatedImages: [
               ...(person.generatedImages ?? []).map((image) => ({ ...image, isPrimary: false })),
-              asPrimary(filePath, name),
+              asPrimary(filePath, name, generation),
             ],
           }
         : person,
@@ -349,7 +354,7 @@ function attachSheet(projectId: string, characterId: string, filePath: string, n
   }));
 }
 
-function attachImage(projectId: string, cutId: string, filePath: string, name: string) {
+function attachImage(projectId: string, cutId: string, filePath: string, name: string, generation?: GenerationInfo) {
   return writeProject(projectId, (current) => ({
     scenes: current.scenes.map((scene) => ({
       ...scene,
@@ -359,7 +364,7 @@ function attachImage(projectId: string, cutId: string, filePath: string, name: s
               ...cut,
               images: [
                 ...(cut.images || []).map((image) => ({ ...image, isPrimary: false })),
-                asPrimary(filePath, name),
+                asPrimary(filePath, name, generation),
               ],
             }
           : cut,
@@ -368,7 +373,7 @@ function attachImage(projectId: string, cutId: string, filePath: string, name: s
   }));
 }
 
-function attachVideo(projectId: string, sceneId: string, filePath: string, name: string) {
+function attachVideo(projectId: string, sceneId: string, filePath: string, name: string, generation?: GenerationInfo) {
   return writeProject(projectId, (current) => ({
     scenes: current.scenes.map((scene) =>
       scene.id === sceneId
@@ -376,7 +381,7 @@ function attachVideo(projectId: string, sceneId: string, filePath: string, name:
             ...scene,
             videos: [
               ...(scene.videos || []).map((video) => ({ ...video, isPrimary: false })),
-              { id: Math.random().toString(36).slice(2), name, filePath, isPrimary: true },
+              { id: Math.random().toString(36).slice(2), name, filePath, isPrimary: true, ...(generation ? { generation } : {}) },
             ],
           }
         : scene,
@@ -600,7 +605,7 @@ registerTaskRunner(CHARACTER_SHEET_TASK, async (raw, report, task) => {
         )
       : await localImage(payload, prompt, "character-generated", report, draft?.localLoras?.[payload.engine], aspectOf(draft, "image"), refs, () => isStopping(task.id));
   report({ step: "카드에 붙이는 중" });
-  const wrote = await attachSheet(payload.projectId, payload.characterId, made.path, made.name);
+  const wrote = await attachSheet(payload.projectId, payload.characterId, made.path, made.name, generationOf(made));
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
 });
 
@@ -682,7 +687,7 @@ registerTaskRunner(CUT_IMAGE_TASK, async (raw, report, task) => {
         )
       : await localImage(payload, base, "scene-cut", report, draft.localLoras?.[payload.engine], aspectOf(draft, "image"), references, () => isStopping(task.id));
   report({ step: "카드에 붙이는 중" });
-  const wrote = await attachImage(payload.projectId, payload.cutId, made.path, made.name);
+  const wrote = await attachImage(payload.projectId, payload.cutId, made.path, made.name, generationOf(made));
   if (!wrote.draft) throw notAttached("카드", made.path, wrote.why);
 });
 
@@ -888,7 +893,7 @@ registerTaskRunner(SCENE_VIDEO_TASK, async (raw, report, task) => {
       () => isStopping(task.id),
     );
     report({ step: "장면에 붙이는 중" });
-    const wrote = await attachVideo(payload.projectId, payload.sceneId, made.path, made.name);
+    const wrote = await attachVideo(payload.projectId, payload.sceneId, made.path, made.name, generationOf(made));
     if (!wrote.draft) throw notAttached("장면", made.path, wrote.why);
     return;
   }
@@ -923,7 +928,7 @@ registerTaskRunner(SCENE_VIDEO_TASK, async (raw, report, task) => {
     onProgress: (message) => report({ step: message || `이 컴퓨터가 ${seconds}초를 뽑는 중` }),
   });
   report({ step: "장면에 붙이는 중" });
-  const wrote = await attachVideo(payload.projectId, payload.sceneId, made.path, made.name);
+  const wrote = await attachVideo(payload.projectId, payload.sceneId, made.path, made.name, generationOf(made));
   if (!wrote.draft) throw notAttached("장면", made.path, wrote.why);
 });
 
