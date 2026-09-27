@@ -850,7 +850,7 @@ export function PlannerMoveTimeline({
           {playing ? "멈춤" : "재생"}
         </button>
         <span className="text-[10px] tabular-nums" style={{ color: "oklch(0.62 0.12 200)" }}>
-          {playhead.toFixed(2)}s / {duration.toFixed(1)}s
+          <span data-playhead-label>{playhead.toFixed(2)}s</span> / {duration.toFixed(1)}s
         </span>
         <span className="min-w-0 flex-1" />
         {/*
@@ -1176,7 +1176,7 @@ export function PlannerMoveTimeline({
           className="tabular-nums text-[9px]"
           style={{ color: "oklch(0.72 0.15 200)" }}
         >
-          {playhead.toFixed(2)}s / {span.toFixed(1)}s
+          <span data-playhead-label>{playhead.toFixed(2)}s</span> / {span.toFixed(1)}s
         </span>
         {/*
           ── 앵커를 여기서 바로 ──────────────────────────────────────────
