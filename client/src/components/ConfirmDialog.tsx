@@ -27,7 +27,7 @@ export interface ConfirmOptions {
 
 type Pending = ConfirmOptions & { resolve: (value: boolean) => void };
 
-let notify: ((pending: Pending | null) => void) | null = null;
+let notify: ((pending: Pending) => void) | null = null;
 
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
   // 창이 아직 화면에 없으면(테스트 등) 막지 말고 통과시킵니다.
@@ -40,10 +40,16 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
 
 /** App 안에 한 번만 놓습니다. 어디서 confirmDialog 를 불러도 여기로 뜹니다. */
 export function ConfirmDialogHost() {
-  const [pending, setPending] = useState<Pending | null>(null);
+  /*
+    **줄을 세웁니다.** 예전에는 하나만 들고 있어서, 확인 창이 떠 있는 동안 다른 곳에서 또 물으면
+    먼저 물은 쪽의 답이 영영 오지 않았습니다 — 예컨대 폴더 이름 바꾸기가 답을 기다린 채 멈춰
+    그 뒤로는 폴더를 맞추지 않았습니다(2026-09-26 앱 회귀 점검). 차례로 하나씩 묻습니다.
+  */
+  const [queue, setQueue] = useState<Pending[]>([]);
+  const pending = queue[0] ?? null;
 
   useEffect(() => {
-    notify = setPending;
+    notify = (next) => setQueue((current) => [...current, next]);
     return () => { notify = null; };
   }, []);
 
@@ -70,7 +76,7 @@ export function ConfirmDialogHost() {
 
   const answer = (value: boolean) => {
     pending?.resolve(value);
-    setPending(null);
+    setQueue((current) => current.slice(1));
   };
 
   if (!pending) return null;

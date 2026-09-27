@@ -806,6 +806,26 @@ fn renamed_prefix(path: &Path, old: &str, new: &str) -> Option<PathBuf> {
     Some(path.with_file_name(renamed))
 }
 
+/// 옛 폴더(`from`)가 이미 새 폴더(`to`)로 옮겨진 뒤의 «옛 경로 → 지금 경로».
+/// 파일 이름의 앞부분을 `new` → `old` 로 되돌려 옛 경로를 짓습니다. 디스크는 건드리지 않습니다.
+fn already_moved(from: &Path, to: &Path, old: &str, new: &str) -> RenameOutcome {
+    let mut now_files: Vec<PathBuf> = vec![];
+    collect_owner_files(to, &mut now_files);
+    let mut outcome = RenameOutcome::default();
+    for now in now_files {
+        let Ok(relative) = now.strip_prefix(to) else { continue };
+        let old_path = match renamed_prefix(&now, new, old) {
+            Some(renamed) => {
+                let name = renamed.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+                from.join(relative).with_file_name(name)
+            }
+            None => from.join(relative),
+        };
+        outcome.moved.push((old_path.to_string_lossy().to_string(), now.to_string_lossy().to_string()));
+    }
+    outcome
+}
+
 /// 인물 폴더를 통째로 옮기고 그 안의 파일 이름도 함께 바꿉니다.
 ///
 /// 예전에는 갈래마다 따로 불렀습니다. 그런데 새 구조에서는 레퍼런스가 인물
@@ -839,7 +859,23 @@ fn rename_owner_tree(
     };
     let from = top_dir.join(&old_safe);
     let to = top_dir.join(&new_safe);
-    if !from.is_dir() || from == to || from == top_dir || to == top_dir {
+    if from == to || from == top_dir || to == top_dir {
+        return Ok(RenameOutcome::default());
+    }
+    /*
+      **이미 옮겨진 뒤면 경로만 이어 줍니다.**
+
+      폴더를 옮긴 직후 앱이 꺼지거나(새 경로를 작품 파일에 적기 전), 사람이 탐색기에서 폴더
+      이름을 바꾸면 옛 폴더는 없고 새 폴더만 있습니다. 예전에는 여기서 빈 결과를 돌려줘서
+      화면이 옛 경로를 계속 들고 있었습니다 — 그림이 깨지고, 저장할 때마다 같은 확인 창이
+      다시 떴습니다(2026-09-26 앱 회귀 점검). 새 폴더의 파일 이름을 거꾸로 풀어 «옛 경로 →
+      지금 경로» 를 돌려줍니다. 화면은 자기가 들고 있는 경로와 **같은 것만** 바꿉니다.
+    */
+    if !from.is_dir() && to.is_dir() {
+        ensure_inside(&root, &to)?;
+        return Ok(already_moved(&from, &to, &old_safe, &new_safe));
+    }
+    if !from.is_dir() {
         return Ok(RenameOutcome::default());
     }
     // 프로젝트 폴더 밖은 절대 건드리지 않습니다. 실제 경로로 펴서 확인합니다.
@@ -1588,6 +1624,29 @@ mod rename_tests {
         assert!(names.contains(&"손으로.png".to_string()), "{names:?}");
         assert_eq!(fs::read(existing.join("서리_001.png")).unwrap(), b"keep");
         assert!(!owner.exists(), "옛 폴더는 비어서 사라져야 합니다");
+
+        // 이미 옮겨진 뒤에 다시 부르면(옛 폴더 없음) 디스크는 그대로 두고 옛 경로 → 지금 경로만 돌려줍니다.
+        let again = rename_owner_tree(
+            base.to_string_lossy().to_string(),
+            "프로젝트".into(),
+            "character".into(),
+            "냥이".into(),
+            "서리".into(),
+        )
+        .unwrap();
+        let pairs: Vec<(String, String)> = again
+            .moved
+            .iter()
+            .map(|(from, to)| {
+                let short = |p: &str| p.rsplit(['/', '\\']).take(2).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("/");
+                (short(from), short(to))
+            })
+            .collect();
+        assert!(pairs.contains(&("냥이/냥이_얼굴 정면_001.png".into(), "서리/서리_얼굴 정면_001.png".into())), "{pairs:?}");
+        assert!(pairs.contains(&("ref/ref_냥이_001.png".into(), "ref/ref_서리_001.png".into())), "{pairs:?}");
+        assert!(pairs.contains(&("냥이/손으로.png".into(), "서리/손으로.png".into())), "{pairs:?}");
+        assert!(again.failed.is_empty());
+        assert!(!owner.exists(), "되돌려 만들지 않습니다");
 
         // 변형 이름 바꾸기 — 부모 것은 그대로.
         let outcome = rename_stem_files(
