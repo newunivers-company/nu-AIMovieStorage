@@ -134,6 +134,7 @@
 | `settings-auto-unfold` | `SettingsPage.tsx` | `<Section title="전개도 자동 6면 커팅">` (L606) |
 | `settings-lora` | `SettingsPage.tsx` | `<Section title="로라 (엔진별로 찾고 받기)">` (L647) |
 | `settings-magnific` | `SettingsPage.tsx` | `<Section title="마그니픽 (MCP 로 끝까지 뽑기)">` (L651) |
+| `settings-comfy-fleet` | `SettingsPage.tsx` | `<Section title="사내 ComfyUI (원격 생성)">` — 로컬 모델 칸 바로 위 |
 | `settings-local-engines` | `SettingsPage.tsx` | `<Section title="로컬 모델 (그림·영상·음악)">` (L655) |
 | `settings-upscale` | `SettingsPage.tsx` | `<Section title="업스케일 엔진">` (L660) |
 | `settings-prompt-docs` | `SettingsPage.tsx` | `<Section title="가이드 문서 관리">` (L908) |

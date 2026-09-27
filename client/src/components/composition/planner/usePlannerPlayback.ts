@@ -36,7 +36,6 @@ export function usePlannerPlayback(
   // 재생 중 눈금·슬라이더는 React 를 거치지 않고 DOM 을 직접 씁니다.
   // 이 컴포넌트는 패널이 많아 한 번 리렌더할 때 비용이 큽니다.
   // 초당 열두 번씩 통째로 다시 그리면 그게 곧 재생 끊김으로 보입니다.
-  const playheadLabelRef = useRef<HTMLSpanElement>(null);
   const scrubRef = useRef<HTMLInputElement>(null);
   /**
    * 화면 아래 타임라인의 **빨간 세로선**. 재생 중에도 여기만 직접 옮깁니다.
@@ -48,8 +47,15 @@ export function usePlannerPlayback(
    */
   const playheadLineRef = useRef<HTMLDivElement>(null);
   const paintPlayhead = (time: number) => {
-    if (playheadLabelRef.current)
-      playheadLabelRef.current.textContent = `${time.toFixed(2)}s`;
+    /*
+      **시각 글자** — 타임라인의 «1.23s / 5.0s» 중 앞쪽. 예전에는 ref 하나(`playheadLabelRef`)를 고쳤는데
+      그 ref 를 단 글자가 없어서, 재생하는 동안 글자가 시작한 자리(0.00s)에 서 있었습니다(2026-09-26
+      회귀 점검). 접힘·펼침 두 모습에 글자가 하나씩 있어 표지(`data-playhead-label`)로 찾습니다.
+    */
+    const label = `${time.toFixed(2)}s`;
+    document.querySelectorAll<HTMLElement>("[data-playhead-label]").forEach((element) => {
+      element.textContent = label;
+    });
     if (scrubRef.current) scrubRef.current.value = String(time);
     if (playheadLineRef.current) {
       const span = Math.max(0.5, timelineDuration);
@@ -162,7 +168,6 @@ export function usePlannerPlayback(
     playheadRef,
     previewingRef,
     playingRef,
-    playheadLabelRef,
     playheadLineRef,
     scrubRef,
     seek,
