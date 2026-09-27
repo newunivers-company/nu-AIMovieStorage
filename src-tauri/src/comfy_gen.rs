@@ -306,6 +306,63 @@ pub(crate) fn fill(doc: &Value, opts: &Value, image: Option<&str>, refs: &Refs, 
     Ok(Filled { graph, values, output_node, output_key })
 }
 
+/// **«여기만 움직인다» 마스크를 서버에 보낼 모양으로.** 로컬 워커(`common.freeze_by_mask`)와 같은 규칙입니다:
+/// 흰 곳은 새 프레임을 그대로, 검은 곳은 첫 장면으로 되돌립니다.
+///
+/// 서버에서는 `ImageCompositeMasked(destination=프레임들, source=첫 장면, mask=M)` 으로 섞는데,
+/// 이 노드는 **마스크가 흰 곳에 source(첫 장면)** 를 놓습니다. 그래서 M 은 그린 마스크를
+/// **뒤집은 것**이어야 합니다. 서버에서 `InvertMask` 로 뒤집으려 했더니 사내 서버 정책이 그 노드를
+/// 막아 두었습니다(2026-09-27 실측, `local_only_node_policy_forbidden`) — 여기서 뒤집어 올립니다.
+///
+/// 전부 검으면 `None` — 영상이 정지 사진이 되므로, 로컬과 같이 그린 쪽의 실수로 보고 무시합니다.
+fn inverted_mask(path: &str) -> Res<Option<Vec<u8>>> {
+    let picture = image::open(path).map_err(|e| err(&format!("{READ_FAILED} ({path})"), e))?;
+    let mut gray = picture.to_luma8();
+    if gray.pixels().all(|p| p.0[0] == 0) {
+        return Ok(None);
+    }
+    image::imageops::colorops::invert(&mut gray);
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    gray.write_to(&mut bytes, image::ImageFormat::Png).map_err(|e| err("움직임 마스크를 만들지 못했습니다", e))?;
+    Ok(Some(bytes.into_inner()))
+}
+
+/// 영상 워크플로인가 — 프레임을 모아 영상으로 만드는 `CreateVideo` 가 있는가.
+fn makes_video(graph: &Map<String, Value>) -> bool {
+    graph.values().any(|n| n.get("class_type").and_then(Value::as_str) == Some("CreateVideo"))
+}
+
+/// `CreateVideo` 가 받는 프레임을 «첫 장면에 묶은 프레임» 으로 바꿉니다. `name` 은 올린 (뒤집은) 마스크.
+///
+/// 마스크 크기는 프레임과 달라도 됩니다 — 노드가 늘려서 맞추고, 회색은 그 비율만큼 섞입니다
+/// (64×32 마스크를 128×64 프레임에 대어 확인). 첫 프레임은 제 자신과 섞이므로 그대로입니다.
+fn attach_motion_mask(graph: &mut Map<String, Value>, name: &str) -> bool {
+    let targets: Vec<String> = graph
+        .iter()
+        .filter(|(_, n)| n.get("class_type").and_then(Value::as_str) == Some("CreateVideo"))
+        .map(|(id, _)| id.clone())
+        .collect();
+    if targets.is_empty() {
+        return false;
+    }
+    graph.insert("motionmask".into(), json!({ "class_type": "LoadImageMask", "inputs": { "image": name, "channel": "red" } }));
+    for (index, id) in targets.iter().enumerate() {
+        let Some(frames) = graph.get(id).and_then(|n| n.pointer("/inputs/images")).cloned() else { continue };
+        let (first, mixed) = (format!("motionfirst{index}"), format!("motionmix{index}"));
+        graph.insert(first.clone(), json!({ "class_type": "ImageFromBatch", "inputs": { "image": frames, "batch_index": 0, "length": 1 } }));
+        graph.insert(
+            mixed.clone(),
+            json!({ "class_type": "ImageCompositeMasked", "inputs": {
+                "destination": frames, "source": [first, 0], "x": 0, "y": 0, "resize_source": false, "mask": ["motionmask", 0]
+            } }),
+        );
+        if let Some(inputs) = graph.get_mut(id).and_then(|n| n.get_mut("inputs")).and_then(Value::as_object_mut) {
+            inputs.insert("images".into(), json!([mixed, 0]));
+        }
+    }
+    true
+}
+
 #[derive(Clone, Copy)]
 enum RefKind {
     Image,
@@ -771,8 +828,13 @@ async fn upload_file(client: &reqwest::Client, base: &str, path: &str, tag: &str
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_else(|| "png".into());
+    upload_bytes(client, base, bytes, &ext, tag).await
+}
+
+/// 이미 읽어 둔(또는 앱이 만든) 내용을 올립니다. 이름 짓는 규칙은 `upload_file` 과 같습니다.
+async fn upload_bytes(client: &reqwest::Client, base: &str, bytes: Vec<u8>, ext: &str, tag: &str) -> Res<String> {
     // 이름이 `/upload/image` 이지만 영상·소리도 같은 input 폴더로 받습니다(LoadVideo·LoadAudio 가 거기서 읽음).
-    let mime = match ext.as_str() {
+    let mime = match ext {
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
         "mp4" | "m4v" => "video/mp4",
@@ -938,6 +1000,8 @@ struct Submission<'a> {
     image_path: Option<&'a str>,
     reference_paths: &'a Refs,
     loras: &'a [(String, f64)],
+    /// 뒤집어 둔 움직임 마스크(PNG). 영상 워크플로일 때만 채웁니다.
+    motion_mask: Option<&'a [u8]>,
     prefix: &'a str,
     tag: &'a str,
     seed: u64,
@@ -961,7 +1025,16 @@ async fn submit(client: &reqwest::Client, base: &str, request: &Submission<'_>) 
     for (index, path) in local.audios.iter().enumerate() {
         refs.audios.push(upload_file(client, base, path, &format!("{tag}_audio{index}")).await?);
     }
+    let mask = match request.motion_mask {
+        Some(bytes) => Some(upload_bytes(client, base, bytes.to_vec(), "png", &format!("{tag}_mask")).await?),
+        None => None,
+    };
     let mut filled = fill(request.doc, request.opts, image.as_deref(), &refs, request.prefix, request.seed)?;
+    if let Some(name) = mask {
+        if attach_motion_mask(&mut filled.graph, &name) {
+            filled.values.insert("motion_mask".into(), json!(true));
+        }
+    }
     let (used, dropped) = if request.loras.is_empty() {
         (Vec::new(), Vec::new())
     } else {
@@ -1138,7 +1211,20 @@ async fn run_remote(
         videos: placeholder(&reference_paths.videos),
         audios: placeholder(&reference_paths.audios),
     };
-    fill(doc, opts, image_path.as_deref().map(|_| "check.png"), &dry_refs, &prefix, seed)?;
+    let dry = fill(doc, opts, image_path.as_deref().map(|_| "check.png"), &dry_refs, &prefix, seed)?;
+    /*
+      **움직임 마스크.** 예전에는 원격에서 이 칸을 «못 실음» 으로만 적었습니다. 이제 서버에서 섞습니다
+      (`attach_motion_mask`). 못 읽는 파일은 서버를 바꿔도 같으니 여기서 바로 돌려줍니다.
+    */
+    let mask_path = non_empty(opts, "motion_mask");
+    let (motion_mask, mask_note) = match mask_path {
+        Some(path) if makes_video(&dry.graph) => match inverted_mask(path)? {
+            Some(bytes) => (Some(bytes), None),
+            None => (None, Some("움직임 마스크(전부 검은색이라 무시)")),
+        },
+        Some(_) => (None, Some("움직임 마스크")),
+        None => (None, None),
+    };
     let loras: Vec<(String, f64)> = opts
         .get("loras")
         .and_then(Value::as_array)
@@ -1171,6 +1257,7 @@ async fn run_remote(
             image_path: image_path.as_deref(),
             reference_paths: &reference_paths,
             loras: &loras,
+            motion_mask: motion_mask.as_deref(),
             prefix: &prefix,
             tag: &tag,
             seed,
@@ -1189,9 +1276,12 @@ async fn run_remote(
             }
         }
     }
-    let Some((base, prompt_id, filled, lora_used, lora_dropped, reservation)) = accepted else {
+    let Some((base, prompt_id, mut filled, lora_used, lora_dropped, reservation)) = accepted else {
         return Err(format!("어느 사내 ComfyUI 도 요청을 받지 않았습니다.\n{}", rejections.join("\n")));
     };
+    if let Some(note) = mask_note {
+        filled.values.insert("motion_mask_ignored".into(), json!(note));
+    }
     let host = host_of(&base).to_string();
     job.submitted(&base, &prompt_id);
     // 올리는 사이에 멈추기를 눌렀으면 방금 올린 것을 바로 거둡니다.
@@ -1373,18 +1463,19 @@ pub async fn comfy_generate(
     reserved.keep();
 
     // 원격에서는 못 하는 것들 — 조용히 버리지 않고 결과에 적습니다.
-    let mut ignored: Vec<&str> = Vec::new();
-    if non_empty(&opts, "motion_mask").is_some() {
-        ignored.push("움직임 마스크");
+    let mut ignored: Vec<String> = Vec::new();
+    if let Some(note) = filled.values.get("motion_mask_ignored").and_then(Value::as_str) {
+        ignored.push(note.to_string());
     }
     if opts.get("control").is_some_and(|v| !v.is_null()) {
-        ignored.push("동작 기준(포즈)");
+        ignored.push("동작 기준(포즈)".into());
     }
     let all_refs = references_of(&opts).total();
     let sent_refs = filled.values.get("references").and_then(Value::as_u64).unwrap_or(0) as usize;
     let mut meta = filled.values.clone();
     meta.remove("prefix");
     meta.remove("lora_after");
+    meta.remove("motion_mask_ignored");
     meta.insert("backend".into(), json!("comfy"));
     meta.insert("endpoint".into(), json!(base));
     meta.insert("prompt_id".into(), json!(prompt_id));
@@ -1790,6 +1881,58 @@ mod tests {
         assert!(!is_running(&queue, "ours"));
         assert!(is_running(&queue, "theirs"));
         assert!(!is_running(&Value::Null, "ours"));
+    }
+
+    /// 움직임 마스크는 영상 워크플로마다 `CreateVideo` 앞에서 첫 장면과 섞입니다.
+    #[test]
+    fn motion_mask_rewires_every_video_workflow() {
+        for name in ["minimaxh3_t2v", "minimaxh3_i2v", "minimaxh3_r2v", "wanvideo_t2v", "wanvideo_i2v", "ltx25_t2v", "ltx25_i2v"] {
+            let doc = workflow_doc(name).unwrap();
+            let mut graph = doc["graph"].as_object().unwrap().clone();
+            let (video_id, before) = graph
+                .iter()
+                .find(|(_, n)| n["class_type"] == "CreateVideo")
+                .map(|(id, n)| (id.clone(), n["inputs"]["images"].clone()))
+                .unwrap();
+            assert!(makes_video(&graph), "{name}");
+            assert!(attach_motion_mask(&mut graph, "mask.png"), "{name}");
+            assert_eq!(graph[&video_id]["inputs"]["images"], json!(["motionmix0", 0]), "{name}");
+            let mix = &graph["motionmix0"]["inputs"];
+            assert_eq!(mix["destination"], before, "{name}");
+            assert_eq!(mix["source"], json!(["motionfirst0", 0]));
+            assert_eq!(graph["motionfirst0"]["inputs"]["image"], before);
+            assert_eq!(graph["motionmask"]["inputs"]["image"], "mask.png");
+            // 사내 서버 정책이 막는 노드는 쓰지 않습니다.
+            assert!(graph.values().all(|n| n["class_type"] != "InvertMask"));
+        }
+        let mut still = workflow_doc("qwenimage").unwrap()["graph"].as_object().unwrap().clone();
+        assert!(!makes_video(&still));
+        assert!(!attach_motion_mask(&mut still, "mask.png"));
+        assert!(!still.contains_key("motionmask"));
+    }
+
+    /// 마스크는 뒤집어 올리고, 전부 검으면 무시합니다(로컬 `freeze_by_mask` 와 같은 규칙).
+    #[test]
+    fn motion_mask_is_inverted_and_all_black_is_ignored() {
+        let dir = std::env::temp_dir().join(format!("comfy_mask_{}", unique_suffix()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut drawn = image::GrayImage::new(4, 2);
+        drawn.put_pixel(3, 1, image::Luma([255]));
+        drawn.put_pixel(2, 1, image::Luma([64]));
+        let path = dir.join("움직임.png");
+        drawn.save(&path).unwrap();
+        let bytes = inverted_mask(path.to_str().unwrap()).unwrap().unwrap();
+        let sent = image::load_from_memory(&bytes).unwrap().to_luma8();
+        assert_eq!(sent.get_pixel(3, 1).0[0], 0, "움직이는 곳은 첫 장면을 덮지 않습니다");
+        assert_eq!(sent.get_pixel(0, 0).0[0], 255, "멈춘 곳은 첫 장면으로");
+        assert_eq!(sent.get_pixel(2, 1).0[0], 191, "회색은 비율 그대로");
+
+        let black = dir.join("검정.png");
+        image::GrayImage::new(4, 2).save(&black).unwrap();
+        assert!(inverted_mask(black.to_str().unwrap()).unwrap().is_none());
+        let missing = inverted_mask(dir.join("없다.png").to_str().unwrap()).unwrap_err();
+        assert!(missing.starts_with(READ_FAILED), "{missing}");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// 업로드 이름에 섞는 값은 매번 다릅니다(PC 사이에서 겹치지 않게).
