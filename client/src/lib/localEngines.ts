@@ -897,6 +897,11 @@ export interface LocalLora {
    * 엔진에 보내는 값은 아닙니다 — 프롬프트를 짓는 쪽(`withLoraTriggers`)이 씁니다.
    */
   trigger?: string;
+  /**
+   * 사내 ComfyUI 의 로라인가(`path` 가 서버의 상대 경로). 이 컴퓨터의 엔진에는 없는 파일이라,
+   * 로컬로 돌 때는 빼고 결과에 «못 실음» 으로 적습니다(`comfyLoras.ts`).
+   */
+  server?: boolean;
 }
 
 export interface LocalRunOptions {
@@ -1133,6 +1138,11 @@ export async function runLocal(
         off = hooks?.onProgress ? onLocalProgress(hooks.onProgress, engine) : () => {};
       }
     }
+    // 서버 로라는 이 컴퓨터에 없습니다 — 워커가 없는 파일을 열다 실패하지 않게 빼고, 뺀 것을 알립니다.
+    const serverOnly = (options.loras ?? []).filter((lora) => lora.server);
+    const localOptions = serverOnly.length
+      ? { ...options, loras: (options.loras ?? []).filter((lora) => !lora.server) }
+      : options;
     const raw = await invoke<{
       output: string;
       seconds: number;
@@ -1140,13 +1150,17 @@ export async function runLocal(
     }>("local_run", {
       engine,
       outputPath,
-      opts: options,
+      opts: localOptions,
       timeoutSecs: hooks?.timeoutSecs,
     });
     return {
       output: raw.output,
       seconds: Number(raw.seconds) || 0,
-      meta: fellBack ? { ...(raw.meta ?? {}), comfy_fallback: fellBack } : (raw.meta ?? {}),
+      meta: {
+        ...(raw.meta ?? {}),
+        ...(fellBack ? { comfy_fallback: fellBack } : {}),
+        ...(serverOnly.length ? { server_loras_skipped: serverOnly.map((lora) => lora.path) } : {}),
+      },
     };
   } finally {
     off();

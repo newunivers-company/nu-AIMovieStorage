@@ -92,7 +92,8 @@ It is **on by default** under **Settings → Company ComfyUI (remote generation)
 - **Stop:** the «Stop» button on a card, or stopping a queued batch task, withdraws only that job from the server.
 - **Check connection** shows each server's queue and whether every built-in workflow's nodes and model files are present.
 - Motion masks («only this moves») are applied on the server: the black area is held to the first frame, as in the local engines. An all-black mask is ignored.
-- Not sent to the servers yet: pose control. LoRAs are applied only when a file with the same name exists on the server. Anything dropped is listed in the result notice.
+- Server LoRAs: the LoRA row next to the generate button has a «서버 로라» list with the LoRAs on the company servers, filtered by model folder (speed, edit, IC and upscaler LoRAs are left out) and searchable. A local LoRA is applied only when a file with the same name exists on the server. After a run the app reads the server log, and if a LoRA did not fit the model (the server skips it silently) the result notice says so.
+- Not sent to the servers yet: pose control. Anything dropped is listed in the result notice.
 - The four servers share one host (80 GB RAM). Several MiniMax H3 jobs at once slow each other down.
 
 Workflows live in `src-tauri/src/comfy_workflows/` (API format, one per engine); `comfy_gen.rs` fills and submits them.
@@ -359,7 +360,8 @@ API 사용료는 선택한 제공자의 과금 기준을 따릅니다.
 - **멈추기:** 카드의 «멈추기» 단추나 작업 줄의 멈추기는 서버에서 **그 작업만** 거둡니다.
 - **연결 확인**은 서버마다 대기열과, 내장 워크플로가 요구하는 노드·모델 파일이 다 있는지를 보여 줍니다.
 - 움직임 마스크(«여기만 움직인다»)는 서버에서 섞습니다. 로컬 엔진과 같이 검은 곳을 첫 장면에 묶어 두고, 전부 검은 마스크는 무시합니다.
-- 아직 서버로 보내지 않는 것: 포즈 조건. 로라는 서버에 같은 이름의 파일이 있을 때만 겁니다. 못 실은 것은 결과 알림에 적습니다.
+- 서버 로라: 생성 단추 옆 로라 줄의 «서버 로라» 에서 사내 서버에 있는 로라를 고릅니다. 모델 폴더로 맞는 것만 먼저 보여 주고(속도용·편집용·IC·업스케일 로라는 뺌), 검색하면 전체에서 찾습니다. 이 컴퓨터의 로라는 서버에 같은 이름의 파일이 있을 때만 겁니다. 뽑은 뒤 서버 로그를 읽어, 모델과 맞지 않아 서버가 조용히 뺀 로라가 있으면 결과 알림에 적습니다.
+- 아직 서버로 보내지 않는 것: 포즈 조건. 못 실은 것은 결과 알림에 적습니다.
 - 서버 네 대는 한 컴퓨터(RAM 80GB)를 나눠 씁니다. MiniMax H3 를 여러 개 동시에 돌리면 서로 느려집니다.
 
 워크플로는 `src-tauri/src/comfy_workflows/` 에 엔진마다 하나씩(API 형식) 있고, `comfy_gen.rs` 가 채워서 보냅니다.

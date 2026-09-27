@@ -6,6 +6,9 @@ import {
   useLoraFiles,
 } from "@/lib/localLoras";
 import type { LocalEngineId } from "@/lib/localEngines";
+import { isComfyRemote, useComfyFleet } from "@/lib/comfyFleet";
+import { isDesktopApp } from "@/lib/llm";
+import ServerLoraPicker from "@/components/ServerLoraPicker";
 
 /**
  * **이번에 쓸 로라 고르기** — 받아 둔 것만 보입니다.
@@ -33,8 +36,14 @@ export default function LoraPicker({
   disabled?: boolean;
 }) {
   const files = useLoraFiles();
+  const fleet = useComfyFleet();
   const items = loraItems(files, engine);
-  if (!items.length) return null;
+  // 사내 ComfyUI 로 도는 엔진이면 서버 로라도 고를 수 있습니다 — 이 컴퓨터에 받아 둔 것이 없어도 뜹니다.
+  const remote = isDesktopApp() && isComfyRemote(engine, fleet);
+  if (!items.length && !remote) return null;
+  if (!items.length) {
+    return <ServerLoraPicker engine={engine} picked={picked} onChange={onChange} disabled={disabled} />;
+  }
 
   const chosen = picked.length ? items.filter((item) => picked.includes(item.path)) : [];
   const clash = styleClash(chosen.length ? chosen : items.filter((item) => item.enabled));
@@ -94,6 +103,8 @@ export default function LoraPicker({
           <FolderOpen className="h-3 w-3" /> 폴더
         </button>
       </div>
+
+      {remote && <ServerLoraPicker engine={engine} picked={picked} onChange={onChange} disabled={disabled} />}
 
       {/*
         화풍이 섞이면 **보이게만** 합니다. 막지 않는 까닭은 일부러 섞어 보는 일이 있어서고,

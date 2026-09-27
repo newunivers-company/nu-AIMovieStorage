@@ -11,6 +11,7 @@ import {
   type LoraEntry,
   type LoraStyle,
 } from "@/lib/localEngines";
+import { serverLorasToRun } from "@/lib/comfyLoras";
 
 /**
  * **받아 둔 로라** — 폴더가 진실입니다.
@@ -348,7 +349,11 @@ export function lorasToRun(
   const use = picked?.length
     ? items.filter((item) => picked.includes(item.path))
     : items.filter((item) => item.enabled);
-  return use.map((item) => ({ path: item.path, weight: item.weight, trigger: item.trigger }));
+  // 서버 로라(`comfy:…`)는 이 컴퓨터 폴더에 없으니 따로 붙입니다 — 사내 ComfyUI 로 돌 때만 먹습니다.
+  return [
+    ...use.map((item) => ({ path: item.path, weight: item.weight, trigger: item.trigger })),
+    ...serverLorasToRun(picked),
+  ];
 }
 
 /**
